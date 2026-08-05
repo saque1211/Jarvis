@@ -29,10 +29,10 @@ Coloque o arquivo em `src/skills/` e pronto — o registry carrega sozinho no
 próximo boot. Nomes de tool são globais, então não pode repetir.
 
 **A `description` da tool é o que faz o roteamento funcionar.** Ela é o único
-sinal que o modelo tem pra escolher entre 92 tools. Diga *quando* usar, não só
+sinal que o modelo tem pra escolher entre 99 tools. Diga *quando* usar, não só
 *o que faz* — e cite as frases que o usuário realmente fala.
 
-## As 15 skills
+## As skills
 
 | Arquivo | Cobre |
 |---|---|
@@ -50,6 +50,7 @@ sinal que o modelo tem pra escolher entre 92 tools. Diga *quando* usar, não só
 | `browser.js` | Abas, workspaces de abas, bookmarks |
 | `freelance.js` | Feeds de vagas (Workana e afins) |
 | `build.js` | Build, testes, git, GitHub Actions |
+| `timer.js` | Contagem regressiva, cronômetro, pomodoro |
 | `notify.js` | Lembretes, alarmes, notificações do Windows |
 | `memory.js` | Consultar e alimentar o vault |
 

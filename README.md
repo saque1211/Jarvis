@@ -26,7 +26,7 @@ Você fala **"jarvis"**, dá o comando, ele executa.
 "jarvis, o que eu fiz na terça?"
 ```
 
-**16 skills, 92 tools.** O Claude escolhe qual usar — não existe lista de
+**17 skills, 99 tools.** O Claude escolhe qual usar — não existe lista de
 comandos decorados.
 
 | Skill | O que cobre |
@@ -42,6 +42,7 @@ comandos decorados.
 | **scaffold** | Projetos novos, componentes React, boilerplate |
 | **search** | Web, GitHub, Stack Overflow, npm, ler páginas |
 | **tasks** | To-dos, prioridades do dia, anotações |
+| **timer** | Contagem regressiva, cronômetro, pomodoro |
 | **notify** | Lembretes, alarmes, notificações do Windows |
 | **integrations** | Discord, Home Assistant, HTTP genérico |
 | **freelance** | Feeds de vagas |
@@ -170,7 +171,8 @@ O JARVIS controla sua máquina de verdade, então tem freio:
 src/
   core/         router (tool-use loop), registry, vault, config
   platform/     win32.js — tudo que toca o Windows passa aqui
-  skills/       16 skills, uma por arquivo
+  skills/       17 skills, uma por arquivo
+  core/state.js snapshot que o HUD consome
   voice/        wake word, STT, TTS, daemon
   integrations/ clientes de API (Spotify OAuth...)
 config/         apps.json, scripts.json, tab-workspaces.json
@@ -210,9 +212,17 @@ Detalhes em [`.skills/README.md`](.skills/README.md).
 
 ---
 
+## HUD
+
+O brief de design está em [`HUD-SPEC.md`](HUD-SPEC.md) — 8 painéis, contrato
+de dados e estados, prontos pra mandar pra quem for desenhar.
+
+Os dados já existem: `npm run hud:state` cospe o JSON que o HUD vai consumir.
+Falta só a camada visual.
+
 ## Ainda não tem
 
-- **HUD** — a tela escura com os vitais. Próximo passo.
+- **A tela do HUD** — spec pronta, visual não.
 - **Calendário** — `tasks` guarda prazos, mas não fala com Google Calendar ainda.
 - **E-mail** — sem integração de inbox.
 

@@ -11,6 +11,7 @@
     "jarvis": "node src/index.js",
     "listen": "node src/voice/daemon.js",
     "doctor": "node scripts/doctor.js",
+    "hud:state": "node scripts/hud-state.js",
     "auth:spotify": "node scripts/auth-spotify.js"
   },
   "keywords": [

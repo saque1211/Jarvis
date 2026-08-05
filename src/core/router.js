@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { loadSkills, buildToolIndex, toAnthropicTools } from './registry.js';
 import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
+import { recordActivity, writeRuntime } from './state.js';
 
 const SYSTEM = `Voce e o JARVIS, assistente pessoal do usuario, rodando na maquina dele (Windows 11).
 
@@ -77,6 +78,7 @@ export async function route(userInput, options = {}) {
     if (response.stop_reason !== 'tool_use') {
       const reply = textOf(response);
       setLastReply(reply);
+      writeRuntime({ lastTranscript: userInput, lastReply: reply });
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
       return { reply, steps };
     }
@@ -104,6 +106,7 @@ export async function route(userInput, options = {}) {
         const output = await tool.handler(block.input, ctx);
         const content = typeof output === 'string' ? output : JSON.stringify(output);
         steps.push({ tool: block.name, input: block.input, ok: true });
+        recordActivity({ tool: block.name, skill: tool.skillName, ok: true });
         results.push({
           type: 'tool_result',
           tool_use_id: block.id,
@@ -111,6 +114,7 @@ export async function route(userInput, options = {}) {
         });
       } catch (err) {
         steps.push({ tool: block.name, input: block.input, ok: false, error: err.message });
+        recordActivity({ tool: block.name, skill: tool.skillName, ok: false, error: err.message });
         results.push({
           type: 'tool_result',
           tool_use_id: block.id,

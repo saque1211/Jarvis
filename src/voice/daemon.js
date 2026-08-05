@@ -9,6 +9,8 @@ import { transcribe, sttEngineName } from './stt.js';
 import { speak } from './tts.js';
 import { writeWav, frameEnergy } from './wav.js';
 import { checkDueReminders } from '../skills/notify.js';
+import { checkDueTimers } from '../skills/timer.js';
+import { writeRuntime } from '../core/state.js';
 
 /**
  * Daemon de voz: escuta a wake word, grava o comando ate voce parar de falar,
@@ -103,12 +105,16 @@ async function captureCommand() {
 
 async function handleUtterance() {
   log('escuta', pc.cyan('wake word detectada — pode falar'), pc.cyan);
+  writeRuntime({ voiceState: 'listening' });
 
   const audio = await captureCommand();
   if (!audio) {
     log('escuta', 'nao ouvi nada, voltando a dormir');
+    writeRuntime({ voiceState: 'idle' });
     return;
   }
+
+  writeRuntime({ voiceState: 'thinking' });
 
   const wavPath = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
   writeWav(wavPath, audio, SAMPLE_RATE);
@@ -118,6 +124,7 @@ async function handleUtterance() {
     text = await transcribe(wavPath);
   } catch (err) {
     log('stt', pc.red(err.message), pc.red);
+    writeRuntime({ voiceState: 'idle' });
     await speak('Nao consegui transcrever. Confira a configuracao do STT.');
     return;
   } finally {
@@ -126,10 +133,12 @@ async function handleUtterance() {
 
   if (!text || text.length < 2) {
     log('stt', 'transcricao vazia');
+    writeRuntime({ voiceState: 'idle' });
     return;
   }
 
   log('voce', pc.white(text), pc.green);
+  writeRuntime({ lastTranscript: text });
 
   try {
     const { reply, steps } = await route(text, {
@@ -140,10 +149,13 @@ async function handleUtterance() {
     if (steps.some((s) => !s.ok)) {
       log('aviso', pc.yellow(`${steps.filter((s) => !s.ok).length} tool(s) falharam`), pc.yellow);
     }
+    writeRuntime({ voiceState: 'speaking' });
     await speak(reply);
   } catch (err) {
     log('erro', pc.red(err.message), pc.red);
     await speak('Deu erro aqui. Confira o terminal.');
+  } finally {
+    writeRuntime({ voiceState: 'idle' });
   }
 }
 
@@ -167,7 +179,13 @@ async function main() {
   log('mic', pc.green(recorder.getSelectedDevice()), pc.green);
   console.log(pc.bold(pc.cyan(`\n  Ouvindo. Diga "${config.voice.wakeWord}" pra comecar.\n`)));
 
-  // Lembretes: checa a cada 30s no mesmo processo.
+  writeRuntime({
+    voiceState: 'idle',
+    sttEngine: engine,
+    micDevice: recorder.getSelectedDevice(),
+  });
+
+  // Lembretes: precisao de meio minuto basta.
   const reminderTimer = setInterval(async () => {
     try {
       const fired = await checkDueReminders();
@@ -180,6 +198,19 @@ async function main() {
     }
   }, 30000);
 
+  // Timers: precisam do segundo exato, entao rodam num tick proprio.
+  const countdownTimer = setInterval(async () => {
+    try {
+      const fired = await checkDueTimers();
+      for (const timer of fired) {
+        log('timer', pc.yellow(timer.message), pc.yellow);
+        await speak(timer.message);
+      }
+    } catch {
+      // Idem: nao derruba a escuta.
+    }
+  }, 1000);
+
   while (running) {
     const frame = await recorder.read();
     if (porcupine.process(frame) >= 0) {
@@ -189,11 +220,17 @@ async function main() {
   }
 
   clearInterval(reminderTimer);
+  clearInterval(countdownTimer);
 }
 
 function shutdown() {
   running = false;
   console.log(pc.dim('\n  desligando...'));
+  try {
+    writeRuntime({ voiceState: 'offline' });
+  } catch {
+    // Encerrando de qualquer jeito.
+  }
   try {
     recorder?.stop();
     recorder?.release();

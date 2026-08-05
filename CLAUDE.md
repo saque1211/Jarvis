@@ -45,17 +45,21 @@ npm run jarvis "comando"   # uma vez
 npm run jarvis             # modo conversa
 npm run listen             # daemon de voz (wake word)
 npm run doctor             # diagnóstico de setup
+npm run hud:state          # snapshot que o HUD consome (add "-- watch")
 npm run auth:spotify       # OAuth do Spotify, uma vez só
 ```
 
 ## Estado atual
 
-16 skills / 92 tools. Cobertura: apps, exec, files, media, hardware (inclui
-Quest 3S), capture, browser, build, scaffold, search, tasks, notify,
+17 skills / 99 tools. Cobertura: apps, exec, files, media, hardware (inclui
+Quest 3S), capture, browser, build, scaffold, search, tasks, timer, notify,
 integrations, freelance, memory, voice.
 
-**Falta:** o HUD (terminal escuro com vitais + deck + agenda), integração de
-calendário e de e-mail.
+`src/core/state.js` monta o snapshot que o HUD consome — é o contrato entre
+dado e visual. Brief de design em `HUD-SPEC.md`.
+
+**Falta:** a camada visual do HUD (o contrato de dados já existe), integração
+de calendário e de e-mail.
 
 ## Limites conhecidos, documentados de propósito
 

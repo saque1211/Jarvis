@@ -78,9 +78,15 @@ export async function checkDueReminders() {
   if (!due.length) return [];
 
   for (const reminder of due) {
-    await toast('JARVIS', reminder.message);
     reminder.fired = true;
     reminder.firedAt = new Date().toISOString();
+    // Marca como disparado ANTES de notificar: se o toast falhar e a excecao
+    // subir, o lembrete venceria de novo no proximo tick, pra sempre.
+    try {
+      await toast('JARVIS', reminder.message);
+    } catch {
+      // O daemon ainda fala a mensagem mesmo sem o toast visual.
+    }
     appendDaily('Lembrete disparado', reminder.message);
   }
 
