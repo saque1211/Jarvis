@@ -1,89 +1,68 @@
-# JARVIS OS — Claude Code Project
+# JARVIS — contexto pro Claude Code
 
-Your personal AI assistant built with Claude.
+Assistente pessoal voice-first pra **Windows 11**. Wake word local (Porcupine),
+STT local (Whisper), roteamento por Claude com tool-use, TTS local (SAPI/Piper).
 
-## Project Overview
+## Arquitetura
 
-JARVIS is an operating system for your mind. It's a voice-first AI assistant that:
-
-- **Wires the Brain** — Claude + Skills (metrics, inbox, trends, plan, vault)
-- **Builds Memory** — Everything in the vault (vault/ directory)
-- **Adds Voice** — Local STT/TTS (Whisper + Piper)
-- **Builds the Face** — Dark terminal HUD with real-time data
-
-## Mindset
 ```
-SPEAK. ROUTE. REMEMBER. REPEAT.
+voz/texto → router (tool-use loop) → skills → platform/win32 → máquina
+                    ↕
+                  vault (markdown)
 ```
 
-## Architecture
+- **`src/core/router.js`** — loop de tool-use. Carrega todas as tools de uma
+  vez e deixa o modelo escolher. Não existe intent matching.
+- **`src/core/registry.js`** — varre `src/skills/*.js` e achata as tools.
+  Adicionar skill = criar arquivo, nada de registrar em lugar nenhum.
+- **`src/platform/win32.js`** — **toda** chamada de sistema passa aqui.
+  Nunca use `spawn`/`exec` direto numa skill.
+- **`src/core/vault.js`** — memória em markdown. Sem banco.
 
-### Directory Structure
-```
-jarvis/
-├── src/                    # Core application
-│   ├── index.js           # Main CLI interface
-│   ├── skills/            # Skill implementations
-│   └── voice/             # Voice integration
-├── vault/                 # User's memory (local database)
-│   ├── daily/            # Daily logs
-│   ├── projects/         # Project notes
-│   ├── people/           # People database
-│   └── archive/          # Old projects
-├── .skills/              # Skill definitions
-├── config/               # Configuration templates
-├── SETUP.md             # Step-by-step setup
-└── README.md            # Project overview
-```
+## Regras ao mexer no código
 
-## Quick Start
+**Nunca monte comando como string de shell.** Use `run(cmd, argsArray)` ou
+`ps(script)` (que usa `-EncodedCommand`). O input vem de transcrição de voz —
+tratar como não-confiável não é paranoia, é o caso normal.
+
+**Toda operação irreversível precisa de `confirmed`.** Padrão: o handler
+retorna uma frase pedindo confirmação em vez de executar, e o modelo pergunta
+antes de chamar de novo. Veja `exec.run_command` e `files.delete_file`.
+
+**Escrita de arquivo passa por `assertAllowed()`** em `files.js`.
+
+**A `description` da tool é o roteamento.** É o único sinal que o modelo tem
+pra escolher entre 92 tools. Escreva *quando usar*, com as frases reais que o
+usuário fala — não só *o que faz*.
+
+**Respostas são lidas em voz alta.** O system prompt pede 1-2 frases, sem
+markdown, sem emoji. Handlers devem devolver texto curto e falável.
+
+## Comandos
 
 ```bash
-# Install dependencies
-npm install
-
-# Create .env file
-cp .env.example .env
-
-# Run JARVIS
-npm start "Morning brief"
-npm start "Plan today"
-npm start "Ask anything"
+npm run jarvis "comando"   # uma vez
+npm run jarvis             # modo conversa
+npm run listen             # daemon de voz (wake word)
+npm run doctor             # diagnóstico de setup
+npm run auth:spotify       # OAuth do Spotify, uma vez só
 ```
 
-## Skills
+## Estado atual
 
-- **metrics** — Poll your numbers (views, followers, etc)
-- **inbox** — Read today's emails
-- **trends** — Scan what's trending
-- **plan** — Set your top 3 priorities
-- **vault** — Query your memory
+16 skills / 92 tools. Cobertura: apps, exec, files, media, hardware (inclui
+Quest 3S), capture, browser, build, scaffold, search, tasks, notify,
+integrations, freelance, memory, voice.
 
-## Development
+**Falta:** o HUD (terminal escuro com vitais + deck + agenda), integração de
+calendário e de e-mail.
 
-### Adding a New Skill
-1. Create `.skills/skill-name.md` with documentation
-2. Create `src/skills/skill-name.js` with implementation
-3. Add to package.json scripts
-4. Test with `npm start "skill command"`
+## Limites conhecidos, documentados de propósito
 
-### Next Steps
-- [ ] Implement voice integration (Step 3)
-- [ ] Build terminal HUD (Step 4)
-- [ ] Add email integration
-- [ ] Connect to analytics APIs
-- [ ] Create scheduling system
-
-## Configuration
-
-See `.env.example` for all available options.
-
-Key variables:
-- `CLAUDE_API_KEY` — Your Claude API key
-- `VAULT_PATH` — Where to store vault data
-- `VOICE_ENABLED` — Enable/disable voice
-- `PORT` — Server port (for future web UI)
-
----
-
-**Your voice is the interface. Consistency compounds.**
+- **Workana/Fiverr não têm API pública de freelancer.** A skill trabalha com
+  feeds RSS de vagas. Ver `.skills/freelance.md`.
+- **Abas já abertas do navegador** não são manipuláveis de fora sem extensão.
+  Por isso existe o conceito de *workspace de abas*: em vez de reorganizar o
+  caos, você abre a janela certa de uma vez.
+- **GPU** depende de `nvidia-smi`. Em AMD/Intel a tool reporta indisponível em
+  vez de inventar número.

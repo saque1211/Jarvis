@@ -1,34 +1,33 @@
 {
   "name": "jarvis-os",
-  "version": "0.1.0",
-  "description": "Your personal AI assistant. A real operating system for your mind.",
-  "main": "index.js",
+  "version": "0.2.0",
+  "description": "Assistente pessoal voice-first para Windows 11. Wake word local, roteamento por Claude, controle real da maquina.",
   "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "node src/index.js",
-    "start": "node src/index.js",
-    "brief": "node src/skills/morning-brief.js",
-    "plan": "node src/skills/plan-today.js",
-    "metrics": "node src/skills/metrics.js",
-    "close": "node src/skills/close-day.js",
-    "voice": "node src/voice/listen.js"
+    "jarvis": "node src/index.js",
+    "listen": "node src/voice/daemon.js",
+    "doctor": "node scripts/doctor.js",
+    "auth:spotify": "node scripts/auth-spotify.js"
   },
   "keywords": [
-    "ai",
-    "assistant",
-    "voice",
     "jarvis",
-    "automation"
+    "voice-assistant",
+    "claude",
+    "wake-word",
+    "windows"
   ],
-  "author": "Your Name",
   "license": "MIT",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.28.0",
+    "@anthropic-ai/sdk": "^0.65.0",
     "dotenv": "^16.4.5",
-    "chalk": "^5.3.0",
-    "ora": "^8.0.1"
+    "picocolors": "^1.1.1"
   },
-  "devDependencies": {
-    "eslint": "^9.9.1"
+  "optionalDependencies": {
+    "@picovoice/porcupine-node": "^3.0.3",
+    "@picovoice/pvrecorder-node": "^1.2.2"
   }
 }
