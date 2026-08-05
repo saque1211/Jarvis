@@ -49,7 +49,11 @@ markdown, sem emoji. Handlers devem devolver texto curto e falável.
 
 **`speaks: true` numa tool** = a saída dela já é a resposta final, e o router
 encerra ali em vez de fazer mais uma viagem ao modelo. Só marque quando a
-frase serve pra ser falada sem edição. Detalhes em `.skills/README.md`.
+frase serve pra ser falada sem edição. Aceita função, quando depende da
+entrada. Detalhes em `.skills/README.md`.
+
+**Tools pedidas na mesma rodada rodam em paralelo.** Se uma depende da outra,
+diga isso na `description` — não confie na ordem de execução.
 
 ## Comandos
 

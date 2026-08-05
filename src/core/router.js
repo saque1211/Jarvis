@@ -107,44 +107,58 @@ export async function route(userInput, options = {}) {
 
     messages.push({ role: 'assistant', text: response.text, toolUses: response.toolUses });
 
-    const results = [];
-    for (const use of response.toolUses) {
-      const tool = toolIndex.get(use.name);
-      ctx.onStep({ tool: use.name, input: use.input });
+    // Em paralelo: quando o modelo pede duas tools na mesma rodada, ele ja
+    // decidiu que sao independentes. Uma de cada vez faria o comando custar a
+    // soma, e nao a mais lenta.
+    const batchStarted = Date.now();
+    const results = await Promise.all(
+      response.toolUses.map(async (use) => {
+        const tool = toolIndex.get(use.name);
+        ctx.onStep({ tool: use.name, input: use.input });
 
-      if (!tool) {
-        results.push({
-          id: use.id,
-          name: use.name,
-          isError: true,
-          content: `Tool desconhecida: ${use.name}`,
-        });
-        continue;
-      }
+        if (!tool) {
+          return {
+            id: use.id,
+            name: use.name,
+            isError: true,
+            content: `Tool desconhecida: ${use.name}`,
+            step: { tool: use.name, input: use.input, ok: false, error: 'tool desconhecida' },
+          };
+        }
 
-      const toolStarted = Date.now();
-      try {
-        const output = await tool.handler(use.input, ctx);
-        timings.tools += since(toolStarted);
-        const content = typeof output === 'string' ? output : JSON.stringify(output);
-        steps.push({ tool: use.name, input: use.input, ok: true });
-        recordActivity({ tool: use.name, skill: tool.skillName, ok: true });
-        results.push({
-          id: use.id,
-          name: use.name,
-          content: content.slice(0, 8000) || '(sem saida)',
-        });
-      } catch (err) {
-        timings.tools += since(toolStarted);
-        steps.push({ tool: use.name, input: use.input, ok: false, error: err.message });
-        recordActivity({ tool: use.name, skill: tool.skillName, ok: false, error: err.message });
-        results.push({
-          id: use.id,
-          name: use.name,
-          isError: true,
-          content: err.message,
-        });
+        try {
+          const output = await tool.handler(use.input, ctx);
+          const content = typeof output === 'string' ? output : JSON.stringify(output);
+          return {
+            id: use.id,
+            name: use.name,
+            content: content.slice(0, 8000) || '(sem saida)',
+            step: { tool: use.name, input: use.input, ok: true },
+            skillName: tool.skillName,
+          };
+        } catch (err) {
+          return {
+            id: use.id,
+            name: use.name,
+            isError: true,
+            content: err.message,
+            step: { tool: use.name, input: use.input, ok: false, error: err.message },
+            skillName: tool.skillName,
+          };
+        }
+      })
+    );
+    // Relogio de parede do lote, nao a soma — senao o paralelo "pioraria" o numero.
+    timings.tools += since(batchStarted);
+
+    // A trilha sai na ordem em que o modelo pediu, nao na ordem em que terminou.
+    for (const r of results) {
+      steps.push(r.step);
+      if (r.skillName) {
+        recordActivity({ tool: r.name, skill: r.skillName, ok: r.step.ok, error: r.step.error });
       }
+      delete r.step;
+      delete r.skillName;
     }
 
     // Atalho: uma tool so, que deu certo, e cuja saida ja e a resposta falada.
@@ -153,7 +167,11 @@ export async function route(userInput, options = {}) {
     if (config.fastReply && results.length === 1 && !looksChained(userInput)) {
       const only = results[0];
       const tool = toolIndex.get(only.name);
-      if (tool?.speaks && !only.isError) {
+      // `speaks` pode ser funcao: a tool decide pela entrada se a saida dela ja
+      // e a resposta (system_stats com foco e, sem foco nao e).
+      const speaks =
+        typeof tool?.speaks === 'function' ? tool.speaks(response.toolUses[0].input) : tool?.speaks;
+      if (speaks && !only.isError) {
         const reply = only.content;
         timings.total = since(started);
         ctx.onNote('resposta direta da tool');

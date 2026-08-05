@@ -51,12 +51,55 @@ export default {
   tools: [
     {
       name: 'system_stats',
+      // Com foco a saida ja e a frase final; sem foco e relatorio, e ai o
+      // modelo precisa destilar a parte que responde a pergunta.
+      speaks: (input) => Boolean(input?.focus) && input.focus !== 'tudo',
       description:
         'Le os vitais da maquina: CPU, RAM, GPU, disco e temperatura. ' +
-        'Use quando o usuario perguntar como esta a maquina, se esta pesada, quanto sobra de espaco.',
-      input_schema: { type: 'object', properties: {} },
-      handler: async () => {
-        const [cpu, mem, g, dsk] = await Promise.all([cpuLoad(), memory(), gpu(), disks()]);
+        'Use quando o usuario perguntar como esta a maquina, se esta pesada, quanto sobra de espaco. ' +
+        'SEMPRE passe "focus" com a parte que a pergunta pede: "quanto de RAM ta livre" e focus=ram, ' +
+        '"como ta a GPU" e focus=gpu, "quanto sobra de disco" e focus=disco. ' +
+        'Use focus=tudo so quando a pergunta for geral ("como ta a maquina").',
+      input_schema: {
+        type: 'object',
+        properties: {
+          focus: {
+            type: 'string',
+            enum: ['tudo', 'cpu', 'ram', 'gpu', 'disco'],
+            description: 'Qual vital a pergunta quer. Default: tudo.',
+          },
+        },
+      },
+      handler: async ({ focus = 'tudo' } = {}) => {
+        // So mede o que foi pedido — cada leitura e uma chamada ao PowerShell.
+        const want = (part) => focus === 'tudo' || focus === part;
+        const [cpu, mem, g, dsk] = await Promise.all([
+          want('cpu') ? cpuLoad() : null,
+          want('ram') ? memory() : null,
+          want('gpu') ? gpu() : null,
+          want('disco') ? disks() : [],
+        ]);
+
+        // Focado: uma frase pronta pra ser falada, sem passar pelo modelo.
+        if (focus === 'ram') {
+          if (!mem) return 'Nao consegui ler a memoria.';
+          const free = mem.FreeGB.toFixed(1);
+          const pct = Math.round(((mem.TotalGB - mem.FreeGB) / mem.TotalGB) * 100);
+          return `Tem ${free} de ${mem.TotalGB} GB de RAM livres, ${pct}% em uso.`;
+        }
+        if (focus === 'cpu') {
+          if (!cpu) return 'Nao consegui ler a CPU.';
+          return `CPU em ${cpu.LoadPercentage ?? '?'}% de uso, ${cpu.NumberOfCores} nucleos.`;
+        }
+        if (focus === 'gpu') {
+          if (!g) return 'nvidia-smi indisponivel — GPU nao-NVIDIA ou driver sem o utilitario.';
+          return `GPU ${g.name} em ${g.util}% de uso, ${g.memUsed} de ${g.memTotal} MB de VRAM, ${g.temp} graus.`;
+        }
+        if (focus === 'disco') {
+          if (!dsk.length) return 'Nao consegui ler os discos.';
+          return dsk.map((d) => `Disco ${d.DeviceID} com ${d.FreeGB} de ${d.TotalGB} GB livres`).join('; ') + '.';
+        }
+
         const lines = [];
 
         if (cpu) {

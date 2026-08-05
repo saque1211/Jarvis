@@ -87,9 +87,13 @@ Cada comando mostra onde o tempo foi:
   responde mais rápido e erra mais a escolha de tool. Esse é o trade.
 
   Comandos de ação ("põe 10 minutos", "abre o spotify") já encerram na saída da
-  tool e economizam uma viagem inteira. Perguntas que precisam de resumo
-  ("quanto de RAM tá livre") gastam a viagem extra por necessidade — o modelo
-  tem que destilar o relatório na parte que responde.
+  tool e economizam uma viagem inteira. Perguntas focadas ("quanto de RAM tá
+  livre") também, desde que o modelo passe o `focus` certo. Só a pergunta geral
+  ("como tá a máquina") gasta a viagem extra, porque aí destilar o relatório é
+  trabalho de verdade.
+
+- **máquina** alta com várias tools → elas já rodam em paralelo; o número é o
+  relógio de parede do lote, então é a tool mais lenta, não a soma.
 - **máquina** alta → não é o LLM, é o Windows. PowerShell frio demora no
   primeiro comando de cada tipo.
 
