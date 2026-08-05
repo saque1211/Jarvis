@@ -19,6 +19,7 @@ ${pc.dim('  SPEAK. ROUTE. REMEMBER. REPEAT.')}
 async function runOnce(command, { spoken }) {
   const { reply, steps } = await route(command, {
     source: 'cli',
+    onNote: (note) => console.log(pc.dim(`  · ${note}`)),
     onStep: ({ tool }) => console.log(pc.dim(`  → ${tool}`)),
   });
 

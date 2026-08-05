@@ -101,6 +101,36 @@ async function callAnthropic({ system, messages, tools }) {
 
 // ─── Groq ───────────────────────────────────────────────────────────────────
 
+/** O erro cru da Groq vem como JSON dentro da mensagem. Traduz pro humano. */
+function translateGroqError(err) {
+  const code = err?.error?.error?.code || err?.code;
+  const raw = err?.error?.error?.message || err?.message || '';
+
+  if (code === 'rate_limit_exceeded' || err?.status === 429 || err?.status === 413) {
+    if (/tokens per minute|TPM/i.test(raw)) {
+      return new Error(
+        'Estourou o limite de tokens por minuto do Groq. Espere um minuto e ' +
+          'tente de novo, ou baixe JARVIS_TOOL_BUDGET no .env pra mandar menos ' +
+          'ferramentas por comando.'
+      );
+    }
+    return new Error('Limite de uso do Groq atingido. Espere um minuto e tente de novo.');
+  }
+
+  if (err?.status === 401) {
+    return new Error('GROQ_API_KEY invalida ou revogada. Gere outra em console.groq.com/keys.');
+  }
+
+  if (code === 'model_not_found' || err?.status === 404) {
+    return new Error(
+      `Modelo "${config.llm.model}" nao existe no Groq. Veja os disponiveis em ` +
+        'console.groq.com/docs/models e ajuste JARVIS_MODEL.'
+    );
+  }
+
+  return new Error(raw || 'Falha na chamada ao Groq.');
+}
+
 function groqMessages(system, messages) {
   const out = [{ role: 'system', content: system }];
 
@@ -148,20 +178,31 @@ async function callGroq({ system, messages, tools }) {
     });
   }
 
-  const response = await client.chat.completions.create({
+  const request = {
     model: config.llm.model,
     max_tokens: 2048,
-    tools: tools.map((t) => ({
+    messages: groqMessages(system, messages),
+  };
+
+  // Groq rejeita tools: [] — omite o campo quando nao ha ferramenta nenhuma.
+  if (tools.length) {
+    request.tools = tools.map((t) => ({
       type: 'function',
       function: {
         name: t.name,
         description: t.description,
         parameters: normalizeSchema(t.input_schema),
       },
-    })),
-    tool_choice: 'auto',
-    messages: groqMessages(system, messages),
-  });
+    }));
+    request.tool_choice = 'auto';
+  }
+
+  let response;
+  try {
+    response = await client.chat.completions.create(request);
+  } catch (err) {
+    throw translateGroqError(err);
+  }
 
   const message = response.choices?.[0]?.message || {};
   const toolUses = (message.tool_calls || []).map((call, i) => ({

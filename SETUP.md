@@ -61,6 +61,18 @@ Windows estão de pé.
 > Claude — vai chamar a tool errada, ou nenhuma, em comandos ambíguos. Começa
 > no Groq porque é grátis; se irritar, migra.
 
+**Se aparecer erro de limite de tokens:** as 99 tools custam ~14 mil tokens e o
+free tier do Groq dá 12 mil por minuto. Por isso, no Groq, o router faz antes
+uma chamada barata que escolhe 2-3 skills relevantes e só manda as tools delas
+— cai pra ~4 mil por comando. Você vê a escolha na saída:
+
+```
+  · skills: hardware, timer
+  → system_stats
+```
+
+Ainda estourando? Baixe `JARVIS_TOOL_BUDGET` no `.env`.
+
 ---
 
 ## Etapa 2 — Memória (2 min)

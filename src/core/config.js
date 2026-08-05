@@ -58,6 +58,11 @@ export const config = {
     apiKey: PROVIDER === 'groq' ? GROQ_KEY : ANTHROPIC_KEY,
     keyName: PROVIDER === 'groq' ? 'GROQ_API_KEY' : 'ANTHROPIC_API_KEY',
     model: pickModel(PROVIDER),
+    // Teto de tokens gasto so com definicao de tool. Acima dele o router
+    // pre-seleciona skills em vez de mandar as 99. O free tier do Groq da
+    // 12k tokens por minuto e o loop faz varias chamadas dentro do mesmo
+    // minuto — por isso o teto e bem abaixo disso. 0 desliga.
+    toolBudget: Number(process.env.JARVIS_TOOL_BUDGET ?? (PROVIDER === 'groq' ? 3000 : 0)),
   },
 
   // Atalho legado — varios lugares so querem o nome do modelo pra logar.

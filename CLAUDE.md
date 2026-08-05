@@ -17,6 +17,10 @@ voz/texto → router (tool-use loop) → skills → platform/win32 → máquina
 - **`src/core/llm.js`** — adapter dos provedores. O router fala um formato
   canônico só; cada adapter traduz pro wire format. Trocar de cérebro não
   toca em skill nenhuma.
+- **`src/core/preselect.js`** — só entra quando as 99 tools não cabem no
+  orçamento de tokens do provedor (`JARVIS_TOOL_BUDGET`). Uma chamada barata,
+  sem tool nenhuma, escolhe 2-3 skills; o loop recebe só as tools delas.
+  Com Anthropic fica desligado.
 - **`src/core/registry.js`** — varre `src/skills/*.js` e achata as tools.
   Adicionar skill = criar arquivo, nada de registrar em lugar nenhum.
 - **`src/platform/win32.js`** — **toda** chamada de sistema passa aqui.

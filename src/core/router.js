@@ -1,6 +1,7 @@
 import { config } from './config.js';
 import { chat } from './llm.js';
 import { loadSkills, buildToolIndex, toolSpecs } from './registry.js';
+import { pickSkills, estimateTokens } from './preselect.js';
 import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
 import { recordActivity, writeRuntime } from './state.js';
@@ -53,8 +54,21 @@ export async function route(userInput, options = {}) {
     skills,
     source: options.source || 'cli',
     onStep: options.onStep || (() => {}),
+    onNote: options.onNote || (() => {}),
     confirm: options.confirm || (async () => false),
   };
+
+  // Todas as tools de uma vez so cabe quando o provedor aguenta o payload.
+  // Quando nao cabe, uma chamada barata escolhe as skills relevantes antes.
+  let active = tools;
+  const budget = config.llm.toolBudget;
+  if (budget && estimateTokens(tools) > budget) {
+    const picked = await pickSkills(userInput, skills);
+    if (picked.length) {
+      active = toolSpecs(skills.filter((s) => picked.includes(s.name)));
+      ctx.onNote(`skills: ${picked.join(', ')}`);
+    }
+  }
 
   const messages = [{ role: 'user', content: userInput }];
   const steps = [];
@@ -63,7 +77,7 @@ export async function route(userInput, options = {}) {
     const response = await chat({
       system: SYSTEM.replace('{{TODAY}}', todayContext()),
       messages,
-      tools,
+      tools: active,
     });
 
     if (response.stopReason !== 'tool_use') {
