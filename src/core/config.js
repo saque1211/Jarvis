@@ -1,9 +1,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..');
+// fileURLToPath, nao url.pathname: no Windows o pathname vem "/C:/Users/..."
+// e o resolve monta "C:\C:\Users\...".
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function bool(value, fallback = false) {
   if (value === undefined || value === '') return fallback;

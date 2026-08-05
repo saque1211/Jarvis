@@ -1,8 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
-const SKILLS_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'skills');
+// fileURLToPath, nao url.pathname — veja o comentario em config.js.
+const SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'skills');
 
 /**
  * Uma skill e um modulo que exporta { name, description, tools: [...] }.
