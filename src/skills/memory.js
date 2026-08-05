@@ -72,6 +72,7 @@ export default {
     },
     {
       name: 'remember',
+      speaks: true,
       description:
         'Grava um fato duravel sobre o usuario, um projeto ou uma pessoa. ' +
         'Use quando ele disser "lembra que", "sempre faca assim", "meu X e Y".',

@@ -101,6 +101,7 @@ export default {
   tools: [
     {
       name: 'set_reminder',
+      speaks: true,
       description:
         'Cria um lembrete que dispara uma notificacao do Windows na hora certa. ' +
         'Aceita tempo falado: "em 10 minutos", "as 15:30", "amanha as 9".',
@@ -162,6 +163,7 @@ export default {
     },
     {
       name: 'cancel_reminder',
+      speaks: true,
       description: 'Cancela um lembrete pendente pelo id ou por parte da mensagem.',
       input_schema: {
         type: 'object',
@@ -185,6 +187,7 @@ export default {
     },
     {
       name: 'notify_now',
+      speaks: true,
       description: 'Mostra uma notificacao do Windows agora, sem agendar.',
       input_schema: {
         type: 'object',
@@ -201,6 +204,7 @@ export default {
     },
     {
       name: 'set_alarm',
+      speaks: true,
       description:
         'Alarme sonoro: notifica e toca um beep repetido. Use quando o usuario quer ser interrompido ' +
         'de verdade, nao so avisado.',

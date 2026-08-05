@@ -85,6 +85,11 @@ Cada comando mostra onde o tempo foi:
   Ele só precisa cuspir `["hardware"]`; use o menor modelo que existir.
 - **modelo** alta → é o roteador pensando. Um modelo menor em `JARVIS_MODEL`
   responde mais rápido e erra mais a escolha de tool. Esse é o trade.
+
+  Comandos de ação ("põe 10 minutos", "abre o spotify") já encerram na saída da
+  tool e economizam uma viagem inteira. Perguntas que precisam de resumo
+  ("quanto de RAM tá livre") gastam a viagem extra por necessidade — o modelo
+  tem que destilar o relatório na parte que responde.
 - **máquina** alta → não é o LLM, é o Windows. PowerShell frio demora no
   primeiro comando de cada tipo.
 

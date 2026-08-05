@@ -37,6 +37,7 @@ export default {
     },
     {
       name: 'repeat_last',
+      speaks: true,
       description: 'Repete em voz alta a ultima coisa que eu disse. Use pra "repete", "nao entendi".',
       input_schema: { type: 'object', properties: {} },
       handler: async () => {
@@ -47,6 +48,7 @@ export default {
     },
     {
       name: 'say',
+      speaks: true,
       description:
         'Fala um texto especifico em voz alta. Use quando o usuario pedir pra eu ler algo ' +
         'ou anunciar alguma coisa.',

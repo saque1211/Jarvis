@@ -24,6 +24,7 @@ export default {
   tools: [
     {
       name: 'media_play_pause',
+      speaks: true,
       description: 'Da play ou pausa no que estiver tocando. Funciona pra Spotify, YouTube, qualquer player.',
       input_schema: {
         type: 'object',
@@ -45,6 +46,7 @@ export default {
     },
     {
       name: 'media_next',
+      speaks: true,
       description: 'Pula pra proxima faixa.',
       input_schema: { type: 'object', properties: {} },
       handler: async () =>
@@ -61,6 +63,7 @@ export default {
     },
     {
       name: 'media_previous',
+      speaks: true,
       description: 'Volta pra faixa anterior.',
       input_schema: { type: 'object', properties: {} },
       handler: async () =>
@@ -77,6 +80,7 @@ export default {
     },
     {
       name: 'set_volume',
+      speaks: true,
       description:
         'Ajusta o volume. Use "level" (0-100) pro volume do sistema, ou direction=up/down pra ajuste relativo.',
       input_schema: {
@@ -118,6 +122,7 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'spotify_play_search',
+      speaks: true,
       description:
         'Busca no Spotify e toca o primeiro resultado. Use quando o usuario pedir uma musica, ' +
         'artista, album ou playlist pelo nome.',
@@ -150,6 +155,7 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'spotify_now_playing',
+      speaks: true,
       description: 'Diz o que esta tocando agora no Spotify.',
       input_schema: { type: 'object', properties: {} },
       handler: async () =>
@@ -189,6 +195,7 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'play_youtube',
+      speaks: true,
       description: 'Abre uma busca ou video do YouTube no navegador padrao.',
       input_schema: {
         type: 'object',

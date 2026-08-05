@@ -24,6 +24,14 @@ Regras:
 Contexto do vault hoje:
 {{TODAY}}`;
 
+// Pistas de que o comando tem mais de uma intencao. Na duvida o router faz a
+// viagem extra ao modelo — errar aqui pro lado do "otimiza" perderia acao.
+const CHAINED = /(^|\s)(e|depois|dai|entao|tambem|ai|ainda)(\s|$)|[,;]/;
+
+function looksChained(input) {
+  return CHAINED.test(input.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+}
+
 let cached = null;
 
 async function getRuntime() {
@@ -136,6 +144,23 @@ export async function route(userInput, options = {}) {
           isError: true,
           content: err.message,
         });
+      }
+    }
+
+    // Atalho: uma tool so, que deu certo, e cuja saida ja e a resposta falada.
+    // Sem isso o comando gasta uma viagem inteira ao modelo grande so pra
+    // reescrever "Timer de 10 minutos rodando." com outras palavras.
+    if (config.fastReply && results.length === 1 && !looksChained(userInput)) {
+      const only = results[0];
+      const tool = toolIndex.get(only.name);
+      if (tool?.speaks && !only.isError) {
+        const reply = only.content;
+        timings.total = since(started);
+        ctx.onNote('resposta direta da tool');
+        setLastReply(reply);
+        writeRuntime({ lastTranscript: userInput, lastReply: reply });
+        appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
+        return { reply, steps, timings };
       }
     }
 

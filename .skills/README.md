@@ -28,6 +28,27 @@ export default {
 Coloque o arquivo em `src/skills/` e pronto — o registry carrega sozinho no
 próximo boot. Nomes de tool são globais, então não pode repetir.
 
+## `speaks: true`
+
+Marque assim a tool cuja saída **já é a resposta falada**:
+
+```js
+{ name: 'start_timer', speaks: true, /* ... */ }
+```
+
+Quando o comando é resolvido por uma tool `speaks` só, o router responde com a
+saída dela direto, em vez de gastar mais uma ida ao modelo pra reescrever
+"Timer de 10 minutos rodando." com outras palavras. Corta cerca de metade da
+latência dos comandos de ação.
+
+Só marque se a frase serve pra ser lida em voz alta sem edição. `start_timer`
+devolve *"Timer de 10m rodando."* — serve. `system_stats` devolve um relatório
+de quatro linhas — não serve, o modelo precisa destilar aquilo na parte que
+responde a pergunta.
+
+O atalho se desliga sozinho quando o comando parece ter mais de uma intenção
+("abre o spotify **e** põe 10 minutos"), pra não perder a segunda ação.
+
 **A `description` da tool é o que faz o roteamento funcionar.** Ela é o único
 sinal que o modelo tem pra escolher entre 99 tools. Diga *quando* usar, não só
 *o que faz* — e cite as frases que o usuário realmente fala.

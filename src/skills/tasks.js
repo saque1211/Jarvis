@@ -74,6 +74,7 @@ export default {
   tools: [
     {
       name: 'add_task',
+      speaks: true,
       description:
         'Adiciona uma tarefa. Aceita prazo em linguagem natural ("amanha", "em 3 dias", "15/08").',
       input_schema: {
@@ -163,6 +164,7 @@ export default {
     },
     {
       name: 'complete_task',
+      speaks: true,
       description: 'Marca uma tarefa como concluida. Aceita o id ou parte do titulo.',
       input_schema: {
         type: 'object',
@@ -188,6 +190,7 @@ export default {
     },
     {
       name: 'delete_task',
+      speaks: true,
       description: 'Remove uma tarefa da lista.',
       input_schema: {
         type: 'object',
@@ -246,6 +249,7 @@ export default {
     },
     {
       name: 'take_note',
+      speaks: true,
       description:
         'Salva uma anotacao livre no vault. Use quando o usuario disser "anota ai", "lembra disso", ' +
         '"guarda essa ideia".',

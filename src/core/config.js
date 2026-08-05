@@ -83,6 +83,10 @@ export const config = {
   },
   maxTurns: Number(process.env.JARVIS_MAX_TURNS || 8),
 
+  // Encerra o comando na saida da tool quando ela ja e a resposta falada,
+  // em vez de gastar outra ida ao modelo pra reescrever a mesma frase.
+  fastReply: bool(process.env.JARVIS_FAST_REPLY, true),
+
   // Memoria
   vaultPath: path.resolve(process.env.VAULT_PATH || path.join(ROOT, 'vault')),
 

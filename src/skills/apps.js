@@ -36,6 +36,7 @@ export default {
   tools: [
     {
       name: 'open_app',
+      speaks: true,
       description:
         'Abre um aplicativo pelo apelido (discord, vscode, spotify, chrome, steam...). ' +
         'Opcionalmente abre com um arquivo ou pasta como argumento. ' +
@@ -64,6 +65,7 @@ export default {
     },
     {
       name: 'close_app',
+      speaks: true,
       description:
         'Fecha um aplicativo pelo nome do processo. Operacao destrutiva: confirme com o usuario antes.',
       input_schema: {
@@ -101,6 +103,7 @@ export default {
     },
     {
       name: 'focus_window',
+      speaks: true,
       description: 'Traz a janela de um app que ja esta aberto pra frente, sem reabrir.',
       input_schema: {
         type: 'object',
@@ -129,6 +132,7 @@ if ($null -eq $p) { Write-Error 'Sem janela visivel'; exit 1 }
     },
     {
       name: 'register_app',
+      speaks: true,
       description:
         'Salva um novo apelido de app em config/apps.json. Use quando o usuario disser onde um app fica.',
       input_schema: {

@@ -261,6 +261,7 @@ public static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, In
     },
     {
       name: 'battery_status',
+      speaks: true,
       description: 'Le a bateria do notebook (se houver) e o estado da energia.',
       input_schema: { type: 'object', properties: {} },
       handler: async () => {

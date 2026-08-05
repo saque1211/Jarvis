@@ -234,6 +234,7 @@ export default {
   tools: [
     {
       name: 'start_timer',
+      speaks: true,
       description:
         'Inicia uma contagem regressiva. Aceita duracao falada: "5 minutos", "1 hora e meia", ' +
         '"90 segundos", "meia hora". Use pra "poe 10 minutos", "marca 8 minutos pra massa".',
@@ -269,6 +270,7 @@ export default {
     },
     {
       name: 'start_stopwatch',
+      speaks: true,
       description:
         'Inicia um cronometro (conta pra cima, sem fim). Use pra "comeca a contar", ' +
         '"cronometra isso", "quanto tempo eu levo".',
@@ -303,6 +305,7 @@ export default {
     },
     {
       name: 'stopwatch_control',
+      speaks: true,
       description:
         'Pausa, retoma, marca volta ou para um cronometro. ' +
         'Parar devolve o tempo total e registra no vault.',
@@ -365,6 +368,7 @@ export default {
     },
     {
       name: 'start_pomodoro',
+      speaks: true,
       description:
         'Inicia um ciclo pomodoro que se encadeia sozinho: foco, pausa, foco, pausa. ' +
         'Padrao 25 minutos de foco, 5 de pausa, 4 ciclos.',
@@ -400,6 +404,7 @@ export default {
     },
     {
       name: 'check_timers',
+      speaks: true,
       description:
         'Diz quanto falta nos timers e quanto ja correu nos cronometros. ' +
         'Use pra "quanto falta", "quanto tempo ja passou", "como ta o timer".',
@@ -422,6 +427,7 @@ export default {
     },
     {
       name: 'cancel_timer',
+      speaks: true,
       description: 'Cancela um timer, cronometro ou o pomodoro inteiro.',
       input_schema: {
         type: 'object',
@@ -478,6 +484,7 @@ export default {
     },
     {
       name: 'current_time',
+      speaks: true,
       description:
         'Diz a hora e a data atual. Use pra "que horas sao", "que dia e hoje", ' +
         '"quanto tempo falta pro fim do dia".',
