@@ -1,18 +1,22 @@
 # JARVIS — contexto pro Claude Code
 
 Assistente pessoal voice-first pra **Windows 11**. Wake word local (Porcupine),
-STT local (Whisper), roteamento por Claude com tool-use, TTS local (SAPI/Piper).
+STT local (Whisper), roteamento por LLM com tool-use, TTS local (SAPI/Piper).
 
 ## Arquitetura
 
 ```
 voz/texto → router (tool-use loop) → skills → platform/win32 → máquina
-                    ↕
-                  vault (markdown)
+              ↕            ↕
+            llm.js       vault (markdown)
+         (groq|anthropic)
 ```
 
 - **`src/core/router.js`** — loop de tool-use. Carrega todas as tools de uma
   vez e deixa o modelo escolher. Não existe intent matching.
+- **`src/core/llm.js`** — adapter dos provedores. O router fala um formato
+  canônico só; cada adapter traduz pro wire format. Trocar de cérebro não
+  toca em skill nenhuma.
 - **`src/core/registry.js`** — varre `src/skills/*.js` e achata as tools.
   Adicionar skill = criar arquivo, nada de registrar em lugar nenhum.
 - **`src/platform/win32.js`** — **toda** chamada de sistema passa aqui.
@@ -32,8 +36,9 @@ antes de chamar de novo. Veja `exec.run_command` e `files.delete_file`.
 **Escrita de arquivo passa por `assertAllowed()`** em `files.js`.
 
 **A `description` da tool é o roteamento.** É o único sinal que o modelo tem
-pra escolher entre 92 tools. Escreva *quando usar*, com as frases reais que o
-usuário fala — não só *o que faz*.
+pra escolher entre 99 tools. Escreva *quando usar*, com as frases reais que o
+usuário fala — não só *o que faz*. Isso pesa mais ainda no Groq, onde o modelo
+é menor e erra a escolha com mais facilidade.
 
 **Respostas são lidas em voz alta.** O system prompt pede 1-2 frases, sem
 markdown, sem emoji. Handlers devem devolver texto curto e falável.

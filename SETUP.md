@@ -9,7 +9,12 @@ download de modelo.
 
 - **Windows 11** (o `src/platform/win32.js` assume isso)
 - **Node 20+** — https://nodejs.org
+- **Git** — https://git-scm.com/download/win
 - Um microfone que funcione
+
+> **PowerShell bloqueando o npm?** Se aparecer *"a execução de scripts foi
+> desabilitada neste sistema"*, abra o PowerShell como Administrador e rode
+> `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`.
 
 ---
 
@@ -22,11 +27,21 @@ npm install
 copy .env.example .env
 ```
 
-Pegue a chave em https://console.anthropic.com e edite o `.env`:
+Escolha um provedor e ponha a chave no `.env`.
+
+**Groq** (free tier) — https://console.groq.com/keys
+
+```
+GROQ_API_KEY=gsk_...
+```
+
+**Anthropic** (pago) — https://console.anthropic.com
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Com as duas presentes o Groq ganha. Force com `LLM_PROVIDER=anthropic`.
 
 **Teste:**
 
@@ -37,9 +52,14 @@ npm run jarvis "quanto de RAM tá livre?"
 Se ele respondeu com números reais da sua máquina, o cérebro e a camada
 Windows estão de pé.
 
-> **Modelo.** O padrão é `claude-sonnet-5`, que responde rápido o suficiente
-> pra conversa falada. Se preferir raciocínio mais pesado em comandos
-> complexos, troque `JARVIS_MODEL=claude-opus-5` — custa latência.
+> **Modelo.** Vazio no `.env` = padrão do provedor
+> (`llama-3.3-70b-versatile` no Groq, `claude-sonnet-5` na Anthropic).
+> Sobrescreva com `JARVIS_MODEL` se quiser outro.
+>
+> **O trade-off honesto:** o JARVIS oferece as 99 tools de uma vez e deixa o
+> modelo escolher. O Llama do Groq erra essa escolha com mais frequência que o
+> Claude — vai chamar a tool errada, ou nenhuma, em comandos ambíguos. Começa
+> no Groq porque é grátis; se irritar, migra.
 
 ---
 
@@ -209,10 +229,11 @@ Saída típica no meio do caminho:
 
 ```
   Cérebro
-  OK   ANTHROPIC_API_KEY presente, modelo claude-sonnet-5
+  OK   provedor groq, GROQ_API_KEY presente, modelo llama-3.3-70b-versatile
+  --   Groq e free tier: mais barato, mas erra mais na escolha entre 99 tools
 
   Skills
-  OK   16 skills carregadas, 92 tools disponíveis
+  OK   17 skills carregadas, 99 tools disponíveis
 
   Voz
   OK   PICOVOICE_ACCESS_KEY presente (wake word)

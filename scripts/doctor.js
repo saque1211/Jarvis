@@ -30,8 +30,12 @@ async function main() {
   ok(`Node ${process.version}`);
 
   console.log(pc.bold('\n  Cerebro'));
-  if (config.anthropicApiKey) ok(`ANTHROPIC_API_KEY presente, modelo ${config.model}`);
-  else fail('ANTHROPIC_API_KEY ausente — sem isso o JARVIS nao roteia nada');
+  const { provider, keyName, apiKey, model } = config.llm;
+  if (apiKey) ok(`provedor ${provider}, ${keyName} presente, modelo ${model}`);
+  else fail(`${keyName} ausente (provedor ${provider}) — sem isso o JARVIS nao roteia nada`);
+  if (provider === 'groq') {
+    warn('Groq e free tier: mais barato, mas erra mais na escolha entre 99 tools');
+  }
 
   console.log(pc.bold('\n  Skills'));
   try {

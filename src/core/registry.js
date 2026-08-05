@@ -42,8 +42,11 @@ export function buildToolIndex(skills) {
   return index;
 }
 
-/** Converte pro formato que a API do Claude espera (sem o handler). */
-export function toAnthropicTools(skills) {
+/**
+ * Lista as tools sem o handler. Formato neutro — quem traduz pro wire format
+ * de cada provedor e o src/core/llm.js.
+ */
+export function toolSpecs(skills) {
   const tools = [];
   for (const skill of skills) {
     for (const tool of skill.tools) {

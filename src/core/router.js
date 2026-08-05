@@ -1,6 +1,6 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { config } from './config.js';
-import { loadSkills, buildToolIndex, toAnthropicTools } from './registry.js';
+import { chat } from './llm.js';
+import { loadSkills, buildToolIndex, toolSpecs } from './registry.js';
 import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
 import { recordActivity, writeRuntime } from './state.js';
@@ -31,30 +31,23 @@ async function getRuntime() {
   cached = {
     skills,
     toolIndex: buildToolIndex(skills),
-    anthropicTools: toAnthropicTools(skills),
+    tools: toolSpecs(skills),
   };
   return cached;
 }
 
-function textOf(message) {
-  return message.content
-    .filter((b) => b.type === 'text')
-    .map((b) => b.text)
-    .join('\n')
-    .trim();
-}
-
 /**
- * Roda o loop de tool-use ate o Claude parar de pedir ferramentas.
+ * Roda o loop de tool-use ate o modelo parar de pedir ferramentas.
  * Devolve { reply, steps } — steps e a trilha do que foi executado de fato.
  */
 export async function route(userInput, options = {}) {
-  if (!config.anthropicApiKey) {
-    throw new Error('Falta ANTHROPIC_API_KEY no .env — o JARVIS nao tem cerebro sem isso.');
+  if (!config.llm.apiKey) {
+    throw new Error(
+      `Falta ${config.llm.keyName} no .env — o JARVIS nao tem cerebro sem isso.`
+    );
   }
 
-  const { skills, toolIndex, anthropicTools } = await getRuntime();
-  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const { skills, toolIndex, tools } = await getRuntime();
 
   const ctx = {
     skills,
@@ -67,64 +60,60 @@ export async function route(userInput, options = {}) {
   const steps = [];
 
   for (let turn = 0; turn < config.maxTurns; turn++) {
-    const response = await client.messages.create({
-      model: config.model,
-      max_tokens: 2048,
+    const response = await chat({
       system: SYSTEM.replace('{{TODAY}}', todayContext()),
-      tools: anthropicTools,
       messages,
+      tools,
     });
 
-    if (response.stop_reason !== 'tool_use') {
-      const reply = textOf(response);
+    if (response.stopReason !== 'tool_use') {
+      const reply = response.text;
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
       return { reply, steps };
     }
 
-    messages.push({ role: 'assistant', content: response.content });
+    messages.push({ role: 'assistant', text: response.text, toolUses: response.toolUses });
 
     const results = [];
-    for (const block of response.content) {
-      if (block.type !== 'tool_use') continue;
-
-      const tool = toolIndex.get(block.name);
-      ctx.onStep({ tool: block.name, input: block.input });
+    for (const use of response.toolUses) {
+      const tool = toolIndex.get(use.name);
+      ctx.onStep({ tool: use.name, input: use.input });
 
       if (!tool) {
         results.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          is_error: true,
-          content: `Tool desconhecida: ${block.name}`,
+          id: use.id,
+          name: use.name,
+          isError: true,
+          content: `Tool desconhecida: ${use.name}`,
         });
         continue;
       }
 
       try {
-        const output = await tool.handler(block.input, ctx);
+        const output = await tool.handler(use.input, ctx);
         const content = typeof output === 'string' ? output : JSON.stringify(output);
-        steps.push({ tool: block.name, input: block.input, ok: true });
-        recordActivity({ tool: block.name, skill: tool.skillName, ok: true });
+        steps.push({ tool: use.name, input: use.input, ok: true });
+        recordActivity({ tool: use.name, skill: tool.skillName, ok: true });
         results.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
+          id: use.id,
+          name: use.name,
           content: content.slice(0, 8000) || '(sem saida)',
         });
       } catch (err) {
-        steps.push({ tool: block.name, input: block.input, ok: false, error: err.message });
-        recordActivity({ tool: block.name, skill: tool.skillName, ok: false, error: err.message });
+        steps.push({ tool: use.name, input: use.input, ok: false, error: err.message });
+        recordActivity({ tool: use.name, skill: tool.skillName, ok: false, error: err.message });
         results.push({
-          type: 'tool_result',
-          tool_use_id: block.id,
-          is_error: true,
+          id: use.id,
+          name: use.name,
+          isError: true,
           content: err.message,
         });
       }
     }
 
-    messages.push({ role: 'user', content: results });
+    messages.push({ role: 'tool', results });
   }
 
   return {

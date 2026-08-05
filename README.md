@@ -1,8 +1,8 @@
 # JARVIS
 
 Assistente pessoal voice-first pra Windows 11. Wake word local, roteamento por
-Claude, **controle real da máquina** — não é um chatbot que explica como fazer,
-é um que faz.
+LLM (Groq ou Claude), **controle real da máquina** — não é um chatbot que
+explica como fazer, é um que faz.
 
 ```
 SPEAK. ROUTE. REMEMBER. REPEAT.
@@ -26,7 +26,7 @@ Você fala **"jarvis"**, dá o comando, ele executa.
 "jarvis, o que eu fiz na terça?"
 ```
 
-**17 skills, 99 tools.** O Claude escolhe qual usar — não existe lista de
+**17 skills, 99 tools.** O modelo escolhe qual usar — não existe lista de
 comandos decorados.
 
 | Skill | O que cobre |
@@ -55,7 +55,7 @@ comandos decorados.
 
 **Seu áudio nunca sai da máquina.** Wake word e transcrição rodam local
 (Porcupine + Whisper). A única coisa que vai pra rede é o texto já transcrito,
-pra API do Claude decidir qual tool chamar.
+pra API do LLM decidir qual tool chamar.
 
 O vault é markdown puro no seu disco. Abre no Obsidian, no Notepad, no que
 você quiser. Sem banco de dados, sem nuvem, sem lock-in.
@@ -73,13 +73,27 @@ npm install
 copy .env.example .env
 ```
 
-### 2. Chave do Claude (única obrigatória)
+### 2. Chave de um LLM (única obrigatória)
 
-Pegue em https://console.anthropic.com e ponha no `.env`:
+Escolha um dos dois e ponha no `.env`:
+
+**Groq** — free tier, rápido. Chave em https://console.groq.com/keys
+
+```
+GROQ_API_KEY=gsk_...
+```
+
+**Anthropic** — pago, mas escolhe a tool certa com bem mais precisão entre as 99.
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
 ```
+
+Se as duas estiverem presentes, o Groq ganha. Force com `LLM_PROVIDER=anthropic`.
+
+> Com Groq, espere erros de roteamento de vez em quando — 99 tools é muita
+> escolha pra um modelo aberto. Se o JARVIS chamar a tool errada com frequência,
+> é sinal pra migrar pro Claude.
 
 ### 3. Teste por texto primeiro
 
@@ -169,7 +183,7 @@ O JARVIS controla sua máquina de verdade, então tem freio:
 
 ```
 src/
-  core/         router (tool-use loop), registry, vault, config
+  core/         router (tool-use loop), llm (Groq/Claude), registry, vault, config
   platform/     win32.js — tudo que toca o Windows passa aqui
   skills/       17 skills, uma por arquivo
   core/state.js snapshot que o HUD consome

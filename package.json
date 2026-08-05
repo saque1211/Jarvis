@@ -25,6 +25,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.65.0",
     "dotenv": "^16.4.5",
+    "groq-sdk": "^0.9.1",
     "picocolors": "^1.1.1"
   },
   "optionalDependencies": {

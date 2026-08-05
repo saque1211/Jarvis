@@ -15,14 +15,52 @@ function list(value) {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// ─── Cerebro ────────────────────────────────────────────────────────────────
+// Dois provedores: Groq (free tier, rapido) e Anthropic (roteia melhor com
+// muitas tools). Quem manda e LLM_PROVIDER; sem ele, vale a chave que existir.
+
+const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
+const GROQ_KEY = process.env.GROQ_API_KEY;
+
+const DEFAULT_MODEL = {
+  groq: 'llama-3.3-70b-versatile',
+  anthropic: 'claude-sonnet-5',
+};
+
+function pickProvider() {
+  const explicit = (process.env.LLM_PROVIDER || '').toLowerCase().trim();
+  if (explicit) return explicit;
+  if (GROQ_KEY) return 'groq';
+  return 'anthropic';
+}
+
+function pickModel(provider) {
+  const wanted = process.env.JARVIS_MODEL?.trim();
+  if (!wanted) return DEFAULT_MODEL[provider] || DEFAULT_MODEL.anthropic;
+  // Um JARVIS_MODEL sobrando do provedor anterior quebraria a chamada com um
+  // erro que nao explica nada. Ignora e usa o padrao do provedor atual.
+  const looksAnthropic = wanted.startsWith('claude');
+  if (provider === 'groq' && looksAnthropic) return DEFAULT_MODEL.groq;
+  if (provider === 'anthropic' && !looksAnthropic) return DEFAULT_MODEL.anthropic;
+  return wanted;
+}
+
+const PROVIDER = pickProvider();
+
 export const config = {
   root: ROOT,
 
-  // Cerebro
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY,
-  // Sonnet roteia rapido o suficiente pra voz. Troque por claude-opus-5 se
-  // quiser raciocinio mais pesado em troca de latencia.
-  model: process.env.JARVIS_MODEL || 'claude-sonnet-5',
+  llm: {
+    provider: PROVIDER,
+    apiKey: PROVIDER === 'groq' ? GROQ_KEY : ANTHROPIC_KEY,
+    keyName: PROVIDER === 'groq' ? 'GROQ_API_KEY' : 'ANTHROPIC_API_KEY',
+    model: pickModel(PROVIDER),
+  },
+
+  // Atalho legado — varios lugares so querem o nome do modelo pra logar.
+  get model() {
+    return this.llm.model;
+  },
   maxTurns: Number(process.env.JARVIS_MAX_TURNS || 8),
 
   // Memoria
