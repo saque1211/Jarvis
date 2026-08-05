@@ -68,15 +68,15 @@ function anthropicMessages(messages) {
   });
 }
 
-async function callAnthropic({ system, messages, tools }) {
+async function callAnthropic({ system, messages, tools, model, maxTokens }) {
   if (!client) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     client = new Anthropic({ apiKey: config.llm.apiKey });
   }
 
   const response = await client.messages.create({
-    model: config.llm.model,
-    max_tokens: 2048,
+    model,
+    max_tokens: maxTokens,
     system,
     tools: tools.map((t) => ({
       name: t.name,
@@ -162,7 +162,7 @@ function groqMessages(system, messages) {
   return out;
 }
 
-async function callGroq({ system, messages, tools }) {
+async function callGroq({ system, messages, tools, model, maxTokens }) {
   if (!client) {
     let Groq;
     try {
@@ -179,8 +179,8 @@ async function callGroq({ system, messages, tools }) {
   }
 
   const request = {
-    model: config.llm.model,
-    max_tokens: 2048,
+    model,
+    max_tokens: maxTokens,
     messages: groqMessages(system, messages),
   };
 
@@ -222,12 +222,22 @@ async function callGroq({ system, messages, tools }) {
 
 const PROVIDERS = { anthropic: callAnthropic, groq: callGroq };
 
-export async function chat({ system, messages, tools }) {
+/**
+ * `fast: true` troca pro modelo pequeno. Use nas etapas que sao classificacao,
+ * nao raciocinio — o modelo grande ali e so latencia.
+ */
+export async function chat({ system, messages, tools = [], fast = false, maxTokens = 2048 }) {
   const call = PROVIDERS[config.llm.provider];
   if (!call) {
     throw new Error(
       `Provedor desconhecido: "${config.llm.provider}". Use LLM_PROVIDER=groq ou anthropic.`
     );
   }
-  return call({ system, messages, tools });
+  return call({
+    system,
+    messages,
+    tools,
+    model: fast ? config.llm.fastModel : config.llm.model,
+    maxTokens,
+  });
 }

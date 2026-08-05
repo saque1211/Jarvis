@@ -58,15 +58,21 @@ export async function route(userInput, options = {}) {
     confirm: options.confirm || (async () => false),
   };
 
+  const started = Date.now();
+  const timings = { preselect: 0, llm: 0, tools: 0, total: 0 };
+  const since = (t) => Date.now() - t;
+
   // Todas as tools de uma vez so cabe quando o provedor aguenta o payload.
   // Quando nao cabe, uma chamada barata escolhe as skills relevantes antes.
   let active = tools;
   const budget = config.llm.toolBudget;
   if (budget && estimateTokens(tools) > budget) {
+    const t = Date.now();
     const picked = await pickSkills(userInput, skills);
+    timings.preselect = since(t);
     if (picked.length) {
       active = toolSpecs(skills.filter((s) => picked.includes(s.name)));
-      ctx.onNote(`skills: ${picked.join(', ')}`);
+      ctx.onNote(`skills: ${picked.join(', ')} (${timings.preselect}ms)`);
     }
   }
 
@@ -74,18 +80,21 @@ export async function route(userInput, options = {}) {
   const steps = [];
 
   for (let turn = 0; turn < config.maxTurns; turn++) {
+    const t = Date.now();
     const response = await chat({
       system: SYSTEM.replace('{{TODAY}}', todayContext()),
       messages,
       tools: active,
     });
+    timings.llm += since(t);
 
     if (response.stopReason !== 'tool_use') {
       const reply = response.text;
+      timings.total = since(started);
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
-      return { reply, steps };
+      return { reply, steps, timings };
     }
 
     messages.push({ role: 'assistant', text: response.text, toolUses: response.toolUses });
@@ -105,8 +114,10 @@ export async function route(userInput, options = {}) {
         continue;
       }
 
+      const toolStarted = Date.now();
       try {
         const output = await tool.handler(use.input, ctx);
+        timings.tools += since(toolStarted);
         const content = typeof output === 'string' ? output : JSON.stringify(output);
         steps.push({ tool: use.name, input: use.input, ok: true });
         recordActivity({ tool: use.name, skill: tool.skillName, ok: true });
@@ -116,6 +127,7 @@ export async function route(userInput, options = {}) {
           content: content.slice(0, 8000) || '(sem saida)',
         });
       } catch (err) {
+        timings.tools += since(toolStarted);
         steps.push({ tool: use.name, input: use.input, ok: false, error: err.message });
         recordActivity({ tool: use.name, skill: tool.skillName, ok: false, error: err.message });
         results.push({
@@ -130,8 +142,10 @@ export async function route(userInput, options = {}) {
     messages.push({ role: 'tool', results });
   }
 
+  timings.total = since(started);
   return {
     reply: 'Chegamos no limite de passos sem terminar. Tenta pedir de um jeito mais especifico.',
     steps,
+    timings,
   };
 }

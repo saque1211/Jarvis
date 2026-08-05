@@ -101,7 +101,10 @@ export async function pickSkills(userInput, skills) {
     const response = await chat({
       system: SYSTEM.replace('{{SKILLS}}', catalog(skills)),
       messages: [{ role: 'user', content: userInput }],
-      tools: [],
+      // Classificacao, nao raciocinio: modelo pequeno e resposta curta.
+      // A saida util e tipo ["apps","timer"] — 16 tokens dao folga.
+      fast: true,
+      maxTokens: 64,
     });
     const picked = parseNames(response.text, valid);
     if (picked.length) return picked;

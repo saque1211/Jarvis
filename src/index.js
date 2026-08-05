@@ -17,13 +17,23 @@ ${pc.dim('  SPEAK. ROUTE. REMEMBER. REPEAT.')}
 `;
 
 async function runOnce(command, { spoken }) {
-  const { reply, steps } = await route(command, {
+  const { reply, steps, timings } = await route(command, {
     source: 'cli',
     onNote: (note) => console.log(pc.dim(`  · ${note}`)),
     onStep: ({ tool }) => console.log(pc.dim(`  → ${tool}`)),
   });
 
   console.log(`\n${pc.magenta('JARVIS:')} ${reply}\n`);
+
+  if (timings) {
+    const s = (ms) => `${(ms / 1000).toFixed(1)}s`;
+    console.log(
+      pc.dim(
+        `  ${s(timings.total)} total — ${s(timings.preselect)} escolha, ` +
+          `${s(timings.llm)} modelo, ${s(timings.tools)} máquina\n`
+      )
+    );
+  }
 
   const failed = steps.filter((s) => !s.ok);
   if (failed.length) {

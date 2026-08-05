@@ -73,6 +73,25 @@ uma chamada barata que escolhe 2-3 skills relevantes e só manda as tools delas
 
 Ainda estourando? Baixe `JARVIS_TOOL_BUDGET` no `.env`.
 
+### Se estiver lento
+
+Cada comando mostra onde o tempo foi:
+
+```
+  2.4s total — 0.3s escolha, 1.9s modelo, 0.2s máquina
+```
+
+- **escolha** alta → o `JARVIS_FAST_MODEL` está pesado demais pro serviço.
+  Ele só precisa cuspir `["hardware"]`; use o menor modelo que existir.
+- **modelo** alta → é o roteador pensando. Um modelo menor em `JARVIS_MODEL`
+  responde mais rápido e erra mais a escolha de tool. Esse é o trade.
+- **máquina** alta → não é o LLM, é o Windows. PowerShell frio demora no
+  primeiro comando de cada tipo.
+
+Vale lembrar: no CLI o tempo de fala do TTS vem *depois* desse número. Se a
+sensação de lentidão for a resposta demorando a sair da caixa, é o TTS —
+`npm run jarvis --mudo "..."` mede sem ele.
+
 ---
 
 ## Etapa 2 — Memória (2 min)

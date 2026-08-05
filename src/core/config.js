@@ -30,6 +30,14 @@ const DEFAULT_MODEL = {
   anthropic: 'claude-sonnet-5',
 };
 
+// Modelo pequeno pras tarefas que nao precisam de raciocinio — hoje so a
+// pre-selecao de skills, que devolve um array de 2 palavras. Rodar isso no
+// modelo grande e latencia jogada fora.
+const DEFAULT_FAST_MODEL = {
+  groq: 'llama-3.1-8b-instant',
+  anthropic: 'claude-haiku-4-5-20251001',
+};
+
 function pickProvider() {
   const explicit = (process.env.LLM_PROVIDER || '').toLowerCase().trim();
   if (explicit) return explicit;
@@ -58,6 +66,10 @@ export const config = {
     apiKey: PROVIDER === 'groq' ? GROQ_KEY : ANTHROPIC_KEY,
     keyName: PROVIDER === 'groq' ? 'GROQ_API_KEY' : 'ANTHROPIC_API_KEY',
     model: pickModel(PROVIDER),
+    fastModel:
+      process.env.JARVIS_FAST_MODEL?.trim() ||
+      DEFAULT_FAST_MODEL[PROVIDER] ||
+      DEFAULT_FAST_MODEL.anthropic,
     // Teto de tokens gasto so com definicao de tool. Acima dele o router
     // pre-seleciona skills em vez de mandar as 99. O free tier do Groq da
     // 12k tokens por minuto e o loop faz varias chamadas dentro do mesmo
