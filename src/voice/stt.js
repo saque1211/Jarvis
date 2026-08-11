@@ -43,6 +43,20 @@ const CANDIDATES = [
   },
 ];
 
+/**
+ * Quebra o STT_COMMAND em argumentos respeitando aspas — "C:/Program Files/x.exe"
+ * e um argumento so. Sem isso, qualquer caminho com espaco vira lixo.
+ */
+function tokenize(command) {
+  const tokens = [];
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  let match;
+  while ((match = re.exec(command)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return tokens;
+}
+
 let resolved = null;
 
 async function resolveEngine() {
@@ -83,9 +97,17 @@ export async function transcribe(wavPath) {
   }
 
   if (engine.custom) {
-    const filled = config.voice.sttCommand.replace('{file}', wavPath);
-    const [cmd, ...args] = filled.split(' ');
+    // Substitui {file} depois de quebrar, senao um caminho temporario com
+    // espaco (usuario "Ana Paula") viraria dois argumentos.
+    const [cmd, ...args] = tokenize(config.voice.sttCommand).map((t) =>
+      t.replace('{file}', wavPath)
+    );
     const result = await run(cmd, args, { timeoutMs: 120000 });
+    if (result.code === -1) {
+      throw new Error(
+        `Nao consegui rodar o STT_COMMAND: ${cmd}\n${result.stderr || 'executavel nao encontrado'}`
+      );
+    }
     return result.stdout.trim() || null;
   }
 
