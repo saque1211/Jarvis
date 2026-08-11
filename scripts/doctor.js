@@ -81,8 +81,30 @@ async function main() {
   }
 
   const stt = await sttEngineName();
-  if (stt) ok(`STT: ${stt}`);
-  else fail('nenhum motor de STT — instale whisper.cpp ou openai-whisper');
+  if (stt) {
+    ok(`STT: ${stt}`);
+    // STT_COMMAND ser lido nao garante que o executavel e o modelo existem —
+    // e o erro so apareceria na primeira frase falada.
+    if (stt === 'STT_COMMAND') {
+      const parts = config.voice.sttCommand.match(/"([^"]*)"|(\S+)/g) || [];
+      const paths = parts
+        .map((p) => p.replace(/"/g, ''))
+        .filter((p) => /[/\\]/.test(p) && !p.includes('{file}'));
+      for (const p of paths) {
+        if (fs.existsSync(p)) ok(`  existe: ${p}`);
+        else fail(`  NAO existe: ${p} — o STT vai falhar na primeira frase`);
+      }
+    }
+  } else {
+    fail('nenhum motor de STT');
+    if (!config.voice.sttCommand) {
+      console.log(pc.dim('       STT_COMMAND nao esta no .env, e nem whisper-cli nem whisper'));
+      console.log(pc.dim('       foram achados no PATH. Aponte o seu no .env, por exemplo:'));
+      console.log(
+        pc.dim('         STT_COMMAND=C:/whisper/whisper-cli.exe -m C:/whisper/ggml-small.bin -f {file} -l pt -nt --no-prints')
+      );
+    }
+  }
 
   if (config.voice.ttsCommand) ok('TTS: comando customizado configurado');
   else if (process.platform === 'win32') ok('TTS: SAPI (voz nativa do Windows)');
