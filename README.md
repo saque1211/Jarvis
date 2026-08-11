@@ -146,7 +146,8 @@ Aperte `Ctrl+Alt+J` (ou diga **"jarvis"**, se ligou a wake word) e fale.
 ### 5. Confira o que falta
 
 ```bash
-npm run doctor
+npm run doctor       # o que está configurado
+npm run test:voice   # mic + transcrição + fala, isolados do resto
 ```
 
 Lista, item por item, o que já funciona e o que ainda precisa de chave.

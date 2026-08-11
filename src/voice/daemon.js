@@ -155,7 +155,15 @@ async function main() {
   trigger = await createTrigger();
   log('gatilho', trigger.kind);
 
-  recorder = new PvRecorder(trigger.frameLength, config.voice.micIndex);
+  try {
+    recorder = new PvRecorder(trigger.frameLength, config.voice.micIndex);
+  } catch (err) {
+    throw new Error(
+      `Nao consegui abrir o microfone: ${err.message}\n` +
+        'Rode "npm run test:voice" — ele lista os dispositivos disponiveis e diz\n' +
+        'se e permissao do Windows ou JARVIS_MIC_INDEX errado.'
+    );
+  }
   // So a wake word precisa do microfone aberto sem parar. Com tecla de atalho
   // o mic abre no disparo e fecha depois — nada de buffer velho na captura, e
   // o indicador do Windows so acende quando voce pediu.

@@ -207,7 +207,21 @@ Quer melhor? [Piper](https://github.com/rhasspy/piper):
 TTS_COMMAND=piper --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
 ```
 
-### 3d. Ligue
+### 3d. Teste a cadeia de voz antes de ligar tudo
+
+```bash
+npm run test:voice
+```
+
+Grava 5 segundos, transcreve e fala de volta — sem gatilho, sem LLM, sem tools.
+Cada etapa reporta sozinha: microfone, volume captado, motor de STT, tempo de
+transcrição, TTS.
+
+Vale porque o `npm run listen` junta seis coisas numa corrente só; quando ele
+falha calado, esse aqui diz qual elo quebrou. Se o pico de volume vier zerado,
+o problema é permissão de microfone ou `JARVIS_MIC_INDEX` — não é o Whisper.
+
+### 3e. Ligue
 
 ```bash
 npm run listen

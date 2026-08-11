@@ -72,8 +72,10 @@ async function main() {
   }
 
   try {
-    await import('@picovoice/pvrecorder-node');
-    ok('gravacao de microfone instalada');
+    const { PvRecorder } = await import('@picovoice/pvrecorder-node');
+    const devices = PvRecorder.getAvailableDevices();
+    if (devices.length) ok(`microfone: ${devices.length} dispositivo(s) — ${devices[0]}`);
+    else fail('nenhum microfone detectado — cheque a permissao de microfone do Windows');
   } catch {
     fail('rode: npm install @picovoice/pvrecorder-node (esse nao precisa de chave)');
   }
