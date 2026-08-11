@@ -7,14 +7,19 @@ import { config, ensureDirs } from '../core/config.js';
 import { route } from '../core/router.js';
 import { transcribe, sttEngineName } from './stt.js';
 import { speak } from './tts.js';
+import { createTrigger } from './trigger.js';
 import { writeWav, frameEnergy } from './wav.js';
 import { checkDueReminders } from '../skills/notify.js';
 import { checkDueTimers } from '../skills/timer.js';
 import { writeRuntime } from '../core/state.js';
 
 /**
- * Daemon de voz: escuta a wake word, grava o comando ate voce parar de falar,
- * transcreve local, roteia pro Claude e responde em voz alta.
+ * Daemon de voz: espera o gatilho, grava o comando ate voce parar de falar,
+ * transcreve local, roteia pro modelo e responde em voz alta.
+ *
+ * O gatilho e trocavel (wake word, tecla de atalho ou Enter) — veja
+ * `trigger.js`. O daemon so pergunta "ja posso escutar?" e nao liga pra quem
+ * respondeu.
  *
  * O loop tambem dispara os lembretes vencidos — assim nao existe um segundo
  * processo agendador pra manter vivo.
@@ -23,7 +28,7 @@ import { writeRuntime } from '../core/state.js';
 const SAMPLE_RATE = 16000;
 const SILENCE_THRESHOLD = 0.012; // RMS abaixo disso conta como silencio
 
-let porcupine = null;
+let trigger = null;
 let recorder = null;
 let running = true;
 
@@ -31,52 +36,28 @@ function log(label, message, color = pc.dim) {
   console.log(`${color(`[${label}]`)} ${message}`);
 }
 
-async function loadPorcupine() {
-  let Porcupine;
-  let BuiltinKeyword;
-  let PvRecorder;
-
+async function loadRecorder() {
   try {
-    ({ Porcupine, BuiltinKeyword } = await import('@picovoice/porcupine-node'));
-    ({ PvRecorder } = await import('@picovoice/pvrecorder-node'));
+    const { PvRecorder } = await import('@picovoice/pvrecorder-node');
+    return PvRecorder;
   } catch {
     throw new Error(
-      'Pacotes de wake word nao instalados. Rode:\n' +
-        '  npm install @picovoice/porcupine-node @picovoice/pvrecorder-node'
+      'Pacote de gravacao nao instalado. Rode:\n' +
+        '  npm install @picovoice/pvrecorder-node\n' +
+        '(Esse nao precisa de chave nenhuma — so a wake word precisa.)'
     );
   }
-
-  if (!config.voice.picovoiceKey) {
-    throw new Error(
-      'Falta PICOVOICE_ACCESS_KEY no .env.\n' +
-        'Pegue a chave gratuita em https://console.picovoice.ai — o plano free cobre uso pessoal.'
-    );
-  }
-
-  // Keyword customizada (.ppn) tem prioridade; senao usamos a "jarvis" de fabrica.
-  const engine = config.voice.wakeWordPath
-    ? new Porcupine(config.voice.picovoiceKey, [config.voice.wakeWordPath], [config.voice.sensitivity])
-    : new Porcupine(
-        config.voice.picovoiceKey,
-        [BuiltinKeyword[config.voice.wakeWord.toUpperCase()] ?? BuiltinKeyword.JARVIS],
-        [config.voice.sensitivity]
-      );
-
-  return { engine, PvRecorder };
 }
 
 /**
- * Grava depois da wake word ate detectar silencio sustentado ou estourar o
+ * Grava depois do gatilho ate detectar silencio sustentado ou estourar o
  * tempo maximo. Devolve os frames concatenados.
  */
 async function captureCommand() {
   const frames = [];
-  const silenceFramesNeeded = Math.ceil(
-    config.voice.silenceMs / ((porcupine.frameLength / SAMPLE_RATE) * 1000)
-  );
-  const maxFrames = Math.ceil(
-    config.voice.maxCommandMs / ((porcupine.frameLength / SAMPLE_RATE) * 1000)
-  );
+  const frameMs = (trigger.frameLength / SAMPLE_RATE) * 1000;
+  const silenceFramesNeeded = Math.ceil(config.voice.silenceMs / frameMs);
+  const maxFrames = Math.ceil(config.voice.maxCommandMs / frameMs);
 
   let silentRun = 0;
   let spoke = false;
@@ -95,7 +76,7 @@ async function captureCommand() {
       silentRun++;
       if (silentRun >= silenceFramesNeeded) break;
     } else if (i > silenceFramesNeeded * 3) {
-      // Wake word disparou mas ninguem falou nada: aborta.
+      // Gatilho disparou mas ninguem falou nada: aborta.
       return null;
     }
   }
@@ -104,7 +85,7 @@ async function captureCommand() {
 }
 
 async function handleUtterance() {
-  log('escuta', pc.cyan('wake word detectada — pode falar'), pc.cyan);
+  log('escuta', pc.cyan('pode falar'), pc.cyan);
   writeRuntime({ voiceState: 'listening' });
 
   const audio = await captureCommand();
@@ -170,19 +151,24 @@ async function main() {
   log('tts', config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI (voz nativa do Windows)');
   log('modelo', config.model);
 
-  const { engine: porcupineEngine, PvRecorder } = await loadPorcupine();
-  porcupine = porcupineEngine;
+  const PvRecorder = await loadRecorder();
+  trigger = await createTrigger();
+  log('gatilho', trigger.kind);
 
-  recorder = new PvRecorder(porcupine.frameLength, config.voice.micIndex);
-  recorder.start();
+  recorder = new PvRecorder(trigger.frameLength, config.voice.micIndex);
+  // So a wake word precisa do microfone aberto sem parar. Com tecla de atalho
+  // o mic abre no disparo e fecha depois — nada de buffer velho na captura, e
+  // o indicador do Windows so acende quando voce pediu.
+  if (trigger.needsAudio) recorder.start();
 
   log('mic', pc.green(recorder.getSelectedDevice()), pc.green);
-  console.log(pc.bold(pc.cyan(`\n  Ouvindo. Diga "${config.voice.wakeWord}" pra comecar.\n`)));
+  console.log(pc.bold(pc.cyan(`\n  ${trigger.label}\n`)));
 
   writeRuntime({
     voiceState: 'idle',
     sttEngine: engine,
     micDevice: recorder.getSelectedDevice(),
+    trigger: trigger.kind,
   });
 
   // Lembretes: precisao de meio minuto basta.
@@ -212,11 +198,17 @@ async function main() {
   }, 1000);
 
   while (running) {
-    const frame = await recorder.read();
-    if (porcupine.process(frame) >= 0) {
+    await trigger.wait(recorder);
+    if (!running) break;
+
+    if (!trigger.needsAudio) recorder.start();
+    try {
       await handleUtterance();
-      console.log(pc.dim(`\n  ...ouvindo de novo\n`));
+    } finally {
+      if (!trigger.needsAudio) recorder.stop();
     }
+
+    console.log(pc.dim(`\n  ${trigger.label}\n`));
   }
 
   clearInterval(reminderTimer);
@@ -234,7 +226,7 @@ function shutdown() {
   try {
     recorder?.stop();
     recorder?.release();
-    porcupine?.release();
+    trigger?.release();
   } catch {
     // Encerrando de qualquer jeito.
   }

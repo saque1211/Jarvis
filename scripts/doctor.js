@@ -50,15 +50,32 @@ async function main() {
   }
 
   console.log(pc.bold('\n  Voz'));
-  if (config.voice.picovoiceKey) ok('PICOVOICE_ACCESS_KEY presente (wake word)');
-  else fail('PICOVOICE_ACCESS_KEY ausente — pegue gratis em console.picovoice.ai');
+
+  const trigger = config.voice.trigger;
+  if (trigger === 'wakeword') {
+    ok(`gatilho: wake word ("${config.voice.wakeWord}")`);
+    if (config.voice.picovoiceKey) ok('PICOVOICE_ACCESS_KEY presente');
+    else fail('PICOVOICE_ACCESS_KEY ausente — ou use JARVIS_TRIGGER=hotkey, sem chave');
+    try {
+      await import('@picovoice/porcupine-node');
+      ok('pacote da wake word instalado');
+    } catch {
+      fail('rode: npm install @picovoice/porcupine-node');
+    }
+  } else if (trigger === 'hotkey') {
+    ok(`gatilho: tecla ${config.voice.hotkey} (sem chave, funciona em segundo plano)`);
+    if (process.platform !== 'win32') fail('a tecla global depende do Windows');
+  } else if (trigger === 'enter') {
+    ok('gatilho: Enter no terminal (sem chave, terminal precisa estar em foco)');
+  } else {
+    fail(`JARVIS_TRIGGER="${trigger}" nao existe — use wakeword, hotkey ou enter`);
+  }
 
   try {
-    await import('@picovoice/porcupine-node');
     await import('@picovoice/pvrecorder-node');
-    ok('pacotes de wake word instalados');
+    ok('gravacao de microfone instalada');
   } catch {
-    fail('rode: npm install @picovoice/porcupine-node @picovoice/pvrecorder-node');
+    fail('rode: npm install @picovoice/pvrecorder-node (esse nao precisa de chave)');
   }
 
   const stt = await sttEngineName();

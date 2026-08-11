@@ -93,6 +93,13 @@ export const config = {
   // Voz
   voice: {
     enabled: bool(process.env.VOICE_ENABLED, true),
+    // O que faz o JARVIS comecar a ouvir: "wakeword" (precisa da chave da
+    // Picovoice), "hotkey" (tecla global, sem chave) ou "enter" (terminal em
+    // foco, sem chave). Sem chave configurada, cai em hotkey sozinho.
+    trigger:
+      process.env.JARVIS_TRIGGER?.toLowerCase().trim() ||
+      (process.env.PICOVOICE_ACCESS_KEY ? 'wakeword' : 'hotkey'),
+    hotkey: process.env.JARVIS_HOTKEY || 'ctrl+alt+j',
     picovoiceKey: process.env.PICOVOICE_ACCESS_KEY,
     // "jarvis" e uma keyword embutida no Porcupine, nao precisa treinar nada.
     wakeWord: process.env.JARVIS_WAKE_WORD || 'jarvis',

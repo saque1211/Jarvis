@@ -130,19 +130,53 @@ Quer o vault em outro lugar (OneDrive, pasta do Obsidian)? `VAULT_PATH` no `.env
 
 ## Etapa 3 — Voz (15 min, sendo 10 de download)
 
-### 3a. Wake word
+### 3a. O gatilho — o que faz ele começar a ouvir
 
-Conta grátis em https://console.picovoice.ai → copie o **AccessKey**.
+Só isso precisa de decisão. O resto da cadeia (gravar, transcrever, rotear,
+falar) é igual nos três modos.
+
+```bash
+npm install @picovoice/pvrecorder-node
+```
+
+Esse pacote é só a gravação do microfone — **não precisa de chave nenhuma.**
+
+**Modo `hotkey` (padrão) — tecla global, sem cadastro**
+
+Nada a configurar. Você aperta `Ctrl+Alt+J` e fala, mesmo com o terminal atrás
+de outra janela. Troque a tecla com `JARVIS_HOTKEY=shift+space` se quiser.
+
+**Modo `enter` — mais simples ainda**
 
 ```
+JARVIS_TRIGGER=enter
+```
+
+Aperta Enter no terminal e fala. Zero dependência; só exige o terminal em foco.
+
+**Modo `wakeword` — falar "jarvis"**
+
+Precisa de uma chave da Picovoice:
+
+```bash
+npm install @picovoice/porcupine-node
+```
+
+```
+JARVIS_TRIGGER=wakeword
 PICOVOICE_ACCESS_KEY=...
 ```
 
-```bash
-npm install @picovoice/porcupine-node @picovoice/pvrecorder-node
-```
+Conta em https://console.picovoice.ai. **Atenção:** o cadastro deles exige
+e-mail corporativo, e o login por GitHub cai na mesma tela. Se você não tem um
+e-mail assim, fique no `hotkey` — a única diferença é apertar uma tecla em vez
+de falar a palavra.
 
 A keyword `"jarvis"` já vem embutida. Não precisa treinar nada.
+
+> **Efeito colateral bom do hotkey:** o microfone só abre quando você aperta a
+> tecla. No modo wake word ele fica aberto o tempo todo, porque é ouvindo que
+> ele detecta a palavra.
 
 ### 3b. Transcrição local
 
@@ -179,7 +213,8 @@ TTS_COMMAND=piper --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
 npm run listen
 ```
 
-Diga **"jarvis"**, espere o `wake word detectada`, e fale.
+Ele imprime o gatilho que está usando e o que fazer. Dispare (tecla, Enter ou
+a palavra), espere o `pode falar`, e fale.
 
 > Não detectou? Veja [`.skills/voice.md`](.skills/voice.md) — tem seção de
 > problemas comuns (sensibilidade, microfone errado, corte no meio da frase).
@@ -276,7 +311,8 @@ Saída típica no meio do caminho:
   OK   17 skills carregadas, 99 tools disponíveis
 
   Voz
-  OK   PICOVOICE_ACCESS_KEY presente (wake word)
+  OK   gatilho: tecla ctrl+alt+j (sem chave, funciona em segundo plano)
+  OK   gravacao de microfone instalada
   OK   STT: whisper.cpp
   OK   TTS: SAPI (voz nativa do Windows)
 

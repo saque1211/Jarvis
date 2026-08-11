@@ -85,6 +85,44 @@ export async function ps(script, options = {}) {
 }
 
 /** Roda PowerShell e faz parse do stdout como JSON. */
+/**
+ * PowerShell de longa duracao, uma linha de stdout por evento. Diferente do
+ * `ps()`, que espera terminar — este fica vivo e vai avisando.
+ *
+ * Devolve { stop() } e chama onLine a cada linha. Usado pelo gatilho de tecla
+ * de atalho, que precisa vigiar o teclado sem bloquear o daemon.
+ */
+export function psLines(script, onLine) {
+  assertWindows('PowerShell');
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  const child = spawn(
+    'powershell.exe',
+    ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+    { windowsHide: true }
+  );
+
+  let buffer = '';
+  child.stdout.on('data', (chunk) => {
+    buffer += chunk.toString();
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? '';
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) onLine(trimmed);
+    }
+  });
+
+  return {
+    stop() {
+      try {
+        child.kill();
+      } catch {
+        // Ja morreu, tudo bem.
+      }
+    },
+  };
+}
+
 export async function psJson(script, options = {}) {
   const wrapped = `${script} | ConvertTo-Json -Depth 6 -Compress`;
   const result = await ps(wrapped, options);

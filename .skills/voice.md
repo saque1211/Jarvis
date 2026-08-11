@@ -1,34 +1,54 @@
 # Voz — como funciona por dentro
 
 O pipeline inteiro roda local, menos o roteamento. **Seu áudio nunca sai da
-máquina** — só o texto transcrito vai pra API do Claude.
+máquina** — só o texto transcrito vai pra API do modelo.
 
 ```
 microfone
    ↓
-Porcupine (wake word "jarvis")     ← local, sempre escutando
+gatilho                            ← tecla, Enter ou wake word
    ↓  dispara
 grava até detectar silêncio        ← RMS por frame, 1.2s de silêncio encerra
    ↓  WAV 16kHz mono
 Whisper (STT)                      ← local
    ↓  texto
-Claude + 92 tools (router)         ← única coisa que sai da máquina
+router + 99 tools                  ← única coisa que sai da máquina
    ↓  resposta
 SAPI ou Piper (TTS)                ← local
    ↓
 alto-falante
 ```
 
-## Wake word
+## O gatilho
+
+Só a primeira etapa é trocável. As outras não sabem quem disparou.
+
+| `JARVIS_TRIGGER` | Como dispara | Precisa de chave? | Mic aberto |
+|---|---|---|---|
+| `hotkey` (padrão) | `Ctrl+Alt+J`, mesmo com o terminal atrás | não | só no disparo |
+| `enter` | Enter, com o terminal em foco | não | só no disparo |
+| `wakeword` | falar "jarvis" | sim (Picovoice) | o tempo todo |
+
+O padrão é `hotkey` quando não há `PICOVOICE_ACCESS_KEY`, e `wakeword` quando há.
+
+### hotkey
+
+Um PowerShell vigia o teclado com `GetAsyncKeyState` e avisa o daemon por
+stdout. Combine teclas com `+`: `JARVIS_HOTKEY=shift+space`, `f9`, `ctrl+alt+j`.
+
+Vantagem sobre a wake word, além de não precisar de cadastro: o microfone só
+abre quando você aperta. Nada de falso positivo, e o indicador do Windows só
+acende quando você pediu.
+
+### wakeword
 
 Usa **Porcupine**, da Picovoice. A keyword `"jarvis"` já vem embutida — não
 precisa treinar nada.
 
-- Chave grátis: https://console.picovoice.ai (plano free cobre uso pessoal)
+- Chave: https://console.picovoice.ai — **o cadastro exige e-mail corporativo**,
+  e o login por GitHub cai na mesma tela. Sem um desses, use `hotkey`.
 - Outras built-in: `computer`, `alexa`, `bumblebee`, `picovoice`, `porcupine`, `terminator`
 - Quer uma palavra sua? Treine um `.ppn` no console e aponte `JARVIS_WAKE_WORD_PATH`
-
-### Sensibilidade
 
 `JARVIS_WAKE_SENSITIVITY` vai de 0 a 1 (padrão 0.6).
 
@@ -40,7 +60,7 @@ Vale até reiniciar o daemon.
 
 ## Fim da fala
 
-Depois da wake word, o daemon grava e mede a energia RMS de cada frame. Quando
+Depois do gatilho, o daemon grava e mede a energia RMS de cada frame. Quando
 passa `JARVIS_SILENCE_MS` (padrão 1200ms) em silêncio **depois de você ter
 começado a falar**, ele corta e manda pro STT.
 
@@ -95,9 +115,14 @@ Veja as vozes SAPI que você já tem: *"jarvis, lista as vozes"*.
 
 ## Problemas comuns
 
-**Não detecta a wake word.** Rode `npm run doctor` — ele valida a chave da
-Picovoice e os pacotes. Depois cheque se o mic certo foi escolhido: o daemon
+**O gatilho não dispara.** Rode `npm run doctor` — ele diz qual modo está ativo
+e o que falta pra ele. Depois cheque se o mic certo foi escolhido: o daemon
 imprime o dispositivo no boot. Ajuste com `JARVIS_MIC_INDEX`.
+
+No `hotkey`, se a tecla não responder, provavelmente outro programa já a
+capturou (Discord e OBS costumam brigar por combinações comuns). Troque em
+`JARVIS_HOTKEY`. Se nada funcionar, `JARVIS_TRIGGER=enter` não depende do
+teclado global.
 
 **Transcreve errado.** Modelo pequeno demais. Suba de `base` pra `small`.
 

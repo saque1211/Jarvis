@@ -111,14 +111,21 @@ npm run jarvis
 
 Precisa de duas coisas:
 
-**Wake word** — chave grátis em https://console.picovoice.ai
-
-```
-PICOVOICE_ACCESS_KEY=...
-```
+**Gravação do microfone** — sem chave, sem cadastro:
 
 ```bash
-npm install @picovoice/porcupine-node @picovoice/pvrecorder-node
+npm install @picovoice/pvrecorder-node
+```
+
+O gatilho padrão é a tecla `Ctrl+Alt+J`, que funciona com o terminal em segundo
+plano. Quer falar **"jarvis"** em vez de apertar? Aí precisa da Picovoice:
+
+```bash
+npm install @picovoice/porcupine-node
+```
+```
+JARVIS_TRIGGER=wakeword
+PICOVOICE_ACCESS_KEY=...   # console.picovoice.ai — exige e-mail corporativo
 ```
 
 **Transcrição local** — instale um dos dois:
@@ -134,7 +141,7 @@ Aí:
 npm run listen
 ```
 
-Diga **"jarvis"** e fale.
+Aperte `Ctrl+Alt+J` (ou diga **"jarvis"**, se ligou a wake word) e fale.
 
 ### 5. Confira o que falta
 
