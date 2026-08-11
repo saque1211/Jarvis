@@ -194,8 +194,10 @@ ponha o `whisper-cli.exe` no PATH, e baixe um modelo:
 - [`ggml-small.bin`](https://huggingface.co/ggerganov/whisper.cpp/tree/main) — melhor custo-benefício pra português
 
 ```
-STT_COMMAND=whisper-cli -m C:/models/ggml-small.bin -f {file} -l pt -nt --no-prints
+STT_COMMAND=C:/whisper/whisper-cli.exe -m C:/whisper/ggml-small.bin -f {file} -l pt -bo 1 -bs 1 -nf -nt --no-prints
 ```
+
+`-bo 1 -bs 1 -nf` são pra velocidade — veja a seção abaixo se quiser entender.
 
 ### 3c. Voz de resposta
 
@@ -206,6 +208,40 @@ Quer melhor? [Piper](https://github.com/rhasspy/piper):
 ```
 TTS_COMMAND=piper --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
 ```
+
+### 3c-bis. Se a transcrição estiver lenta
+
+O `npm run listen` mostra o tempo de cada etapa depois de cada comando:
+
+```
+[tempo] 3.1s transcricao · 1.5s resposta (2.4s de fala, 1.2s de silencio esperado)
+```
+
+Em ordem de impacto, se a transcrição for a parte pesada:
+
+**1. Decodificação gulosa** — de graça, só muda o `.env`. O padrão do whisper.cpp
+é beam search com 5 candidatos, pensado pra transcrever podcast. Pra comando
+falado de 3 segundos isso é exagero:
+
+```
+STT_COMMAND=C:/whisper/whisper-cli.exe -m C:/whisper/ggml-small.bin -f {file} -l pt -bo 1 -bs 1 -nf -nt --no-prints
+```
+
+`-bo 1 -bs 1` troca beam search por guloso, `-nf` desliga a repetição com
+temperatura maior quando a confiança cai. Costuma cortar bem mais da metade.
+
+**2. Mais threads** — `-t 8` (ou o número de núcleos que você tem).
+
+**3. Build com CUDA** — se você tem placa NVIDIA (o `npm run doctor` diz), o
+`whisper-cublas-12.4.0-bin-x64.zip` roda a transcrição na GPU. São 640 MB, mas
+é a diferença entre segundos e frações de segundo.
+
+**4. Modelo menor** — `ggml-base.bin` no lugar do `small`. Mais rápido, erra
+mais em português. Última opção, não primeira.
+
+E o silêncio de fim de fala é tempo morto puro — você já parou de falar e o
+daemon ainda espera pra ter certeza. `JARVIS_SILENCE_MS=800` corta 400ms de
+cada comando; abaixo disso ele começa a cortar você no meio da frase.
 
 ### 3d. Teste a cadeia de voz antes de ligar tudo
 

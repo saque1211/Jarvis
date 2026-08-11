@@ -97,6 +97,12 @@ async function handleUtterance() {
 
   writeRuntime({ voiceState: 'thinking' });
 
+  // Da pra sentir lentidao em quatro lugares diferentes aqui, e so medindo pra
+  // saber qual. O silencio de fim de fala e tempo morto puro: ja acabou de
+  // falar, e o daemon ainda esta esperando pra ter certeza.
+  const heard = audio.length / SAMPLE_RATE;
+  const t0 = Date.now();
+
   const wavPath = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
   writeWav(wavPath, audio, SAMPLE_RATE);
 
@@ -118,11 +124,12 @@ async function handleUtterance() {
     return;
   }
 
+  const sttMs = Date.now() - t0;
   log('voce', pc.white(text), pc.green);
   writeRuntime({ lastTranscript: text });
 
   try {
-    const { reply, steps } = await route(text, {
+    const { reply, steps, timings } = await route(text, {
       source: 'voice',
       onStep: ({ tool }) => log('tool', pc.yellow(tool), pc.yellow),
     });
@@ -130,6 +137,14 @@ async function handleUtterance() {
     if (steps.some((s) => !s.ok)) {
       log('aviso', pc.yellow(`${steps.filter((s) => !s.ok).length} tool(s) falharam`), pc.yellow);
     }
+
+    const s = (ms) => `${(ms / 1000).toFixed(1)}s`;
+    log(
+      'tempo',
+      `${s(sttMs)} transcricao · ${s(timings.total)} resposta ` +
+        pc.dim(`(${heard.toFixed(1)}s de fala, ${s(config.voice.silenceMs)} de silencio esperado)`)
+    );
+
     writeRuntime({ voiceState: 'speaking' });
     await speak(reply);
   } catch (err) {
