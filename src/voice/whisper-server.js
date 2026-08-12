@@ -25,12 +25,20 @@ function deduzir() {
   return { bin, modelo };
 }
 
-async function responde(url, timeoutMs = 1500) {
+/**
+ * "Alguem responde nessa porta?" nao basta. A 8080 e a porta mais disputada de
+ * qualquer maquina de desenvolvimento — outro programa ali aceita a conexao,
+ * nunca responde ao /inference, e a transcricao trava esperando.
+ *
+ * Devolve 'whisper', 'outro' ou 'nada'.
+ */
+async function quemAtende(url, timeoutMs = 2000) {
   try {
-    await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
-    return true;
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const corpo = await res.text().catch(() => '');
+    return /whisper/i.test(corpo) ? 'whisper' : 'outro';
   } catch {
-    return false;
+    return 'nada';
   }
 }
 
@@ -43,7 +51,16 @@ export async function ensureWhisperServer() {
   const url = config.voice.sttServerUrl;
   if (!url) return null;
 
-  if (await responde(url)) return 'ja estava no ar';
+  const quem = await quemAtende(url);
+  if (quem === 'whisper') return 'ja estava no ar';
+  if (quem === 'outro') {
+    const porta = new URL(url).port || '80';
+    return (
+      `a porta ${porta} esta ocupada por outro programa, nao pelo whisper — ` +
+      `troque a porta no STT_SERVER_URL (ex: http://127.0.0.1:8422) ou tire a ` +
+      `variavel do .env pra usar so o STT_COMMAND`
+    );
+  }
 
   const { bin, modelo } = deduzir();
   if (!bin || !modelo) {
@@ -59,7 +76,7 @@ export async function ensureWhisperServer() {
   // que subiu, senao a primeira frase falada cai na reserva lenta.
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 500));
-    if (await responde(url)) return `subi na porta ${porta}`;
+    if ((await quemAtende(url)) === 'whisper') return `subi na porta ${porta}`;
   }
 
   processo?.stop();

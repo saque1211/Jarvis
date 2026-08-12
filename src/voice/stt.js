@@ -67,7 +67,10 @@ let resolved = null;
 async function transcribeViaServer(wavPath) {
   const url = config.voice.sttServerUrl.replace(/\/$/, '');
   const form = new FormData();
-  form.append('file', new Blob([fs.readFileSync(wavPath)]), path.basename(wavPath));
+  // O type vira o Content-Type da parte. O parser multipart do whisper.cpp
+  // depende dele pra reconhecer o anexo como audio.
+  const blob = new Blob([fs.readFileSync(wavPath)], { type: 'audio/wav' });
+  form.append('file', blob, path.basename(wavPath));
   form.append('response_format', 'json');
   form.append('language', 'pt');
   if (config.voice.sttPrompt) form.append('prompt', config.voice.sttPrompt);
