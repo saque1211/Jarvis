@@ -154,6 +154,37 @@ treine. Se for clonar voz de alguém, a pessoa precisa ter concordado.
 **Custo:** o Piper sintetiza em fração de segundo no CPU, então não pesa como o
 Whisper. A troca é disco — cada voz ocupa entre 20 e 60 MB.
 
+## Voz boa de graça: Edge TTS
+
+As vozes neurais da Microsoft — as mesmas do "ler em voz alta" do Edge. Não tem
+cadastro, não tem chave, não tem custo. Em português são muito melhores que
+qualquer coisa local, porque rodam na infra da Microsoft em vez do seu CPU.
+
+```bash
+npm run voices:edge          # ouve todas as pt-BR e imprime a linha do .env
+npm run voices:edge en-US    # outro idioma
+npm run voices:edge --mudo   # só lista
+```
+
+```
+EDGE_TTS_VOICE=pt-BR-AntonioNeural
+EDGE_TTS_RATE=-10%      # mais devagar
+EDGE_TTS_VOLUME=+20%    # mais alta
+```
+
+**O preço:** precisa de internet, e o texto da resposta sai da máquina. O áudio
+do microfone continua nunca saindo — isso é o Whisper, sempre local.
+
+**Aviso honesto:** é o protocolo interno do Edge, não uma API pública com
+contrato. A Microsoft pode mudar e quebrar. Por isso a fala cai no TTS local
+quando falha, com o motivo no terminal.
+
+### Ordem de preferência
+
+Com mais de um configurado, a ordem é: **Fish Audio → Edge → Piper/`TTS_COMMAND`
+→ SAPI**. Cada um que falha passa pro próximo, então o JARVIS nunca fica mudo
+por causa de rede.
+
 ## Voz na nuvem (Fish Audio)
 
 Quando você quer uma voz específica que não existe em formato local:

@@ -14,6 +14,7 @@
     "test:voice": "node scripts/test-voice.js",
     "whisper:server": "node scripts/whisper-server.js",
     "voices": "node scripts/voices.js",
+    "voices:edge": "node scripts/voices-edge.js",
     "voice:piper": "node scripts/setup-piper.js",
     "hud:state": "node scripts/hud-state.js",
     "auth:spotify": "node scripts/auth-spotify.js"

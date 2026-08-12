@@ -163,6 +163,13 @@ export const config = {
   brave: {
     apiKey: process.env.BRAVE_API_KEY,
   },
+  edgeTts: {
+    // Vozes pt-BR: AntonioNeural, FranciscaNeural, ThalitaNeural, DonatoNeural,
+    // BrendaNeural, HumbertoNeural. Vazio desliga.
+    voice: process.env.EDGE_TTS_VOICE || null,
+    rate: process.env.EDGE_TTS_RATE || '+0%',
+    volume: process.env.EDGE_TTS_VOLUME || '+0%',
+  },
   fishAudio: {
     apiKey: process.env.FISH_AUDIO_API_KEY,
     // O reference_id da voz, o que aparece na pagina dela.

@@ -123,6 +123,10 @@ async function main() {
     console.log(pc.dim('       (o endereco so existe com o npm run listen rodando)'));
   }
 
+  if (config.edgeTts.voice) {
+    ok(`TTS: Edge (${config.edgeTts.voice}) — gratuito, precisa de internet`);
+  }
+
   if (config.fishAudio.apiKey && config.fishAudio.voiceId) {
     ok(`TTS: Fish Audio (voz ${config.fishAudio.voiceId.slice(0, 8)}…, modelo ${config.fishAudio.model})`);
     console.log(pc.dim('       cai no TTS local se a API falhar'));

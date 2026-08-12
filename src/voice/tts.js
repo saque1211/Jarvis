@@ -5,6 +5,7 @@ import { run, ps, psQuote } from '../platform/win32.js';
 import { config } from '../core/config.js';
 import { pushAudio } from './speaker.js';
 import { synthesize as fishSynthesize, isConfigured as fishConfigured } from '../integrations/fish-audio.js';
+import { synthesize as edgeSynthesize, isConfigured as edgeConfigured } from '../integrations/edge-tts.js';
 
 /** Mesma quebra respeitando aspas que o STT usa — caminho com espaco e comum. */
 function tokenize(command) {
@@ -126,14 +127,18 @@ export async function speak(text) {
     // Voz na nuvem depende de rede e de credito. Se falhar, a fala tem que
     // sair do mesmo jeito — mudo por causa de API fora do ar seria pior que
     // uma voz feia.
-    if (fishConfigured()) {
+    for (const [nome, configurado, sintetizar] of [
+      ['Fish Audio', fishConfigured, fishSynthesize],
+      ['Edge', edgeConfigured, edgeSynthesize],
+    ]) {
+      if (!configurado()) continue;
       try {
-        const wav = await fishSynthesize(clean);
+        const wav = await sintetizar(clean);
         if (config.voice.speakerMode === 'phone' && pushAudio(wav, clean)) return;
         await playWav(wav);
         return;
       } catch (err) {
-        console.error(`[tts] Fish Audio falhou, usando a voz local: ${err.message}`);
+        console.error(`[tts] ${nome} falhou, tentando a proxima voz: ${err.message}`);
       }
     }
 
