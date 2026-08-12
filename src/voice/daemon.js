@@ -79,6 +79,10 @@ async function captureCommand() {
     const frame = await recorder.read();
     frames.push(...frame);
 
+    // Soltar a tecla e um fim exato — a pessoa disse que acabou. Vale mais que
+    // qualquer heuristica de silencio, entao corta na hora.
+    if (spoke && trigger.endedByRelease?.()) break;
+
     const energy = frameEnergy(frame);
     peak = Math.max(peak, energy);
     floor = Math.min(floor, energy);

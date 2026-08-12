@@ -104,8 +104,8 @@ function parseHotkey(spec) {
 function hotkeyTrigger() {
   const { codes, pretty } = parseHotkey(config.voice.hotkey);
 
-  // GetAsyncKeyState com o bit 0x8000 = tecla pressionada agora. O sleep depois
-  // do disparo evita repetir enquanto a pessoa ainda nao soltou.
+  // GetAsyncKeyState com o bit 0x8000 = tecla pressionada agora. Avisa nas duas
+  // bordas: DOWN pra comecar a ouvir, UP pra saber que a pessoa terminou.
   const checks = codes.map((c) => `([K]::GetAsyncKeyState(${c}) -band 0x8000)`).join(' -and ');
   const script = `
 Add-Type @"
@@ -113,29 +113,53 @@ using System;
 using System.Runtime.InteropServices;
 public class K { [DllImport("user32.dll")] public static extern short GetAsyncKeyState(int vKey); }
 "@
+$estava = $false
 while ($true) {
-  if (${checks}) {
+  $agora = [bool](${checks})
+  if ($agora -ne $estava) {
     # Direto no stdout em vez de Write-Output: o pipeline do PowerShell segura
     # a saida em buffer, e aqui a linha precisa chegar no Node na hora.
-    [Console]::Out.WriteLine("TRIGGER")
+    [Console]::Out.WriteLine($(if ($agora) { "DOWN" } else { "UP" }))
     [Console]::Out.Flush()
-    Start-Sleep -Milliseconds 800
+    $estava = $agora
   }
-  Start-Sleep -Milliseconds 40
+  Start-Sleep -Milliseconds 25
 }`;
 
   const waiters = [];
-  const watcher = psLines(script, () => {
-    const resolve = waiters.shift();
-    if (resolve) resolve(true);
+  let heldSince = 0;
+  // Registrado no momento em que solta, nao deduzido do relogio depois: um
+  // toque rapido tambem "passa de 400ms" alguns instantes depois, e ai o corte
+  // cairia no meio da fala de quem apertou-e-falou.
+  let soltouDepoisDeSegurar = false;
+
+  const watcher = psLines(script, (line) => {
+    if (line === 'DOWN') {
+      heldSince = Date.now();
+      soltouDepoisDeSegurar = false;
+      const resolve = waiters.shift();
+      if (resolve) resolve(true);
+    } else if (line === 'UP') {
+      if (Date.now() - heldSince > 400) soltouDepoisDeSegurar = true;
+    }
   });
 
   return {
     kind: 'hotkey',
     frameLength: FRAME_LENGTH,
-    label: `Aperte ${pc.bold(pretty)} pra falar (funciona com o terminal em segundo plano).`,
+    label:
+      `Aperte ${pc.bold(pretty)} pra falar` +
+      pc.dim(' — segure enquanto fala e solte pra encerrar na hora.'),
     needsAudio: false,
     wait: () => new Promise((resolve) => waiters.push(resolve)),
+
+    /**
+     * Se a pessoa segurou a tecla enquanto falava, soltar e o sinal de fim —
+     * exato, sem esperar silencio. Um toque rapido nao conta: aí ela quis
+     * apertar-e-falar, e quem decide o fim e a deteccao de silencio.
+     */
+    endedByRelease: () => soltouDepoisDeSegurar,
+
     release: () => watcher.stop(),
   };
 }

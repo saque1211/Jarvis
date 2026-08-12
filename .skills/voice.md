@@ -36,6 +36,19 @@ O padrão é `hotkey` quando não há `PICOVOICE_ACCESS_KEY`, e `wakeword` quand
 Um PowerShell vigia o teclado com `GetAsyncKeyState` e avisa o daemon por
 stdout. Combine teclas com `+`: `JARVIS_HOTKEY=shift+space`, `f9`, `ctrl+alt+j`.
 
+**Duas formas de usar, e ele descobre sozinho qual você quis:**
+
+- **Segurar enquanto fala e soltar** — soltar encerra na hora. É o fim exato:
+  você disse que acabou, não há o que adivinhar.
+- **Tocar e falar** — aí quem decide o fim é a detecção de silêncio, com a
+  espera de `JARVIS_SILENCE_MS`.
+
+A diferença é a duração do toque: acima de 400ms conta como "segurou". Um toque
+rápido não é tratado como fim de fala, senão cortaria quem apertou e só depois
+começou a falar.
+
+Se a espera do silêncio incomoda, segure a tecla — é a forma sem espera nenhuma.
+
 Vantagem sobre a wake word, além de não precisar de cadastro: o microfone só
 abre quando você aperta. Nada de falso positivo, e o indicador do Windows só
 acende quando você pediu.
@@ -123,9 +136,13 @@ npm run voice:piper https://algum-site.com/voz.onnx         # URL direta
 ```
 
 Atalhos que já vêm: `faber` e `edresson` (pt-BR), `alan` e `northern` (inglês
-britânico), `ryan` (inglês americano). As em inglês servem pra quem quer o
-JARVIS soando como no filme — ele entende português falado do mesmo jeito, só
-responde com sotaque.
+britânico), `ryan` (inglês americano).
+
+> **Modelo em inglês não fala português.** O Piper converte texto em fonemas
+> usando as regras do idioma do modelo, então um `en_GB` aplica fonética
+> inglesa em palavra portuguesa — não é sotaque, é pronúncia errada, e não tem
+> ajuste que corrija: a fonetização está amarrada ao modelo. Se quiser a voz
+> inglesa, o JARVIS precisa responder em inglês também.
 
 Catálogo completo: [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main).
 São centenas, em dezenas de idiomas, todas livres.
