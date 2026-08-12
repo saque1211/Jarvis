@@ -4,6 +4,7 @@ import os from 'node:os';
 import { run, ps, psQuote } from '../platform/win32.js';
 import { config } from '../core/config.js';
 import { pushAudio } from './speaker.js';
+import { synthesize as fishSynthesize, isConfigured as fishConfigured } from '../integrations/fish-audio.js';
 
 /** Mesma quebra respeitando aspas que o STT usa — caminho com espaco e comum. */
 function tokenize(command) {
@@ -57,8 +58,8 @@ $synth.Dispose()
   return ps(script, { timeoutMs: 60000 });
 }
 
-/** Sintetiza pra arquivo, sem tocar em alto-falante nenhum. */
-async function synthesizeToFile(text) {
+/** Sintetiza pra arquivo com o TTS local, sem tocar em alto-falante nenhum. */
+async function synthesizeLocal(text) {
   const out = path.join(os.tmpdir(), `jarvis-fala-${Date.now()}.wav`);
 
   if (config.voice.ttsCommand) {
@@ -122,10 +123,24 @@ export async function speak(text) {
 
   speaking = true;
   try {
+    // Voz na nuvem depende de rede e de credito. Se falhar, a fala tem que
+    // sair do mesmo jeito — mudo por causa de API fora do ar seria pior que
+    // uma voz feia.
+    if (fishConfigured()) {
+      try {
+        const wav = await fishSynthesize(clean);
+        if (config.voice.speakerMode === 'phone' && pushAudio(wav, clean)) return;
+        await playWav(wav);
+        return;
+      } catch (err) {
+        console.error(`[tts] Fish Audio falhou, usando a voz local: ${err.message}`);
+      }
+    }
+
     // Celular com a pagina aberta ganha a fala. Ninguem ouvindo la, toca aqui —
     // assim fechar a aba nao deixa o JARVIS mudo sem avisar.
     if (config.voice.speakerMode === 'phone') {
-      const wav = await synthesizeToFile(clean);
+      const wav = await synthesizeLocal(clean);
       if (pushAudio(wav, clean)) return;
       fs.rmSync(wav, { force: true });
     }
@@ -136,6 +151,17 @@ export async function speak(text) {
     console.error(`[tts] ${err.message}`);
   } finally {
     speaking = false;
+  }
+}
+
+/** Toca um WAV sem abrir player nenhum, e apaga depois. */
+async function playWav(file) {
+  try {
+    await ps(`(New-Object System.Media.SoundPlayer ${psQuote(file)}).PlaySync()`, {
+      timeoutMs: 60000,
+    });
+  } finally {
+    fs.rmSync(file, { force: true });
   }
 }
 

@@ -163,6 +163,12 @@ export const config = {
   brave: {
     apiKey: process.env.BRAVE_API_KEY,
   },
+  fishAudio: {
+    apiKey: process.env.FISH_AUDIO_API_KEY,
+    // O reference_id da voz, o que aparece na pagina dela.
+    voiceId: process.env.FISH_AUDIO_VOICE_ID,
+    model: process.env.FISH_AUDIO_MODEL || 's1',
+  },
   freelance: {
     // Workana e Fiverr nao tem API publica de freelancer. O watcher trabalha
     // com feeds RSS/URLs autenticadas que voce fornecer. Veja .skills/freelance.md

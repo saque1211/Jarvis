@@ -123,6 +123,42 @@ treine. Se for clonar voz de alguém, a pessoa precisa ter concordado.
 **Custo:** o Piper sintetiza em fração de segundo no CPU, então não pesa como o
 Whisper. A troca é disco — cada voz ocupa entre 20 e 60 MB.
 
+## Voz na nuvem (Fish Audio)
+
+Quando você quer uma voz específica que não existe em formato local:
+
+```
+FISH_AUDIO_API_KEY=...
+FISH_AUDIO_VOICE_ID=d9a100f6d45f43dea41bd0c160d7e578
+```
+
+O `VOICE_ID` é o `reference_id` que aparece na página da voz em
+[fish.audio](https://fish.audio). Com as duas variáveis presentes, o Fish Audio
+tem prioridade sobre Piper e SAPI.
+
+**Não dá pra trazer essa voz pro Piper.** O Fish Audio te dá um identificador
+que aponta pro modelo no servidor deles — o modelo em si nunca sai de lá. E o
+Piper roda arquivos `.onnx` no formato VITS, que é outra arquitetura. Pra ter a
+mesma voz local seria preciso *treinar* um modelo Piper com horas de áudio dela,
+não converter um ID.
+
+**O que muda ao sair do local:**
+
+| | Piper | Fish Audio |
+|---|---|---|
+| Onde sintetiza | sua máquina | servidor deles |
+| Custo | zero | por caractere |
+| Latência | fração de segundo | ida e volta de rede |
+| Funciona offline | sim | não |
+| O texto sai da máquina | não | sim |
+
+O áudio do microfone continua nunca saindo, nos dois casos — isso é o Whisper,
+e ele é local sempre.
+
+**Se a API falhar** — sem crédito, sem internet, chave errada — a fala cai no
+TTS local automaticamente, com o motivo no terminal. Ficar mudo por causa de
+API fora do ar seria pior que uma voz feia.
+
 ## Ouvir pelo celular
 
 `JARVIS_SPEAKER=phone` no `.env` faz a resposta sair no seu telefone em vez da

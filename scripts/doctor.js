@@ -123,6 +123,13 @@ async function main() {
     console.log(pc.dim('       (o endereco so existe com o npm run listen rodando)'));
   }
 
+  if (config.fishAudio.apiKey && config.fishAudio.voiceId) {
+    ok(`TTS: Fish Audio (voz ${config.fishAudio.voiceId.slice(0, 8)}…, modelo ${config.fishAudio.model})`);
+    console.log(pc.dim('       cai no TTS local se a API falhar'));
+  } else if (config.fishAudio.apiKey || config.fishAudio.voiceId) {
+    fail('Fish Audio pela metade — precisa de FISH_AUDIO_API_KEY e FISH_AUDIO_VOICE_ID');
+  }
+
   if (config.voice.ttsCommand) ok('TTS: comando customizado configurado');
   else if (process.platform === 'win32') ok('TTS: SAPI (voz nativa do Windows)');
   else warn('TTS: SAPI indisponivel fora do Windows');
