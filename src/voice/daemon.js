@@ -36,6 +36,10 @@ const SAMPLE_RATE = 16000;
 const SILENCE_FLOOR = 0.006; // piso absoluto, pra mic muito limpo
 const NOISE_MARGIN = 2.5; // quantas vezes o chiado medido conta como fala
 const SPEECH_RATIO = 0.12; // fracao do pico que ainda conta como fala
+// Teto: o limiar nunca pode passar disso do pico. Sem ele, uma gravacao que
+// comeca ja com voz tem "chiado" igual a propria voz, o limiar vai a 2,5x a
+// fala, nada nunca conta como fala — e a captura so termina no tempo maximo.
+const SPEECH_CAP = 0.5;
 
 let trigger = null;
 let recorder = null;
@@ -94,10 +98,9 @@ async function captureCommand() {
     // Limiar relativo ao proprio microfone, nao um numero fixo. Com um mic
     // ruidoso, um limiar fixo baixo nunca acusa silencio: o daemon grava os 15
     // segundos inteiros e o whisper recebe a frase afogada em chiado.
-    const threshold = Math.max(
-      SILENCE_FLOOR,
-      floor * NOISE_MARGIN,
-      peak * SPEECH_RATIO
+    const threshold = Math.min(
+      peak * SPEECH_CAP,
+      Math.max(SILENCE_FLOOR, floor * NOISE_MARGIN, peak * SPEECH_RATIO)
     );
 
     if (config.voice.vadDebug && i % 8 === 0) {
