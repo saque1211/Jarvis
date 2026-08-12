@@ -96,8 +96,29 @@ Com `TTS_COMMAND` presente o SAPI sai de cena, e `JARVIS_VOICE` deixa de valer �
 quem manda na voz passa a ser o modelo `.onnx`.
 
 Cada voz são dois arquivos: o `.onnx` (o modelo) e o `.onnx.json` (como
-pronunciar). Faltando um dos dois, não roda. Mais locutores em
-[huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR).
+pronunciar). Faltando um dos dois, não roda.
+
+### Pegar outra voz
+
+O instalador aceita três formas:
+
+```bash
+npm run voice:piper alan                                    # atalho
+npm run voice:piper pt/pt_BR/cadu/medium/pt_BR-cadu-medium  # caminho no repositório
+npm run voice:piper https://algum-site.com/voz.onnx         # URL direta
+```
+
+Atalhos que já vêm: `faber` e `edresson` (pt-BR), `alan` e `northern` (inglês
+britânico), `ryan` (inglês americano). As em inglês servem pra quem quer o
+JARVIS soando como no filme — ele entende português falado do mesmo jeito, só
+responde com sotaque.
+
+Catálogo completo: [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main).
+São centenas, em dezenas de idiomas, todas livres.
+
+A URL direta existe porque o repositório do Piper não é o único lugar com voz
+pronta. Qualquer `.onnx` no formato do Piper serve — inclusive um que você
+treine. Se for clonar voz de alguém, a pessoa precisa ter concordado.
 
 **Custo:** o Piper sintetiza em fração de segundo no CPU, então não pesa como o
 Whisper. A troca é disco — cada voz ocupa entre 20 e 60 MB.

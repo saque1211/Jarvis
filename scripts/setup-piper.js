@@ -18,21 +18,41 @@ const DEST = process.env.PIPER_DIR || 'C:/piper';
 const PIPER_URL =
   'https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_windows_amd64.zip';
 
+const HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/main';
+
 // As vozes vivem num repositorio separado do binario, uma pasta por locutor.
-const VOZES = {
-  faber: {
-    nome: 'faber (masculina, media)',
-    base: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium/pt_BR-faber-medium',
-    arquivo: 'pt_BR-faber-medium',
-  },
-  edresson: {
-    nome: 'edresson (masculina, leve)',
-    base: 'https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/edresson/low/pt_BR-edresson-low',
-    arquivo: 'pt_BR-edresson-low',
-  },
+const ATALHOS = {
+  faber: 'pt/pt_BR/faber/medium/pt_BR-faber-medium',
+  edresson: 'pt/pt_BR/edresson/low/pt_BR-edresson-low',
+  // Vozes em ingles, pra quem quer o JARVIS falando como no filme.
+  alan: 'en/en_GB/alan/medium/en_GB-alan-medium',
+  northern: 'en/en_GB/northern_english_male/medium/en_GB-northern_english_male-medium',
+  ryan: 'en/en_US/ryan/high/en_US-ryan-high',
 };
 
-const escolhida = VOZES[process.argv[2]] || VOZES.faber;
+/**
+ * Aceita tres formas, da mais curta pra mais livre:
+ *   faber                                        atalho daqui
+ *   pt/pt_BR/cadu/medium/pt_BR-cadu-medium        caminho dentro do repositorio
+ *   https://.../qualquer-voz.onnx                 URL direta de qualquer lugar
+ *
+ * A terceira existe porque o repositorio do Piper nao e o unico lugar com voz
+ * pronta, e nao ha razao pra prender voce nele.
+ */
+function resolverVoz(arg) {
+  if (!arg) return { nome: 'faber (padrao, pt-BR)', base: `${HF}/${ATALHOS.faber}`, arquivo: 'pt_BR-faber-medium' };
+
+  if (/^https?:\/\//.test(arg)) {
+    const base = arg.replace(/\.onnx(\.json)?$/, '');
+    return { nome: `URL direta`, base, arquivo: path.basename(base) };
+  }
+
+  const caminho = ATALHOS[arg] || arg;
+  const base = `${HF}/${caminho}`;
+  return { nome: ATALHOS[arg] ? `${arg} (${caminho})` : caminho, base, arquivo: path.basename(caminho) };
+}
+
+const escolhida = resolverVoz(process.argv[2]);
 
 async function baixar(url, destino) {
   if (fs.existsSync(destino) && fs.statSync(destino).size > 1000) {
@@ -100,7 +120,15 @@ async function main() {
   console.log(pc.green(`    TTS_COMMAND=${comando}\n`));
   console.log(pc.dim('  Com ela presente o SAPI sai de cena e JARVIS_VOICE deixa de valer —'));
   console.log(pc.dim('  quem manda na voz passa a ser o modelo .onnx.\n'));
-  console.log(pc.dim(`  Outra voz: npm run voice:piper edresson\n`));
+
+  console.log(pc.bold('  Outras vozes:'));
+  for (const [atalho, caminho] of Object.entries(ATALHOS)) {
+    console.log(pc.dim(`    npm run voice:piper ${atalho.padEnd(10)} ${caminho}`));
+  }
+  console.log(pc.dim('\n  Ou qualquer outra: passe o caminho no repositorio ou uma URL direta.'));
+  console.log(pc.dim('    npm run voice:piper pt/pt_BR/cadu/medium/pt_BR-cadu-medium'));
+  console.log(pc.dim('    npm run voice:piper https://exemplo.com/voz.onnx'));
+  console.log(pc.dim('  Catalogo: https://huggingface.co/rhasspy/piper-voices/tree/main\n'));
 }
 
 main().catch((err) => {
