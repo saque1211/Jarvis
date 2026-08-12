@@ -3,6 +3,18 @@ import path from 'node:path';
 import os from 'node:os';
 import { run, ps, psQuote } from '../platform/win32.js';
 import { config } from '../core/config.js';
+import { pushAudio } from './speaker.js';
+
+/** Mesma quebra respeitando aspas que o STT usa — caminho com espaco e comum. */
+function tokenize(command) {
+  const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
+  const tokens = [];
+  let match;
+  while ((match = re.exec(command)) !== null) {
+    tokens.push(match[1] ?? match[2] ?? match[3]);
+  }
+  return tokens;
+}
 
 /**
  * Sintese de voz.
@@ -17,8 +29,11 @@ import { config } from '../core/config.js';
 
 let speaking = false;
 
-/** A voz nativa do Windows. Zero dependencia. */
-async function speakSapi(text) {
+/**
+ * A voz nativa do Windows. Zero dependencia.
+ * Com `outFile`, grava em vez de tocar — e assim que a fala vai pro celular.
+ */
+async function speakSapi(text, outFile = null) {
   const script = `
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
@@ -26,10 +41,29 @@ $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
 $ptbr = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'pt-BR' } | Select-Object -First 1
 if ($ptbr) { $synth.SelectVoice($ptbr.VoiceInfo.Name) }
 $synth.Rate = 1
+${outFile ? `$synth.SetOutputToWaveFile(${psQuote(outFile)})` : ''}
 $synth.Speak(${psQuote(text)})
 $synth.Dispose()
 `;
   return ps(script, { timeoutMs: 60000 });
+}
+
+/** Sintetiza pra arquivo, sem tocar em alto-falante nenhum. */
+async function synthesizeToFile(text) {
+  const out = path.join(os.tmpdir(), `jarvis-fala-${Date.now()}.wav`);
+
+  if (config.voice.ttsCommand) {
+    const [cmd, ...args] = tokenize(config.voice.ttsCommand).map((t) =>
+      t.replace('{text}', text).replace('{out}', out)
+    );
+    const result = await run(cmd, args, { timeoutMs: 60000, stdin: text });
+    if (!fs.existsSync(out)) throw new Error(`TTS_COMMAND nao gerou audio: ${result.stderr}`);
+    return out;
+  }
+
+  await speakSapi(text, out);
+  if (!fs.existsSync(out)) throw new Error('SAPI nao gerou o arquivo de audio.');
+  return out;
 }
 
 /** Piper ou qualquer outro TTS via linha de comando. */
@@ -73,6 +107,14 @@ export async function speak(text) {
 
   speaking = true;
   try {
+    // Celular com a pagina aberta ganha a fala. Ninguem ouvindo la, toca aqui —
+    // assim fechar a aba nao deixa o JARVIS mudo sem avisar.
+    if (config.voice.speakerMode === 'phone') {
+      const wav = await synthesizeToFile(clean);
+      if (pushAudio(wav, clean)) return;
+      fs.rmSync(wav, { force: true });
+    }
+
     if (config.voice.ttsCommand) await speakCommand(clean);
     else await speakSapi(clean);
   } catch (err) {

@@ -8,6 +8,7 @@ import { route } from '../core/router.js';
 import { transcribe, sttEngineName } from './stt.js';
 import { speak } from './tts.js';
 import { createTrigger } from './trigger.js';
+import { startSpeaker, stopSpeaker, lanAddress, listenerCount } from './speaker.js';
 import { writeWav, frameEnergy } from './wav.js';
 import { checkDueReminders } from '../skills/notify.js';
 import { checkDueTimers } from '../skills/timer.js';
@@ -182,7 +183,7 @@ async function handleUtterance() {
       log('audio', pc.dim(`pico ${peak.toFixed(3)} · chiado ${floor.toFixed(3)}`) + veredito);
     }
 
-    writeRuntime({ voiceState: 'speaking' });
+    writeRuntime({ voiceState: 'speaking', speakerListeners: listenerCount() });
     await speak(reply);
   } catch (err) {
     log('erro', pc.red(err.message), pc.red);
@@ -201,6 +202,20 @@ async function main() {
   const engine = await sttEngineName();
   log('stt', engine ? pc.green(engine) : pc.red('nenhum motor encontrado'), engine ? pc.green : pc.red);
   log('tts', config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI (voz nativa do Windows)');
+
+  if (config.voice.speakerMode === 'phone') {
+    const port = config.voice.speakerPort;
+    try {
+      await startSpeaker(port);
+      const url = `http://${lanAddress()}:${port}`;
+      log('alto-falante', pc.green(url), pc.green);
+      console.log(pc.dim(`  Abra esse endereco no navegador do celular e toque em "Tocar aqui".`));
+      console.log(pc.dim('  Sem ninguem com a pagina aberta, a fala volta pro PC.\n'));
+    } catch (err) {
+      log('alto-falante', pc.red(`nao subiu na porta ${port}: ${err.message}`), pc.red);
+      log('alto-falante', 'a fala continua saindo pelo PC');
+    }
+  }
   log('modelo', config.model);
 
   const PvRecorder = await loadRecorder();
@@ -287,6 +302,7 @@ function shutdown() {
     recorder?.stop();
     recorder?.release();
     trigger?.release();
+    stopSpeaker();
   } catch {
     // Encerrando de qualquer jeito.
   }

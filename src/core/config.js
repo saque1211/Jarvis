@@ -121,6 +121,11 @@ export const config = {
     sttPrompt: process.env.STT_PROMPT || null,
     ttsCommand: process.env.TTS_COMMAND || null,
     speakReplies: bool(process.env.JARVIS_SPEAK, true),
+    // "local" toca na placa de som do PC. "phone" serve a fala por HTTP pro
+    // navegador do celular — util quando a caixa de som morreu ou voce quer
+    // ouvir de outro comodo. Sem ninguem com a pagina aberta, cai no local.
+    speakerMode: (process.env.JARVIS_SPEAKER || 'local').toLowerCase().trim(),
+    speakerPort: Number(process.env.JARVIS_SPEAKER_PORT || 8790),
   },
 
   // Seguranca: o exec e o files sao as skills perigosas.

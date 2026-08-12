@@ -58,6 +58,32 @@ precisa treinar nada.
 Você também pode ajustar falando: *"jarvis, aumenta a sensibilidade pra 0.7"*.
 Vale até reiniciar o daemon.
 
+## Ouvir pelo celular
+
+`JARVIS_SPEAKER=phone` no `.env` faz a resposta sair no seu telefone em vez da
+placa de som do PC. Serve pra caixa de som quebrada, pra ouvir de outro cômodo,
+ou pra usar o fone que já está no celular.
+
+Não instala nada. O daemon sobe um servidor e imprime o endereço no boot:
+
+```
+[alto-falante] http://192.168.0.12:8790
+```
+
+Abre isso no navegador do celular e toca em **"Tocar aqui"** — esse toque
+existe porque navegador não libera áudio sem interação do usuário. Depois dele
+a página fica conectada e toca cada resposta assim que chega.
+
+Por dentro: o SAPI grava a fala num WAV em vez de tocar, o servidor avisa a
+página por SSE, e ela busca o arquivo. As falas entram numa fila no celular, pra
+duas respostas seguidas não saírem por cima uma da outra.
+
+**Ninguém com a página aberta = a fala volta pro PC.** Fechar a aba não deixa o
+JARVIS mudo sem avisar.
+
+O celular precisa estar na mesma rede. Na primeira vez o Windows vai perguntar
+se libera o Node no firewall — tem que aceitar, senão o telefone não alcança.
+
 ## Fim da fala
 
 O limiar que separa fala de silêncio **é relativo ao seu microfone**, não um

@@ -117,6 +117,12 @@ async function main() {
     }
   }
 
+  if (config.voice.speakerMode === 'phone') {
+    const { lanAddress } = await import('../src/voice/speaker.js');
+    ok(`alto-falante: celular — http://${lanAddress()}:${config.voice.speakerPort}`);
+    console.log(pc.dim('       (o endereco so existe com o npm run listen rodando)'));
+  }
+
   if (config.voice.ttsCommand) ok('TTS: comando customizado configurado');
   else if (process.platform === 'win32') ok('TTS: SAPI (voz nativa do Windows)');
   else warn('TTS: SAPI indisponivel fora do Windows');
