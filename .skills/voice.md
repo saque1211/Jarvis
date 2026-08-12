@@ -98,6 +98,20 @@ quem manda na voz passa a ser o modelo `.onnx`.
 Cada voz são dois arquivos: o `.onnx` (o modelo) e o `.onnx.json` (como
 pronunciar). Faltando um dos dois, não roda.
 
+### Ver o catálogo
+
+```bash
+npm run voice:piper --lista          # vozes em português
+npm run voice:piper --lista en       # inglês
+npm run voice:piper --lista todas    # tudo
+```
+
+Lê o `voices.json` do repositório, então mostra o que existe hoje — não uma
+lista chumbada aqui que envelhece. Cada linha já vem com o comando pra instalar.
+
+Qualidades: `high` soa melhor e ocupa mais disco, `low` é o contrário, `medium`
+é o meio. Pra assistente de voz, `medium` costuma bastar.
+
 ### Pegar outra voz
 
 O instalador aceita três formas:

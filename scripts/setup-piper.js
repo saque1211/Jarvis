@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import pc from 'picocolors';
 import { run, ps, psQuote } from '../src/platform/win32.js';
 
@@ -50,6 +51,72 @@ function resolverVoz(arg) {
   const caminho = ATALHOS[arg] || arg;
   const base = `${HF}/${caminho}`;
   return { nome: ATALHOS[arg] ? `${arg} (${caminho})` : caminho, base, arquivo: path.basename(caminho) };
+}
+
+/**
+ * Lista o catalogo de verdade em vez de depender dos atalhos daqui — sao
+ * centenas de vozes e elas mudam com o tempo.
+ */
+async function listarCatalogo(filtro) {
+  const destino = path.join(os.tmpdir(), 'piper-voices.json');
+  console.log(pc.dim('  buscando catalogo...\n'));
+  await run('curl.exe', ['-L', '--fail', '-s', '-o', destino, `${HF}/voices.json`], {
+    timeoutMs: 120000,
+  });
+
+  if (!fs.existsSync(destino)) {
+    throw new Error(
+      'nao consegui baixar o catalogo.\n' +
+        '  Veja na mao: https://huggingface.co/rhasspy/piper-voices/tree/main'
+    );
+  }
+
+  const catalogo = JSON.parse(fs.readFileSync(destino, 'utf8'));
+  fs.rmSync(destino, { force: true });
+
+  const alvo = (filtro || 'pt').toLowerCase();
+  const vozes = Object.values(catalogo).filter((v) => {
+    const codigo = (v.language?.code || '').toLowerCase();
+    return alvo === 'todas' || codigo.startsWith(alvo);
+  });
+
+  if (!vozes.length) {
+    console.log(pc.yellow(`  Nenhuma voz para "${filtro}".`));
+    console.log(pc.dim('  Tente: pt, en, es, ou "todas".\n'));
+    return;
+  }
+
+  console.log(pc.bold(pc.cyan(`  ${vozes.length} voz(es) para "${alvo}"\n`)));
+
+  // Agrupa por locutor: a mesma voz aparece em varias qualidades, e listar
+  // as tres separadas so polui.
+  const porLocutor = new Map();
+  for (const v of vozes) {
+    const chave = `${v.language?.code}/${v.name}`;
+    if (!porLocutor.has(chave)) porLocutor.set(chave, []);
+    porLocutor.get(chave).push(v);
+  }
+
+  for (const [chave, variantes] of porLocutor) {
+    const [codigo, nome] = chave.split('/');
+    const qualidades = variantes.map((v) => v.quality).join(', ');
+    const melhor = variantes.sort((a, b) => (b.quality === 'high' ? 1 : -1))[0];
+    const caminho = Object.keys(melhor.files || {})
+      .find((f) => f.endsWith('.onnx'))
+      ?.replace(/\.onnx$/, '');
+
+    console.log(`  ${pc.bold(nome.padEnd(22))} ${pc.dim(`${codigo}  [${qualidades}]`)}`);
+    if (caminho) console.log(pc.dim(`    npm run voice:piper ${caminho}`));
+  }
+
+  console.log(pc.dim('\n  "high" soa melhor e ocupa mais disco; "low" e o contrario.\n'));
+}
+
+if (process.argv.includes('--lista')) {
+  const filtro = process.argv[process.argv.indexOf('--lista') + 1];
+  console.log(pc.bold(pc.cyan('\n  Catalogo do Piper\n')));
+  await listarCatalogo(filtro && !filtro.startsWith('--') ? filtro : 'pt');
+  process.exit(0);
 }
 
 const escolhida = resolverVoz(process.argv[2]);
