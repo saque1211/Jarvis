@@ -179,6 +179,32 @@ do microfone continua nunca saindo — isso é o Whisper, sempre local.
 contrato. A Microsoft pode mudar e quebrar. Por isso a fala cai no TTS local
 quando falha, com o motivo no terminal.
 
+### Se o cliente embutido não conectar
+
+Ele é uma reimplementação do protocolo, e o protocolo muda. Quando o serviço
+aceita o token mas recusa a síntese, o caminho confiável é o pacote `edge-tts`
+do Python — mantido, e acompanha essas mudanças:
+
+```bash
+python -m pip install -U edge-tts
+```
+
+```
+TTS_COMMAND=python -m edge_tts --voice pt-BR-AntonioNeural --text {text} --write-media {out}
+```
+
+Tire o `EDGE_TTS_VOICE` do `.env` pra não tentar os dois. Mesmas vozes, mesma
+qualidade — só quem fala com o servidor muda.
+
+Ele devolve MP3. Isso é tratado: o formato é detectado pelos primeiros bytes do
+arquivo, não pela extensão, e MP3 toca por outro caminho no Windows.
+
+Ver as vozes disponíveis:
+
+```bash
+python -m edge_tts --list-voices
+```
+
 ### Ordem de preferência
 
 Com mais de um configurado, a ordem é: **Fish Audio → Edge → Piper/`TTS_COMMAND`

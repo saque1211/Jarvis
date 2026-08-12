@@ -92,9 +92,7 @@ async function speakCommand(text) {
     throw new Error(`TTS_COMMAND falhou: ${result.stderr || 'executavel nao encontrado'}`);
   }
 
-  // Toca o wav gerado sem abrir player nenhum.
-  await ps(`(New-Object System.Media.SoundPlayer ${psQuote(out)}).PlaySync()`, { timeoutMs: 60000 });
-  fs.rmSync(out, { force: true });
+  await playWav(out);
   return { ok: true };
 }
 
@@ -159,12 +157,36 @@ export async function speak(text) {
   }
 }
 
-/** Toca um WAV sem abrir player nenhum, e apaga depois. */
+/**
+ * Toca um arquivo de audio sem abrir player nenhum, e apaga depois.
+ *
+ * SoundPlayer so entende WAV. Como TTS externo costuma cuspir MP3, o formato e
+ * detectado pelo conteudo — extensao mente, os primeiros bytes nao.
+ */
 async function playWav(file) {
   try {
-    await ps(`(New-Object System.Media.SoundPlayer ${psQuote(file)}).PlaySync()`, {
-      timeoutMs: 60000,
-    });
+    const cabecalho = Buffer.alloc(4);
+    const fd = fs.openSync(file, 'r');
+    fs.readSync(fd, cabecalho, 0, 4, 0);
+    fs.closeSync(fd);
+
+    const script =
+      cabecalho.toString('ascii') === 'RIFF'
+        ? `(New-Object System.Media.SoundPlayer ${psQuote(file)}).PlaySync()`
+        : // MediaPlayer toca MP3, mas abre de forma assincrona: sem esperar a
+          // duracao aparecer, o Play() sai antes do audio comecar.
+          `Add-Type -AssemblyName PresentationCore
+$p = New-Object System.Windows.Media.MediaPlayer
+$p.Open([System.Uri]::new(${psQuote(file)}))
+$limite = (Get-Date).AddSeconds(10)
+while (-not $p.NaturalDuration.HasTimeSpan -and (Get-Date) -lt $limite) { Start-Sleep -Milliseconds 50 }
+$p.Play()
+if ($p.NaturalDuration.HasTimeSpan) {
+  Start-Sleep -Milliseconds ($p.NaturalDuration.TimeSpan.TotalMilliseconds + 300)
+}
+$p.Close()`;
+
+    await ps(script, { timeoutMs: 60000 });
   } finally {
     fs.rmSync(file, { force: true });
   }
