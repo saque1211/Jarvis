@@ -74,12 +74,21 @@ async function transcribeViaServer(wavPath) {
 
   let response;
   try {
-    response = await fetch(`${url}/inference`, { method: 'POST', body: form });
+    response = await fetch(`${url}/inference`, {
+      method: 'POST',
+      body: form,
+      // Sem prazo, um servidor que aceita a conexao e nao responde trava o
+      // daemon pra sempre — sem erro, sem log, so parado.
+      signal: AbortSignal.timeout(config.voice.sttTimeoutMs),
+    });
   } catch (err) {
+    const motivo =
+      err.name === 'TimeoutError'
+        ? `nao respondeu em ${config.voice.sttTimeoutMs / 1000}s`
+        : err.message;
     throw new Error(
-      `Nao alcancei o whisper-server em ${url}: ${err.message}\n` +
-        'Ele esta rodando? Suba num terminal separado:\n' +
-        '  C:/whisper/whisper-server.exe -m C:/whisper/ggml-small.bin -l pt --port 8080'
+      `whisper-server em ${url}: ${motivo}\n` +
+        'Ele esta rodando? O daemon sobe sozinho no boot; se falhou, veja o log [whisper].'
     );
   }
 

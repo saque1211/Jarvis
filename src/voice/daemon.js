@@ -127,6 +127,10 @@ async function captureCommand() {
     }
   }
 
+  // O medidor escreve com \r pra ficar numa linha so. Sem quebrar a linha aqui,
+  // o proximo log sai por cima dele e parece que o daemon travou.
+  if (config.voice.vadDebug) process.stdout.write('\n');
+
   if (!spoke) return null;
 
   lastLevels = { peak, floor: floor === Infinity ? 0 : floor };
@@ -154,6 +158,10 @@ async function handleUtterance() {
 
   const wavPath = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
   writeWav(wavPath, audio, SAMPLE_RATE);
+
+  // Sinal de vida: a transcricao e a etapa mais demorada, e sem isso o daemon
+  // parece travado justamente quando esta trabalhando.
+  log('stt', pc.dim(`transcrevendo ${heard.toFixed(1)}s...`));
 
   let text;
   try {

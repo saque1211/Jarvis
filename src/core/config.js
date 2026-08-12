@@ -125,6 +125,9 @@ export const config = {
     // Vocabulario que o whisper deve esperar. Ele usa isso pra desempatar
     // palavra parecida — "vsscode" vira "VS Code" em vez de virar outra coisa.
     sttPrompt: process.env.STT_PROMPT || null,
+    // Teto pra transcricao. Passou disso, e porque travou — melhor um erro
+    // legivel que o daemon parado sem explicacao.
+    sttTimeoutMs: Number(process.env.STT_TIMEOUT_MS || 60000),
     ttsCommand: process.env.TTS_COMMAND || null,
     // Pedaco do nome da voz SAPI, tipo "maria" ou "daniel". Veja as instaladas
     // com `npm run voices`. Vazio = primeira pt-BR do sistema.
