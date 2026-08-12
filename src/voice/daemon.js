@@ -9,6 +9,7 @@ import { transcribe, sttEngineName } from './stt.js';
 import { speak } from './tts.js';
 import { createTrigger } from './trigger.js';
 import { startSpeaker, stopSpeaker, lanAddress, listenerCount } from './speaker.js';
+import { ensureWhisperServer, stopWhisperServer } from './whisper-server.js';
 import { writeWav, frameEnergy } from './wav.js';
 import { checkDueReminders } from '../skills/notify.js';
 import { checkDueTimers } from '../skills/timer.js';
@@ -205,6 +206,9 @@ async function main() {
 
   const engine = await sttEngineName();
   log('stt', engine ? pc.green(engine) : pc.red('nenhum motor encontrado'), engine ? pc.green : pc.red);
+
+  const servidor = await ensureWhisperServer();
+  if (servidor) log('whisper', servidor);
   log('tts', config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI (voz nativa do Windows)');
 
   if (config.voice.speakerMode === 'phone') {
@@ -307,6 +311,7 @@ function shutdown() {
     recorder?.release();
     trigger?.release();
     stopSpeaker();
+    stopWhisperServer();
   } catch {
     // Encerrando de qualquer jeito.
   }

@@ -123,6 +123,33 @@ export function psLines(script, onLine) {
   };
 }
 
+/**
+ * Sobe um processo de longa duracao em segundo plano e devolve { stop() }.
+ * Diferente do `run()`, que espera terminar.
+ */
+export function startBackground(command, args = [], options = {}) {
+  const child = spawn(command, args, {
+    windowsHide: true,
+    stdio: 'ignore',
+    env: { ...process.env, ...(options.env || {}) },
+  });
+
+  child.on('error', () => {
+    // Quem chama verifica se o servico respondeu; um erro aqui nao pode
+    // derrubar o processo pai.
+  });
+
+  return {
+    stop() {
+      try {
+        child.kill();
+      } catch {
+        // Ja morreu.
+      }
+    },
+  };
+}
+
 export async function psJson(script, options = {}) {
   const wrapped = `${script} | ConvertTo-Json -Depth 6 -Compress`;
   const result = await ps(wrapped, options);
