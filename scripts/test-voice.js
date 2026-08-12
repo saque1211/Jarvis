@@ -100,6 +100,8 @@ async function main() {
   ok(`captou audio (pico ${peak.toFixed(3)})`);
 
   // 3. Transcricao
+  // Guardado de proposito: quando a transcricao sai errada, e esse arquivo que
+  // separa "o microfone captou mal" de "o whisper entendeu mal". Escute-o.
   const wavPath = path.join(os.tmpdir(), `jarvis-teste-${Date.now()}.wav`);
   writeWav(wavPath, Int16Array.from(frames), SAMPLE_RATE);
   ok(`WAV salvo: ${wavPath}`);
@@ -123,8 +125,6 @@ async function main() {
   }
   const elapsed = ((Date.now() - started) / 1000).toFixed(1);
 
-  fs.rmSync(wavPath, { force: true });
-
   if (!text) {
     fail(`transcricao vazia (${elapsed}s) — audio captado, mas o STT nao devolveu texto`);
     process.exit(1);
@@ -132,6 +132,10 @@ async function main() {
 
   ok(`transcreveu em ${elapsed}s`);
   console.log(`\n  ${pc.bold('voce disse:')} ${pc.white(text)}\n`);
+  console.log(pc.dim(`  Saiu errado? Escute o WAV pra saber de quem e a culpa:`));
+  console.log(pc.dim(`    start ${wavPath}`));
+  console.log(pc.dim('  Se o audio estiver claro, o problema e o modelo do whisper.'));
+  console.log(pc.dim('  Se estiver abafado ou cortado, e o microfone.\n'));
 
   // Ruido do proprio motor vazando pro stdout estraga o roteamento sem avisar.
   if (/load_backend|whisper_init|ggml_|system_info/i.test(text)) {
