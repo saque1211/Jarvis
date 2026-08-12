@@ -78,15 +78,16 @@ async function synthesizeToFile(text) {
 /** Piper ou qualquer outro TTS via linha de comando. */
 async function speakCommand(text) {
   const out = path.join(os.tmpdir(), `jarvis-tts-${Date.now()}.wav`);
-  const filled = config.voice.ttsCommand
-    .replace('{text}', text.replace(/"/g, ''))
-    .replace('{out}', out);
 
-  const [cmd, ...args] = filled.split(' ');
+  // Quebra respeitando aspas: "C:/Program Files/piper/piper.exe" e um argumento
+  // so. Com split(' ') o executavel nunca era encontrado.
+  const [cmd, ...args] = tokenize(config.voice.ttsCommand).map((t) =>
+    t.replace('{text}', text).replace('{out}', out)
+  );
   const result = await run(cmd, args, { timeoutMs: 60000, stdin: text });
 
   if (!result.ok && !fs.existsSync(out)) {
-    throw new Error(`TTS_COMMAND falhou: ${result.stderr}`);
+    throw new Error(`TTS_COMMAND falhou: ${result.stderr || 'executavel nao encontrado'}`);
   }
 
   // Toca o wav gerado sem abrir player nenhum.

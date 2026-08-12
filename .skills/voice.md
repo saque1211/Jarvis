@@ -76,15 +76,31 @@ JARVIS_VOICE_VOLUME=100    # 0 a 100
 **Só tem uma voz em português?** O Windows traz mais sob demanda:
 *Configurações → Hora e idioma → Fala → Adicionar vozes*.
 
-**As vozes do SAPI são datadas.** Pra algo bem melhor, o [Piper](https://github.com/rhasspy/piper)
-roda local e soa quase natural:
+## Voz melhor: Piper
+
+O SAPI é síntese dos anos 2000 e soa como tal. O [Piper](https://github.com/rhasspy/piper)
+é neural, roda local, é grátis e soa quase natural.
+
+```bash
+npm run voice:piper              # instala e testa falando
+npm run voice:piper edresson     # outro locutor
+```
+
+Ele baixa o binário e a voz, testa, e imprime a linha pro `.env`:
 
 ```
-TTS_COMMAND=C:/piper/piper.exe --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
+TTS_COMMAND=C:/piper/piper/piper.exe --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
 ```
 
 Com `TTS_COMMAND` presente o SAPI sai de cena, e `JARVIS_VOICE` deixa de valer —
-quem manda na voz passa a ser o modelo `.onnx` que você apontar.
+quem manda na voz passa a ser o modelo `.onnx`.
+
+Cada voz são dois arquivos: o `.onnx` (o modelo) e o `.onnx.json` (como
+pronunciar). Faltando um dos dois, não roda. Mais locutores em
+[huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices/tree/main/pt/pt_BR).
+
+**Custo:** o Piper sintetiza em fração de segundo no CPU, então não pesa como o
+Whisper. A troca é disco — cada voz ocupa entre 20 e 60 MB.
 
 ## Ouvir pelo celular
 
