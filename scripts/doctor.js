@@ -101,8 +101,16 @@ async function main() {
         const res = await fetch(config.voice.sttServerUrl, { signal: AbortSignal.timeout(3000) });
         ok(`  whisper-server respondendo em ${config.voice.sttServerUrl} (${res.status})`);
       } catch {
-        fail(`  whisper-server NAO responde em ${config.voice.sttServerUrl}`);
-        console.log(pc.dim('       Suba num terminal separado: npm run whisper:server'));
+        // Fora do ar so e falha quando nao ha comando local pra assumir.
+        const aviso = config.voice.sttCommand ? warn : fail;
+        aviso(`  whisper-server fora do ar em ${config.voice.sttServerUrl}`);
+        if (config.voice.sttCommand) {
+          console.log(pc.dim('       Sem problema: cai no STT_COMMAND, so fica mais lento.'));
+          console.log(pc.dim('       Pra acelerar, suba num terminal separado: npm run whisper:server'));
+        } else {
+          console.log(pc.dim('       Suba num terminal separado: npm run whisper:server'));
+          console.log(pc.dim('       Ou configure STT_COMMAND como reserva.'));
+        }
       }
     }
     // STT_COMMAND ser lido nao garante que o executavel e o modelo existem —
