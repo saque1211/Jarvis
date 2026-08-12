@@ -18,7 +18,18 @@ const fail = (msg) => console.log(`  ${pc.red('X')}    ${msg}`);
 
 async function hasBinary(name) {
   const result = await run(name, ['--version'], { timeoutMs: 6000 });
-  return result.code !== -1;
+  if (result.code === -1) return false;
+
+  const saida = `${result.stdout} ${result.stderr}`;
+
+  // O Windows 11 poe um atalho falso de "python" que so abre a Microsoft Store.
+  // Ele executa, entao o teste de "existe?" passava e o doctor dava OK num
+  // Python que nao existe.
+  if (/was not found|Microsoft Store|execution alias/i.test(saida)) return false;
+
+  // Exit 0 ou algo com cara de versao. Alguns CLIs saem com codigo != 0 no
+  // --version mas imprimem a versao do mesmo jeito.
+  return result.code === 0 || /\d+\.\d+/.test(saida);
 }
 
 async function main() {
