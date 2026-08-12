@@ -111,6 +111,12 @@ export const config = {
     maxCommandMs: Number(process.env.JARVIS_MAX_COMMAND_MS || 15000),
     micIndex: Number(process.env.JARVIS_MIC_INDEX ?? -1),
     sttCommand: process.env.STT_COMMAND || null,
+    // whisper-server mantem o modelo carregado entre um comando e outro. O
+    // whisper-cli recarrega os 466 MB toda vez.
+    sttServerUrl: process.env.STT_SERVER_URL || null,
+    // Vocabulario que o whisper deve esperar. Ele usa isso pra desempatar
+    // palavra parecida — "vsscode" vira "VS Code" em vez de virar outra coisa.
+    sttPrompt: process.env.STT_PROMPT || null,
     ttsCommand: process.env.TTS_COMMAND || null,
     speakReplies: bool(process.env.JARVIS_SPEAK, true),
   },

@@ -83,6 +83,17 @@ async function main() {
   const stt = await sttEngineName();
   if (stt) {
     ok(`STT: ${stt}`);
+    if (stt === 'whisper-server') {
+      // Configurado nao e o mesmo que no ar — e a diferenca so apareceria na
+      // primeira frase falada.
+      try {
+        const res = await fetch(config.voice.sttServerUrl, { signal: AbortSignal.timeout(3000) });
+        ok(`  whisper-server respondendo em ${config.voice.sttServerUrl} (${res.status})`);
+      } catch {
+        fail(`  whisper-server NAO responde em ${config.voice.sttServerUrl}`);
+        console.log(pc.dim('       Suba num terminal separado: npm run whisper:server'));
+      }
+    }
     // STT_COMMAND ser lido nao garante que o executavel e o modelo existem —
     // e o erro so apareceria na primeira frase falada.
     if (stt === 'STT_COMMAND') {

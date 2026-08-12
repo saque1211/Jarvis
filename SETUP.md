@@ -217,6 +217,23 @@ O `npm run listen` mostra o tempo de cada etapa depois de cada comando:
 
 Em ordem de impacto, se a transcrição for a parte pesada:
 
+**0. Modo servidor** — o `whisper-cli` recarrega o modelo inteiro do disco a
+cada comando. O `whisper-server` carrega uma vez e fica de pé:
+
+```bash
+npm run whisper:server     # num terminal separado, deixe aberto
+```
+
+Ele lê o binário e o modelo do seu `STT_COMMAND` e imprime a linha pra colar no
+`.env`:
+
+```
+STT_SERVER_URL=http://127.0.0.1:8080
+```
+
+Com essa variável presente o JARVIS usa o servidor e ignora o `STT_COMMAND` —
+que continua ali como reserva pra quando o servidor não estiver rodando.
+
 **1. Build com CUDA** — se você tem placa NVIDIA (o `npm run doctor` diz), o
 `whisper-cublas-12.4.0-bin-x64.zip` roda a transcrição na GPU. São 640 MB, mas
 é a diferença entre segundos e frações de segundo — **e não custa precisão
@@ -237,6 +254,26 @@ mais em português. Só vale se você fala comandos curtos e previsíveis.
 E o silêncio de fim de fala é tempo morto puro — você já parou de falar e o
 daemon ainda espera pra ter certeza. `JARVIS_SILENCE_MS=800` corta 400ms de
 cada comando; abaixo disso ele começa a cortar você no meio da frase.
+
+### 3c-ter. Se ele errar palavras
+
+O whisper aceita uma lista do vocabulário que ele deve esperar ouvir, e usa
+como desempate quando o som é ambíguo. Sem isso, nome de programa e termo
+técnico viram outra coisa — "VS Code" e "Workana" não estão no português dele.
+
+```
+STT_PROMPT=Comandos para o assistente Jarvis: abrir Spotify, VS Code, Discord, Chrome, Steam. Timer, pomodoro, cronometro, lembrete, tarefa. CPU, RAM, GPU, disco. Workana, freelance, screenshot.
+```
+
+Ponha ali as palavras que **você** fala. Vale mais que trocar de modelo, e é de
+graça.
+
+Se ainda errar palavra comum, aí sim é o modelo: `ggml-medium.bin` (1,5 GB)
+acerta bem mais em português que o `small`.
+
+```bash
+curl.exe -L -o C:/whisper/ggml-medium.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin
+```
 
 ### 3d. Teste a cadeia de voz antes de ligar tudo
 

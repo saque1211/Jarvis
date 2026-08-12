@@ -59,8 +59,45 @@ function tokenize(command) {
 
 let resolved = null;
 
+/**
+ * Fala com o whisper-server (whisper.cpp em modo HTTP). A vantagem sobre o
+ * whisper-cli nao e a rede — e o modelo ficar carregado entre um comando e
+ * outro, em vez de subir do disco toda vez.
+ */
+async function transcribeViaServer(wavPath) {
+  const url = config.voice.sttServerUrl.replace(/\/$/, '');
+  const form = new FormData();
+  form.append('file', new Blob([fs.readFileSync(wavPath)]), path.basename(wavPath));
+  form.append('response_format', 'json');
+  form.append('language', 'pt');
+  if (config.voice.sttPrompt) form.append('prompt', config.voice.sttPrompt);
+
+  let response;
+  try {
+    response = await fetch(`${url}/inference`, { method: 'POST', body: form });
+  } catch (err) {
+    throw new Error(
+      `Nao alcancei o whisper-server em ${url}: ${err.message}\n` +
+        'Ele esta rodando? Suba num terminal separado:\n' +
+        '  C:/whisper/whisper-server.exe -m C:/whisper/ggml-small.bin -l pt --port 8080'
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(`whisper-server respondeu ${response.status}: ${await response.text()}`);
+  }
+
+  const data = await response.json();
+  return (data.text || '').trim();
+}
+
 async function resolveEngine() {
   if (resolved !== null) return resolved;
+
+  if (config.voice.sttServerUrl) {
+    resolved = { name: 'whisper-server', server: true };
+    return resolved;
+  }
 
   if (config.voice.sttCommand) {
     resolved = { name: 'STT_COMMAND', custom: true };
@@ -95,6 +132,8 @@ export async function transcribe(wavPath) {
         'Ou aponte STT_COMMAND no .env pro seu proprio transcritor.'
     );
   }
+
+  if (engine.server) return (await transcribeViaServer(wavPath)) || null;
 
   if (engine.custom) {
     // Substitui {file} depois de quebrar, senao um caminho temporario com
