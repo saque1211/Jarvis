@@ -26,11 +26,19 @@ import { writeRuntime } from '../core/state.js';
  */
 
 const SAMPLE_RATE = 16000;
-const SILENCE_THRESHOLD = 0.012; // RMS abaixo disso conta como silencio
+
+// Deteccao de fim de fala. O limiar e relativo ao proprio microfone: um numero
+// fixo funciona num mic silencioso e falha num ruidoso, onde o chiado sozinho
+// ja fica acima dele — e ai o daemon nunca acusa silencio, grava ate o limite
+// de tempo, e entrega ao whisper a frase afogada em ruido.
+const SILENCE_FLOOR = 0.006; // piso absoluto, pra mic muito limpo
+const NOISE_MARGIN = 2.5; // quantas vezes o chiado medido conta como fala
+const SPEECH_RATIO = 0.12; // fracao do pico que ainda conta como fala
 
 let trigger = null;
 let recorder = null;
 let running = true;
+let lastLevels = null;
 
 function log(label, message, color = pc.dim) {
   console.log(`${color(`[${label}]`)} ${message}`);
@@ -61,13 +69,29 @@ async function captureCommand() {
 
   let silentRun = 0;
   let spoke = false;
+  let peak = 0;
+  // Piso de ruido: o menor nivel visto ate agora. Toda gravacao tem pausa
+  // entre palavras, entao esse minimo converge pro chiado do microfone.
+  let floor = Infinity;
 
   for (let i = 0; i < maxFrames; i++) {
     const frame = await recorder.read();
     frames.push(...frame);
 
     const energy = frameEnergy(frame);
-    if (energy > SILENCE_THRESHOLD) {
+    peak = Math.max(peak, energy);
+    floor = Math.min(floor, energy);
+
+    // Limiar relativo ao proprio microfone, nao um numero fixo. Com um mic
+    // ruidoso, um limiar fixo baixo nunca acusa silencio: o daemon grava os 15
+    // segundos inteiros e o whisper recebe a frase afogada em chiado.
+    const threshold = Math.max(
+      SILENCE_FLOOR,
+      floor * NOISE_MARGIN,
+      peak * SPEECH_RATIO
+    );
+
+    if (energy > threshold) {
       spoke = true;
       silentRun = 0;
     } else if (spoke) {
@@ -81,7 +105,10 @@ async function captureCommand() {
     }
   }
 
-  return spoke ? Int16Array.from(frames) : null;
+  if (!spoke) return null;
+
+  lastLevels = { peak, floor: floor === Infinity ? 0 : floor };
+  return Int16Array.from(frames);
 }
 
 async function handleUtterance() {
@@ -144,6 +171,16 @@ async function handleUtterance() {
       `${s(sttMs)} transcricao · ${s(timings.total)} resposta ` +
         pc.dim(`(${heard.toFixed(1)}s de fala, ${s(config.voice.silenceMs)} de silencio esperado)`)
     );
+
+    // Pico contra chiado: quando essa distancia e curta, nenhum modelo salva a
+    // transcricao — o problema esta no microfone, nao no whisper.
+    if (lastLevels) {
+      const { peak, floor } = lastLevels;
+      const ratio = floor > 0 ? peak / floor : Infinity;
+      const veredito =
+        ratio < 8 ? pc.yellow(' — fala perto do ruido, transcricao vai sofrer') : '';
+      log('audio', pc.dim(`pico ${peak.toFixed(3)} · chiado ${floor.toFixed(3)}`) + veredito);
+    }
 
     writeRuntime({ voiceState: 'speaking' });
     await speak(reply);

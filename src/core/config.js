@@ -106,8 +106,10 @@ export const config = {
     // Caminho pra um .ppn customizado, se voce treinar o seu.
     wakeWordPath: process.env.JARVIS_WAKE_WORD_PATH || null,
     sensitivity: Number(process.env.JARVIS_WAKE_SENSITIVITY || 0.6),
-    // Silencio (ms) que encerra a captura do comando depois do wake word.
-    silenceMs: Number(process.env.JARVIS_SILENCE_MS || 1200),
+    // Silencio (ms) que encerra a captura depois que voce para de falar. E
+    // tempo morto puro: abaixo de ~700ms ele comeca a cortar no meio da frase
+    // de quem fala pausado.
+    silenceMs: Number(process.env.JARVIS_SILENCE_MS || 900),
     maxCommandMs: Number(process.env.JARVIS_MAX_COMMAND_MS || 15000),
     micIndex: Number(process.env.JARVIS_MIC_INDEX ?? -1),
     sttCommand: process.env.STT_COMMAND || null,

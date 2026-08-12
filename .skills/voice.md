@@ -60,6 +60,26 @@ Vale até reiniciar o daemon.
 
 ## Fim da fala
 
+O limiar que separa fala de silêncio **é relativo ao seu microfone**, não um
+número fixo. Ele se calibra sozinho durante a gravação: acompanha o menor nível
+visto (que converge pro chiado do mic) e o pico (que é a sua voz), e corta
+quando a energia cai perto do chiado.
+
+Um limiar fixo funciona num microfone limpo e falha num ruidoso — lá o chiado
+sozinho já fica acima dele, o silêncio nunca é detectado, e o daemon grava até
+o limite de 15 segundos. O whisper então recebe dois segundos de fala afogados
+em treze de ruído, e devolve palavra trocada. Se você já viu "spotify" virar
+"spatchfire", era isso.
+
+O daemon imprime os dois níveis depois de cada comando:
+
+```
+[audio] pico 0.339 · chiado 0.021
+```
+
+Distância curta entre eles (menos de 8x) é aviso: nenhum modelo de STT salva
+transcrição quando a fala está perto do ruído. Aí é microfone, não software.
+
 Depois do gatilho, o daemon grava e mede a energia RMS de cada frame. Quando
 passa `JARVIS_SILENCE_MS` (padrão 1200ms) em silêncio **depois de você ter
 começado a falar**, ele corta e manda pro STT.
