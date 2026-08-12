@@ -130,7 +130,17 @@ async function main() {
     fail('Fish Audio pela metade — precisa de FISH_AUDIO_API_KEY e FISH_AUDIO_VOICE_ID');
   }
 
-  if (config.voice.ttsCommand) ok('TTS: comando customizado configurado');
+  if (config.voice.ttsCommand) {
+    ok('TTS: comando customizado configurado');
+    // Mesma armadilha do STT: configurado nao e o mesmo que existente, e a
+    // diferenca so apareceria na primeira fala.
+    const partes = config.voice.ttsCommand.match(/"([^"]*)"|(\S+)/g) || [];
+    for (const p of partes.map((x) => x.replace(/"/g, ''))) {
+      if (!/[/\\]/.test(p) || p.includes('{out}') || p.includes('{text}')) continue;
+      if (fs.existsSync(p)) ok(`  existe: ${p}`);
+      else fail(`  NAO existe: ${p} — a fala vai falhar e cair no SAPI`);
+    }
+  }
   else if (process.platform === 'win32') ok('TTS: SAPI (voz nativa do Windows)');
   else warn('TTS: SAPI indisponivel fora do Windows');
 
