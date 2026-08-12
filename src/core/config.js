@@ -109,7 +109,13 @@ export const config = {
     // Silencio (ms) que encerra a captura depois que voce para de falar. E
     // tempo morto puro: abaixo de ~700ms ele comeca a cortar no meio da frase
     // de quem fala pausado.
-    silenceMs: Number(process.env.JARVIS_SILENCE_MS || 900),
+    silenceMs: Number(process.env.JARVIS_SILENCE_MS || 1000),
+    // Piso de gravacao. Antes disso o silencio nao encerra nada — protege a
+    // pausa que todo mundo faz depois das duas primeiras palavras.
+    minCommandMs: Number(process.env.JARVIS_MIN_COMMAND_MS || 1500),
+    // Mostra energia, chiado e limiar frame a frame. Pra quando a deteccao nao
+    // acerta o fim e voce precisa ver os numeros em vez de adivinhar.
+    vadDebug: bool(process.env.JARVIS_VAD_DEBUG, false),
     maxCommandMs: Number(process.env.JARVIS_MAX_COMMAND_MS || 15000),
     micIndex: Number(process.env.JARVIS_MIC_INDEX ?? -1),
     sttCommand: process.env.STT_COMMAND || null,

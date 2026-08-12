@@ -68,6 +68,9 @@ async function captureCommand() {
   const frameMs = (trigger.frameLength / SAMPLE_RATE) * 1000;
   const silenceFramesNeeded = Math.ceil(config.voice.silenceMs / frameMs);
   const maxFrames = Math.ceil(config.voice.maxCommandMs / frameMs);
+  // Piso: antes disso nenhum silencio encerra. A pausa que todo mundo faz
+  // depois das duas primeiras palavras nao pode ser lida como fim de frase.
+  const minFrames = Math.ceil(config.voice.minCommandMs / frameMs);
 
   let silentRun = 0;
   let spoke = false;
@@ -97,6 +100,16 @@ async function captureCommand() {
       peak * SPEECH_RATIO
     );
 
+    if (config.voice.vadDebug && i % 8 === 0) {
+      process.stdout.write(
+        `\r  ${pc.dim(
+          `t=${((i * frameMs) / 1000).toFixed(1)}s energia=${energy.toFixed(4)} ` +
+            `limiar=${threshold.toFixed(4)} chiado=${(floor === Infinity ? 0 : floor).toFixed(4)} ` +
+            `silencio=${((silentRun * frameMs) / 1000).toFixed(1)}s   `
+        )}`
+      );
+    }
+
     if (energy > threshold) {
       spoke = true;
       silentRun = 0;
@@ -104,7 +117,7 @@ async function captureCommand() {
       // So conta silencio depois que a pessoa comecou a falar; senao a gente
       // corta antes de ela abrir a boca.
       silentRun++;
-      if (silentRun >= silenceFramesNeeded) break;
+      if (silentRun >= silenceFramesNeeded && i >= minFrames) break;
     } else if (i > silenceFramesNeeded * 3) {
       // Gatilho disparou mas ninguem falou nada: aborta.
       return null;
