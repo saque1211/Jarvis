@@ -29,7 +29,19 @@ const AGENTE =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
   'Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
 
-const CABECALHOS = { Origin: ORIGEM, 'User-Agent': AGENTE, Pragma: 'no-cache' };
+// O servico compara o conjunto de cabecalhos com o que o Edge manda de fato;
+// faltar um e motivo pra recusar o upgrade.
+const CABECALHOS = {
+  Origin: ORIGEM,
+  'User-Agent': AGENTE,
+  Pragma: 'no-cache',
+  'Cache-Control': 'no-cache',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Accept-Language': 'en-US,en;q=0.9',
+};
+
+/** Id de conexao no formato deles: UUID sem hifens. */
+const idConexao = () => crypto.randomUUID().replace(/-/g, '');
 
 /**
  * O WebSocket nao conta por que falhou — o evento de erro nao carrega status.
@@ -84,6 +96,22 @@ function ssml(texto, voz, taxa, volume) {
   );
 }
 
+/**
+ * O formato de data que o Edge manda — nao e ISO. E o toString() do JavaScript
+ * em UTC, porque do outro lado o cliente original e um navegador.
+ */
+function dataProtocolo() {
+  const d = new Date();
+  const dias = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const meses = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const p = (n) => String(n).padStart(2, '0');
+  return (
+    `${dias[d.getUTCDay()]} ${meses[d.getUTCMonth()]} ${p(d.getUTCDate())} ${d.getUTCFullYear()} ` +
+    `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} ` +
+    `GMT+0000 (Coordinated Universal Time)`
+  );
+}
+
 /** Cabecalho no formato do protocolo: "Chave:valor\r\n" repetido, depois \r\n. */
 function mensagem(cabecalhos, corpo = '') {
   const linhas = Object.entries(cabecalhos).map(([k, v]) => `${k}:${v}`);
@@ -104,10 +132,15 @@ export async function synthesize(text, opcoes = {}) {
   const { voice, rate, volume } = { ...config.edgeTts, ...opcoes };
   if (!voice) throw new Error('Falta EDGE_TTS_VOICE no .env.');
 
+  // Um id por conexao. Sem ele o servico aceita o token mas recusa o upgrade —
+  // foi exatamente o sintoma: a lista de vozes respondia, a sintese nao.
+  const conexao = idConexao();
+
   const url =
     `${ENDPOINT}?TrustedClientToken=${TOKEN}` +
     `&Sec-MS-GEC=${gerarToken()}` +
-    `&Sec-MS-GEC-Version=${VERSAO}`;
+    `&Sec-MS-GEC-Version=${VERSAO}` +
+    `&ConnectionId=${conexao}`;
 
   const pedacos = [];
 
@@ -145,7 +178,7 @@ export async function synthesize(text, opcoes = {}) {
       socket.send(
         mensagem(
           {
-            'X-Timestamp': new Date().toISOString(),
+            'X-Timestamp': dataProtocolo(),
             'Content-Type': 'application/json; charset=utf-8',
             Path: 'speech.config',
           },
@@ -169,7 +202,7 @@ export async function synthesize(text, opcoes = {}) {
           {
             'X-RequestId': crypto.randomUUID().replace(/-/g, ''),
             'Content-Type': 'application/ssml+xml',
-            'X-Timestamp': new Date().toISOString(),
+            'X-Timestamp': dataProtocolo(),
             Path: 'ssml',
           },
           ssml(text, voice, rate, volume)
