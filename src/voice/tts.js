@@ -34,13 +34,22 @@ let speaking = false;
  * Com `outFile`, grava em vez de tocar — e assim que a fala vai pro celular.
  */
 async function speakSapi(text, outFile = null) {
+  const wanted = config.voice.voiceName;
+
+  // JARVIS_VOICE casa por pedaco do nome ("maria", "daniel") pra voce nao ter
+  // que digitar "Microsoft Maria Desktop" inteiro. Sem ele, a primeira pt-BR.
+  const selectVoice = wanted
+    ? `$alvo = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Name -like ${psQuote(`*${wanted}*`)} } | Select-Object -First 1
+if (-not $alvo) { $alvo = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'pt-BR' } | Select-Object -First 1 }`
+    : `$alvo = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'pt-BR' } | Select-Object -First 1`;
+
   const script = `
 Add-Type -AssemblyName System.Speech
 $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer
-# Prefere uma voz pt-BR se houver; senao usa a padrao do sistema.
-$ptbr = $synth.GetInstalledVoices() | Where-Object { $_.VoiceInfo.Culture.Name -eq 'pt-BR' } | Select-Object -First 1
-if ($ptbr) { $synth.SelectVoice($ptbr.VoiceInfo.Name) }
-$synth.Rate = 1
+${selectVoice}
+if ($alvo) { $synth.SelectVoice($alvo.VoiceInfo.Name) }
+$synth.Rate = ${config.voice.rate}
+$synth.Volume = ${config.voice.volume}
 ${outFile ? `$synth.SetOutputToWaveFile(${psQuote(outFile)})` : ''}
 $synth.Speak(${psQuote(text)})
 $synth.Dispose()
@@ -95,6 +104,11 @@ export async function speak(text) {
 
   // Markdown e emoji viram lixo sonoro na sintese.
   const clean = String(text)
+    // Rede de seguranca: chamada de tool que escapou do parser nao pode virar
+    // audio. O llm.js ja converte as que reconhece; isto pega o resto.
+    .replace(/<(function|tool)[^>]*>[\s\S]*?<\/(function|tool)[^>]*>/gi, '')
+    .replace(/<\/?(function|tool)[^>]*>/gi, '')
+    .replace(/\{"[\w]+":[\s\S]*?\}/g, '')
     .replace(/[*_`#>]/g, '')
     .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
     .replace(/https?:\/\/\S+/g, 'link')

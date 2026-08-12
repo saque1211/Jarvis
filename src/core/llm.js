@@ -211,11 +211,63 @@ async function callGroq({ system, messages, tools, model, maxTokens }) {
     input: parseArgs(call.function?.arguments),
   }));
 
+  let text = (message.content || '').trim();
+
+  // O Llama as vezes escreve a chamada no meio do texto em vez de usar o campo
+  // tool_calls. Sem tratar, o router entende como resposta final e o TTS le a
+  // marcacao em voz alta.
+  if (!toolUses.length && text) {
+    const { calls, cleaned } = extractInlineCalls(text);
+    if (calls.length) {
+      return { text: cleaned, toolUses: calls, stopReason: 'tool_use' };
+    }
+  }
+
   return {
-    text: (message.content || '').trim(),
+    text,
     toolUses,
     stopReason: toolUses.length ? 'tool_use' : 'end',
   };
+}
+
+/**
+ * Garimpa chamadas de tool escritas como texto. Os formatos que o Llama produz
+ * quando escorrega do protocolo:
+ *
+ *   <function=nome>{"a": 1}</function>
+ *   <function_call>{"name": "nome", "arguments": {...}}</function_call>
+ *   <tool_call>{"name": "nome", "parameters": {...}}</tool_call>
+ */
+function extractInlineCalls(text) {
+  const calls = [];
+  let cleaned = text;
+  let index = 0;
+
+  // <function=nome>{...}</function>
+  cleaned = cleaned.replace(
+    /<function=([\w.-]+)>\s*([\s\S]*?)\s*<\/function>/g,
+    (_, name, args) => {
+      calls.push({ id: `inline_${index++}`, name, input: parseArgs(args) });
+      return '';
+    }
+  );
+
+  // <function_call>/<tool_call> com o nome dentro do JSON
+  cleaned = cleaned.replace(
+    /<(?:function_call|tool_call)>\s*([\s\S]*?)\s*<\/(?:function_call|tool_call)>/g,
+    (whole, body) => {
+      const parsed = parseArgs(body);
+      if (!parsed?.name) return whole;
+      calls.push({
+        id: `inline_${index++}`,
+        name: parsed.name,
+        input: parsed.arguments || parsed.parameters || {},
+      });
+      return '';
+    }
+  );
+
+  return { calls, cleaned: cleaned.replace(/\s+/g, ' ').trim() };
 }
 
 // ─── Entrada ────────────────────────────────────────────────────────────────

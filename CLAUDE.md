@@ -63,6 +63,8 @@ npm run jarvis             # modo conversa
 npm run listen             # daemon de voz (wake word)
 npm run doctor             # diagnóstico de setup
 npm run test:voice         # mic + STT + TTS isolados do resto
+npm run voices             # lista e fala com cada voz do Windows
+npm run whisper:server     # whisper.cpp com o modelo carregado, pra latência
 npm run hud:state          # snapshot que o HUD consome (add "-- watch")
 npm run auth:spotify       # OAuth do Spotify, uma vez só
 ```

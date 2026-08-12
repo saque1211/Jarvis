@@ -13,6 +13,7 @@
     "doctor": "node scripts/doctor.js",
     "test:voice": "node scripts/test-voice.js",
     "whisper:server": "node scripts/whisper-server.js",
+    "voices": "node scripts/voices.js",
     "hud:state": "node scripts/hud-state.js",
     "auth:spotify": "node scripts/auth-spotify.js"
   },

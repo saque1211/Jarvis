@@ -58,6 +58,34 @@ precisa treinar nada.
 Você também pode ajustar falando: *"jarvis, aumenta a sensibilidade pra 0.7"*.
 Vale até reiniciar o daemon.
 
+## Trocar a voz
+
+```bash
+npm run voices          # lista e fala uma frase com cada uma
+npm run voices --mudo   # só lista
+```
+
+Escolheu? Um pedaço do nome basta:
+
+```
+JARVIS_VOICE=maria
+JARVIS_VOICE_RATE=1        # -10 (devagar) a 10 (rápido)
+JARVIS_VOICE_VOLUME=100    # 0 a 100
+```
+
+**Só tem uma voz em português?** O Windows traz mais sob demanda:
+*Configurações → Hora e idioma → Fala → Adicionar vozes*.
+
+**As vozes do SAPI são datadas.** Pra algo bem melhor, o [Piper](https://github.com/rhasspy/piper)
+roda local e soa quase natural:
+
+```
+TTS_COMMAND=C:/piper/piper.exe --model C:/piper/pt_BR-faber-medium.onnx --output_file {out}
+```
+
+Com `TTS_COMMAND` presente o SAPI sai de cena, e `JARVIS_VOICE` deixa de valer —
+quem manda na voz passa a ser o modelo `.onnx` que você apontar.
+
 ## Ouvir pelo celular
 
 `JARVIS_SPEAKER=phone` no `.env` faz a resposta sair no seu telefone em vez da

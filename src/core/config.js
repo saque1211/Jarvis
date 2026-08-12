@@ -120,6 +120,12 @@ export const config = {
     // palavra parecida — "vsscode" vira "VS Code" em vez de virar outra coisa.
     sttPrompt: process.env.STT_PROMPT || null,
     ttsCommand: process.env.TTS_COMMAND || null,
+    // Pedaco do nome da voz SAPI, tipo "maria" ou "daniel". Veja as instaladas
+    // com `npm run voices`. Vazio = primeira pt-BR do sistema.
+    voiceName: process.env.JARVIS_VOICE || null,
+    // SAPI: velocidade vai de -10 (bem devagar) a 10; volume de 0 a 100.
+    rate: Math.max(-10, Math.min(10, Number(process.env.JARVIS_VOICE_RATE ?? 1))),
+    volume: Math.max(0, Math.min(100, Number(process.env.JARVIS_VOICE_VOLUME ?? 100))),
     speakReplies: bool(process.env.JARVIS_SPEAK, true),
     // "local" toca na placa de som do PC. "phone" serve a fala por HTTP pro
     // navegador do celular — util quando a caixa de som morreu ou voce quer
