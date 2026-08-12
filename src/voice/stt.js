@@ -122,7 +122,7 @@ async function resolveEngine() {
  * Transcreve um WAV 16kHz mono. Devolve o texto ou null.
  */
 export async function transcribe(wavPath) {
-  const engine = await resolveEngine();
+  let engine = await resolveEngine();
 
   if (engine === false) {
     throw new Error(
@@ -133,7 +133,17 @@ export async function transcribe(wavPath) {
     );
   }
 
-  if (engine.server) return (await transcribeViaServer(wavPath)) || null;
+  if (engine.server) {
+    try {
+      return (await transcribeViaServer(wavPath)) || null;
+    } catch (err) {
+      // O servidor e otimizacao, nao requisito. Ele fora do ar nao pode
+      // significar assistente surdo se existe um comando local configurado.
+      if (!config.voice.sttCommand) throw err;
+      console.error(`[stt] servidor fora do ar, usando o comando local: ${err.message}`);
+      engine = { name: 'STT_COMMAND', custom: true };
+    }
+  }
 
   if (engine.custom) {
     // Substitui {file} depois de quebrar, senao um caminho temporario com
