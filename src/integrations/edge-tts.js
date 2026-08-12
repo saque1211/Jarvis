@@ -20,10 +20,43 @@ import { config } from '../core/config.js';
 
 const TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
 const ENDPOINT = 'wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1';
+const LISTA = 'https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list';
 const ORIGEM = 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold';
+// A versao acompanha um build real do Edge — o servico compara com o que ele
+// espera, entao um numero inventado como "130.0.0.0" e recusado.
+const VERSAO = '1-131.0.2903.112';
 const AGENTE =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) ' +
-  'Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0';
+  'Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0';
+
+const CABECALHOS = { Origin: ORIGEM, 'User-Agent': AGENTE, Pragma: 'no-cache' };
+
+/**
+ * O WebSocket nao conta por que falhou — o evento de erro nao carrega status.
+ * Entao, quando ele cai, uma chamada HTTP ao mesmo servico com o mesmo token
+ * responde a pergunta: e a rede, o token, ou o servico mudou?
+ */
+async function diagnosticar() {
+  try {
+    const res = await fetch(
+      `${LISTA}?trustedclienttoken=${TOKEN}&Sec-MS-GEC=${gerarToken()}&Sec-MS-GEC-Version=${VERSAO}`,
+      { headers: CABECALHOS, signal: AbortSignal.timeout(10000) }
+    );
+    if (res.ok) {
+      return 'o servico responde, mas recusou a conexao de sintese — o protocolo pode ter mudado';
+    }
+    if (res.status === 401 || res.status === 403) {
+      return (
+        `recusado com ${res.status} — ou a Microsoft mudou a autenticacao, ` +
+        'ou algo na sua rede (proxy, antivirus, firewall corporativo) esta barrando'
+      );
+    }
+    return `o servico respondeu ${res.status}`;
+  } catch (err) {
+    if (err.name === 'TimeoutError') return 'o servico nao respondeu a tempo';
+    return `nao alcancei o servico: ${err.message} (sem internet? firewall?)`;
+  }
+}
 
 /**
  * O servico exige um token derivado do relogio, arredondado em janelas de 5
@@ -74,16 +107,14 @@ export async function synthesize(text, opcoes = {}) {
   const url =
     `${ENDPOINT}?TrustedClientToken=${TOKEN}` +
     `&Sec-MS-GEC=${gerarToken()}` +
-    `&Sec-MS-GEC-Version=1-130.0.0.0`;
+    `&Sec-MS-GEC-Version=${VERSAO}`;
 
   const pedacos = [];
 
   await new Promise((resolve, reject) => {
     let socket;
     try {
-      socket = new WebSocket(url, {
-        headers: { Origin: ORIGEM, 'User-Agent': AGENTE, Pragma: 'no-cache' },
-      });
+      socket = new WebSocket(url, { headers: CABECALHOS });
     } catch (err) {
       reject(new Error(`nao consegui abrir a conexao: ${err.message}`));
       return;
@@ -113,7 +144,11 @@ export async function synthesize(text, opcoes = {}) {
     socket.onopen = () => {
       socket.send(
         mensagem(
-          { 'Content-Type': 'application/json; charset=utf-8', Path: 'speech.config' },
+          {
+            'X-Timestamp': new Date().toISOString(),
+            'Content-Type': 'application/json; charset=utf-8',
+            Path: 'speech.config',
+          },
           JSON.stringify({
             context: {
               synthesis: {
@@ -157,12 +192,19 @@ export async function synthesize(text, opcoes = {}) {
       }
     };
 
-    socket.onerror = () =>
-      encerrar(new Error('falha na conexao com o servico de voz da Microsoft'));
+    let jaFalhou = false;
+    const falhar = async (resumo) => {
+      if (jaFalhou) return;
+      jaFalhou = true;
+      const motivo = await diagnosticar();
+      encerrar(new Error(`${resumo} — ${motivo}`));
+    };
+
+    socket.onerror = () => falhar('a conexao de voz caiu');
 
     socket.onclose = (evento) => {
       if (pedacos.length) encerrar();
-      else encerrar(new Error(`conexao fechou sem audio (codigo ${evento.code})`));
+      else falhar(`a conexao fechou sem audio (codigo ${evento.code})`);
     };
   });
 
