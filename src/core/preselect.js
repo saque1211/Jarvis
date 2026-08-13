@@ -96,8 +96,11 @@ function byKeyword(userInput, skills) {
 /**
  * Devolve os nomes das skills relevantes pro comando. Array vazio significa
  * "nao consegui decidir" — quem chama decide o que fazer com isso.
+ *
+ * `onUsage` recebe o consumo desta chamada. Ela e barata, mas nao e de graca:
+ * sem contabilizar, a conta do comando sai menor do que a real.
  */
-export async function pickSkills(userInput, skills) {
+export async function pickSkills(userInput, skills, onUsage = () => {}) {
   const valid = new Set(skills.map((s) => s.name));
 
   try {
@@ -109,6 +112,7 @@ export async function pickSkills(userInput, skills) {
       fast: true,
       maxTokens: 64,
     });
+    onUsage(response.usage);
     const picked = parseNames(response.text, valid);
     if (picked.length) return picked;
   } catch {

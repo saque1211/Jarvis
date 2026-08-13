@@ -67,13 +67,22 @@ export async function route(userInput, options = {}) {
   const timings = { preselect: 0, llm: 0, tools: 0, total: 0 };
   const since = (t) => Date.now() - t;
 
+  // Soma de todas as idas ao modelo dentro de UM comando — e isso que aparece
+  // na fatura, nao o custo de uma chamada isolada.
+  const usage = { entrada: 0, saida: 0, cacheEscrito: 0, cacheLido: 0, chamadas: 0 };
+  const somar = (u) => {
+    if (!u) return;
+    usage.chamadas++;
+    for (const k of ['entrada', 'saida', 'cacheEscrito', 'cacheLido']) usage[k] += u[k] || 0;
+  };
+
   // Todas as tools de uma vez so cabe quando o provedor aguenta o payload.
   // Quando nao cabe, uma chamada barata escolhe as skills relevantes antes.
   let active = tools;
   const budget = config.llm.toolBudget;
   if (budget && estimateTokens(tools) > budget) {
     const t = Date.now();
-    const picked = await pickSkills(userInput, skills);
+    const picked = await pickSkills(userInput, skills, somar);
     timings.preselect = since(t);
     if (picked.length) {
       active = toolSpecs(skills.filter((s) => picked.includes(s.name)));
@@ -95,6 +104,7 @@ export async function route(userInput, options = {}) {
       tools: active,
     });
     timings.llm += since(t);
+    somar(response.usage);
 
     if (response.stopReason !== 'tool_use') {
       const reply = response.text;
@@ -102,7 +112,7 @@ export async function route(userInput, options = {}) {
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
-      return { reply, steps, timings };
+      return { reply, steps, timings, usage };
     }
 
     messages.push({ role: 'assistant', text: response.text, toolUses: response.toolUses });
@@ -178,7 +188,7 @@ export async function route(userInput, options = {}) {
         setLastReply(reply);
         writeRuntime({ lastTranscript: userInput, lastReply: reply });
         appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
-        return { reply, steps, timings };
+        return { reply, steps, timings, usage };
       }
     }
 
@@ -190,5 +200,6 @@ export async function route(userInput, options = {}) {
     reply: 'Chegamos no limite de passos sem terminar. Tenta pedir de um jeito mais especifico.',
     steps,
     timings,
+    usage,
   };
 }

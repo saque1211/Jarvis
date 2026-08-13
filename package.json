@@ -11,6 +11,7 @@
     "jarvis": "node src/index.js",
     "listen": "node src/voice/daemon.js",
     "doctor": "node scripts/doctor.js",
+    "llm:test": "node scripts/llm-test.js",
     "test:voice": "node scripts/test-voice.js",
     "whisper:server": "node scripts/whisper-server.js",
     "voices": "node scripts/voices.js",

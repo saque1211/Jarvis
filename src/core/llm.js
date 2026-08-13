@@ -13,10 +13,16 @@ import { config } from './config.js';
  *   { role: 'tool',      results: [{ id, name, content, isError }] }
  *
  * Resposta canonica:
- *   { text, toolUses: [{ id, name, input }], stopReason: 'tool_use' | 'end' }
+ *   { text, toolUses: [{ id, name, input }], stopReason: 'tool_use' | 'end',
+ *     usage: { entrada, saida, cacheEscrito, cacheLido } }
+ *
+ * `usage` e o unico jeito de saber quanto um comando custou de verdade — os
+ * numeros vem do provedor, nao de estimativa. Quem nao informa manda zero.
  */
 
 let client = null;
+
+const SEM_USO = { entrada: 0, saida: 0, cacheEscrito: 0, cacheLido: 0 };
 
 function parseArgs(raw) {
   // Groq devolve os argumentos como string JSON. Modelo pequeno as vezes manda
@@ -151,7 +157,18 @@ async function callAnthropic({ system, context, messages, tools, model, maxToken
     .filter((b) => b.type === 'tool_use')
     .map((b) => ({ id: b.id, name: b.name, input: b.input || {} }));
 
-  return { text, toolUses, stopReason: toolUses.length ? 'tool_use' : 'end' };
+  const u = response.usage || {};
+  return {
+    text,
+    toolUses,
+    stopReason: toolUses.length ? 'tool_use' : 'end',
+    usage: {
+      entrada: u.input_tokens || 0,
+      saida: u.output_tokens || 0,
+      cacheEscrito: u.cache_creation_input_tokens || 0,
+      cacheLido: u.cache_read_input_tokens || 0,
+    },
+  };
 }
 
 // ─── Compativel com OpenAI (Groq, OpenAI, e qualquer proxy que fale o mesmo) ──
@@ -381,10 +398,23 @@ async function callOpenAICompat({ system, context, messages, tools, model, maxTo
     const bruto = err?.error?.error?.failed_generation || err?.failed_generation;
     if (bruto) {
       const { calls, cleaned } = extractInlineCalls(String(bruto));
-      if (calls.length) return { text: cleaned, toolUses: calls, stopReason: 'tool_use' };
+      // Recuperado de um erro: o provedor nao contou tokens, entao vai zerado.
+      if (calls.length) {
+        return { text: cleaned, toolUses: calls, stopReason: 'tool_use', usage: SEM_USO };
+      }
     }
     throw translateOpenAIError(err, provider);
   }
+
+  const u = response.usage || {};
+  const usage = {
+    // prompt_tokens ja INCLUI o que veio do cache — o cacheLido e um recorte
+    // dele, nao uma parcela a somar.
+    entrada: u.prompt_tokens || 0,
+    saida: u.completion_tokens || 0,
+    cacheEscrito: 0, // nenhum dos dois cobra escrita de cache
+    cacheLido: u.prompt_tokens_details?.cached_tokens || 0,
+  };
 
   const message = response.choices?.[0]?.message || {};
   const toolUses = (message.tool_calls || []).map((call, i) => ({
@@ -401,11 +431,12 @@ async function callOpenAICompat({ system, context, messages, tools, model, maxTo
   if (!toolUses.length && text) {
     const { calls, cleaned } = extractInlineCalls(text);
     if (calls.length) {
-      return { text: cleaned, toolUses: calls, stopReason: 'tool_use' };
+      return { text: cleaned, toolUses: calls, stopReason: 'tool_use', usage };
     }
   }
 
   return {
+    usage,
     text,
     toolUses,
     stopReason: toolUses.length ? 'tool_use' : 'end',
