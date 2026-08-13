@@ -89,6 +89,9 @@ export const config = {
 
   // Memoria
   vaultPath: path.resolve(process.env.VAULT_PATH || path.join(ROOT, 'vault')),
+  // Quanto do log de hoje entra no system prompt. Vai em toda chamada e o log
+  // so cresce, entao teto curto: o modelo busca o resto pela skill memory.
+  vaultContextChars: Number(process.env.JARVIS_VAULT_CONTEXT || 1200),
 
   // Voz
   voice: {

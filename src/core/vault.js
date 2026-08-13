@@ -107,5 +107,11 @@ export function todayContext() {
   const file = dailyFile();
   if (!fs.existsSync(file)) return 'Nenhum registro hoje ainda.';
   const content = fs.readFileSync(file, 'utf8');
-  return content.length > 4000 ? `${content.slice(-4000)}\n[...truncado]` : content;
+
+  // Esse texto entra no system prompt de TODA chamada, e o log do dia so
+  // cresce — sem teto curto, o custo por comando aumenta ao longo do dia ate
+  // estourar o limite por minuto do provedor. O modelo quase nunca precisa de
+  // mais que os ultimos comandos; o resto ele busca com a skill memory.
+  const limite = config.vaultContextChars;
+  return content.length > limite ? `${content.slice(-limite)}\n[...truncado]` : content;
 }

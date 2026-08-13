@@ -14,7 +14,10 @@ import { chat } from './llm.js';
  * chamar a tool errada — que e justamente onde o Llama tropeca.
  */
 
-const MAX_SKILLS = 3;
+// Cada skill a mais custa as tools dela em toda chamada do loop. Duas cobrem
+// quase todo comando; tres so ajudam em pedido encadeado, e ai o custo bate no
+// limite por minuto do provedor.
+const MAX_SKILLS = Number(process.env.JARVIS_MAX_SKILLS || 2);
 
 const SYSTEM = `Voce e o seletor de skills do JARVIS, um assistente que controla um PC Windows.
 
