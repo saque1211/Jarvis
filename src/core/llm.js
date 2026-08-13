@@ -154,7 +154,62 @@ async function callAnthropic({ system, context, messages, tools, model, maxToken
   return { text, toolUses, stopReason: toolUses.length ? 'tool_use' : 'end' };
 }
 
-// ─── Groq ───────────────────────────────────────────────────────────────────
+// ─── Compativel com OpenAI (Groq, OpenAI, e qualquer proxy que fale o mesmo) ──
+//
+// Groq e OpenAI falam o MESMO protocolo em /chat/completions: `messages`,
+// `tools`, `tool_calls`. Entao um adapter so atende os dois — o que muda e pra
+// onde a requisicao vai e o nome do modelo.
+//
+// O que NAO da pra reaproveitar e o cliente: o groq-sdk cola "/openai/v1" na
+// rota por conta propria, e apontado pra OpenAI ele monta
+// api.openai.com/v1/openai/v1/chat/completions. Por isso o caminho da OpenAI
+// usa fetch direto — sao vinte linhas e evita mais uma dependencia.
+//
+// (A Responses API, /v1/responses, e outro protocolo: `input` no lugar de
+// `messages`, tools achatadas, saida como lista de itens. Precisaria de um
+// adapter proprio e nao traria nada aqui — as tools vao inteiras na requisicao
+// dos dois jeitos, e o cache de prefixo da OpenAI e automatico nos dois.)
+
+const OPENAI_BASE = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
+
+/**
+ * Cliente minimo de /chat/completions. Devolve erro no mesmo formato que o
+ * groq-sdk levanta (status, headers, error.error.message), pra que o retry de
+ * limite e o tradutor de erro sirvam aos dois caminhos sem saber a diferenca.
+ */
+async function postChatCompletions(request) {
+  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${config.llm.apiKey}`,
+    },
+    body: JSON.stringify(request),
+  });
+
+  const texto = await res.text();
+  let corpo;
+  try {
+    corpo = JSON.parse(texto);
+  } catch {
+    corpo = { error: { message: texto.slice(0, 300) } };
+  }
+
+  if (!res.ok) {
+    const err = new Error(corpo?.error?.message || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.headers = Object.fromEntries(res.headers);
+    // O tradutor procura em error.error — mesma profundidade do groq-sdk.
+    err.error = corpo;
+    throw err;
+  }
+
+  return corpo;
+}
+
+// Os modelos de raciocinio da OpenAI recusam `max_tokens` e querem
+// `max_completion_tokens`. Nos demais os dois nomes valem.
+const QUER_MAX_COMPLETION = /^(gpt-5|o[1-4])/;
 
 /**
  * O limite do Groq e por minuto e se recompoe sozinho. Esperar alguns segundos
@@ -165,9 +220,13 @@ async function comEsperaNoLimite(chamada) {
   try {
     return await chamada();
   } catch (err) {
-    const limite =
-      err?.status === 429 || err?.error?.error?.code === 'rate_limit_exceeded';
+    const code = err?.error?.error?.code;
+    const limite = err?.status === 429 || code === 'rate_limit_exceeded';
     if (!limite) throw err;
+
+    // 429 tambem e o codigo de "acabou o credito". Esse nao se recompoe com o
+    // tempo — esperar so atrasa a mensagem que a pessoa precisa ler.
+    if (code === 'insufficient_quota') throw err;
 
     // O Groq diz quanto esperar, no cabecalho ou na propria mensagem.
     const cabecalho = Number(err?.headers?.['retry-after']);
@@ -178,36 +237,49 @@ async function comEsperaNoLimite(chamada) {
     // mensagem e deixar a pessoa decidir.
     if (!Number.isFinite(segundos) || segundos > 30) throw err;
 
-    console.error(`[llm] limite do Groq atingido, tentando de novo em ${segundos.toFixed(0)}s...`);
+    console.error(`[llm] limite por minuto atingido, tentando de novo em ${segundos.toFixed(0)}s...`);
     await new Promise((r) => setTimeout(r, segundos * 1000 + 500));
     return chamada();
   }
 }
 
-/** O erro cru da Groq vem como JSON dentro da mensagem. Traduz pro humano. */
-function translateGroqError(err) {
+/** O erro cru vem como JSON dentro da mensagem. Traduz pro humano. */
+function translateOpenAIError(err, provider) {
   const code = err?.error?.error?.code || err?.code;
   const raw = err?.error?.error?.message || err?.message || '';
+  const nome = provider === 'groq' ? 'Groq' : 'OpenAI';
+  const noProvedor = provider === 'groq' ? 'no Groq' : 'na OpenAI';
 
   if (code === 'rate_limit_exceeded' || err?.status === 429 || err?.status === 413) {
     if (/tokens per minute|TPM/i.test(raw)) {
       return new Error(
-        'Estourou o limite de tokens por minuto do Groq. Espere um minuto e ' +
+        `Estourou o limite de tokens por minuto ${noProvedor}. Espere um minuto e ` +
           'tente de novo, ou baixe JARVIS_TOOL_BUDGET no .env pra mandar menos ' +
           'ferramentas por comando.'
       );
     }
-    return new Error('Limite de uso do Groq atingido. Espere um minuto e tente de novo.');
+    if (provider === 'openai' && /quota|billing/i.test(raw)) {
+      return new Error(
+        'A conta da OpenAI esta sem credito. Nao existe free tier ali — precisa ' +
+          'por credito em platform.openai.com/billing.'
+      );
+    }
+    return new Error(`Limite de uso do ${nome} atingido. Espere um minuto e tente de novo.`);
   }
 
   if (err?.status === 401) {
-    return new Error('GROQ_API_KEY invalida ou revogada. Gere outra em console.groq.com/keys.');
+    return new Error(
+      provider === 'groq'
+        ? 'GROQ_API_KEY invalida ou revogada. Gere outra em console.groq.com/keys.'
+        : 'OPENAI_API_KEY invalida ou revogada. Gere outra em platform.openai.com/api-keys.'
+    );
   }
 
   if (code === 'model_not_found' || err?.status === 404) {
     return new Error(
-      `Modelo "${config.llm.model}" nao existe no Groq. Veja os disponiveis em ` +
-        'console.groq.com/docs/models e ajuste JARVIS_MODEL.'
+      `Modelo "${config.llm.model}" nao existe ${noProvedor}. Ajuste JARVIS_MODEL — a ` +
+        'lista esta em ' +
+        (provider === 'groq' ? 'console.groq.com/docs/models.' : 'platform.openai.com/docs/models.')
     );
   }
 
@@ -219,7 +291,7 @@ function translateGroqError(err) {
     );
   }
 
-  return new Error(raw || 'Falha na chamada ao Groq.');
+  return new Error(raw || `Falha na chamada ao ${nome}.`);
 }
 
 function groqMessages(system, messages) {
@@ -253,16 +325,16 @@ function groqMessages(system, messages) {
   return out;
 }
 
-async function callGroq({ system, context, messages, tools, model, maxTokens }) {
-  if (!client) {
+async function callOpenAICompat({ system, context, messages, tools, model, maxTokens }) {
+  const provider = config.llm.provider;
+
+  if (provider === 'groq' && !client) {
     let Groq;
     try {
       ({ default: Groq } = await import('groq-sdk'));
     } catch {
       throw new Error('Falta o pacote groq-sdk. Rode: npm install groq-sdk');
     }
-    // baseURL destravado deixa apontar pra qualquer endpoint compativel com a
-    // API da OpenAI (proxy local, outro provedor) sem tocar no codigo.
     client = new Groq({
       apiKey: config.llm.apiKey,
       ...(process.env.GROQ_BASE_URL ? { baseURL: process.env.GROQ_BASE_URL } : {}),
@@ -271,12 +343,16 @@ async function callGroq({ system, context, messages, tools, model, maxTokens }) 
 
   const request = {
     model,
-    max_tokens: maxTokens,
-    // O Groq nao tem cache de prompt, entao os dois pedacos vao juntos.
+    // Nenhum dos dois tem cache de prompt controlavel, entao os dois pedacos
+    // vao juntos no system. (A OpenAI cacheia prefixo sozinha, sem pedir.)
     messages: groqMessages(context ? `${system}\n\n${context}` : system, messages),
   };
 
+  if (QUER_MAX_COMPLETION.test(model)) request.max_completion_tokens = maxTokens;
+  else request.max_tokens = maxTokens;
+
   // Groq rejeita tools: [] — omite o campo quando nao ha ferramenta nenhuma.
+  // (Na OpenAI o array vazio passa, mas omitir tambem funciona.)
   if (tools.length) {
     request.tools = tools.map((t) => ({
       type: 'function',
@@ -289,9 +365,14 @@ async function callGroq({ system, context, messages, tools, model, maxTokens }) 
     request.tool_choice = 'auto';
   }
 
+  const enviar =
+    provider === 'groq'
+      ? () => client.chat.completions.create(request)
+      : () => postChatCompletions(request);
+
   let response;
   try {
-    response = await comEsperaNoLimite(() => client.chat.completions.create(request));
+    response = await comEsperaNoLimite(enviar);
   } catch (err) {
     // Quando o Llama escreve uma chamada malformada, o Groq recusa com 400 mas
     // devolve em `failed_generation` o texto exato que ele tentou gerar. Quase
@@ -302,7 +383,7 @@ async function callGroq({ system, context, messages, tools, model, maxTokens }) 
       const { calls, cleaned } = extractInlineCalls(String(bruto));
       if (calls.length) return { text: cleaned, toolUses: calls, stopReason: 'tool_use' };
     }
-    throw translateGroqError(err);
+    throw translateOpenAIError(err, provider);
   }
 
   const message = response.choices?.[0]?.message || {};
@@ -373,7 +454,11 @@ function extractInlineCalls(text) {
 
 // ─── Entrada ────────────────────────────────────────────────────────────────
 
-const PROVIDERS = { anthropic: callAnthropic, groq: callGroq };
+const PROVIDERS = {
+  anthropic: callAnthropic,
+  groq: callOpenAICompat,
+  openai: callOpenAICompat,
+};
 
 /**
  * `fast: true` troca pro modelo pequeno. Use nas etapas que sao classificacao,
@@ -392,7 +477,7 @@ export async function chat({
   const call = PROVIDERS[config.llm.provider];
   if (!call) {
     throw new Error(
-      `Provedor desconhecido: "${config.llm.provider}". Use LLM_PROVIDER=groq ou anthropic.`
+      `Provedor desconhecido: "${config.llm.provider}". Use LLM_PROVIDER=groq, openai ou anthropic.`
     );
   }
   return call({

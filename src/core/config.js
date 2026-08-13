@@ -19,11 +19,13 @@ function list(value) {
 }
 
 // ─── Cerebro ────────────────────────────────────────────────────────────────
-// Dois provedores: Groq (free tier, rapido) e Anthropic (roteia melhor com
-// muitas tools). Quem manda e LLM_PROVIDER; sem ele, vale a chave que existir.
+// Tres provedores: Groq (free tier, rapido), OpenAI (barato por token, sem
+// free tier) e Anthropic (roteia melhor com muitas tools). Quem manda e
+// LLM_PROVIDER; sem ele, vale a chave que existir, do gratis pro pago.
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 const GROQ_KEY = process.env.GROQ_API_KEY;
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
 // Anthropic e paga, entao o padrao e o modelo mais barato que da conta:
 // Haiku 4.5, a $1/$5 por milhao de tokens. Com o cache de prompt segurando as
@@ -31,6 +33,7 @@ const GROQ_KEY = process.env.GROQ_API_KEY;
 // melhor troca por claude-sonnet-5 no .env — custa 3x e erra menos de tool.
 const DEFAULT_MODEL = {
   groq: 'llama-3.3-70b-versatile',
+  openai: 'gpt-4.1-mini',
   anthropic: 'claude-haiku-4-5',
 };
 
@@ -39,24 +42,42 @@ const DEFAULT_MODEL = {
 // modelo grande e latencia jogada fora.
 const DEFAULT_FAST_MODEL = {
   groq: 'llama-3.1-8b-instant',
+  openai: 'gpt-4.1-nano',
   anthropic: 'claude-haiku-4-5',
+};
+
+const KEY_OF = { groq: GROQ_KEY, openai: OPENAI_KEY, anthropic: ANTHROPIC_KEY };
+const KEY_NAME = {
+  groq: 'GROQ_API_KEY',
+  openai: 'OPENAI_API_KEY',
+  anthropic: 'ANTHROPIC_API_KEY',
 };
 
 function pickProvider() {
   const explicit = (process.env.LLM_PROVIDER || '').toLowerCase().trim();
   if (explicit) return explicit;
+  // Sem escolha explicita, o gratis vem primeiro.
   if (GROQ_KEY) return 'groq';
+  if (OPENAI_KEY && !ANTHROPIC_KEY) return 'openai';
   return 'anthropic';
+}
+
+// De que provedor um nome de modelo parece ser, ou null quando nao da pra
+// dizer. Serve so pra ignorar um JARVIS_MODEL que sobrou da troca anterior —
+// sem isso a chamada quebra com um erro que nao explica nada. Na duvida
+// (null) o nome passa: pode ser fine-tune, modelo novo ou proxy local.
+function guessProvider(model) {
+  if (model.startsWith('claude')) return 'anthropic';
+  if (/^(gpt-|o[1-4](-|$)|chatgpt-|ft:)/.test(model)) return 'openai';
+  if (/^(llama|mixtral|gemma|qwen|deepseek|moonshot|openai\/)/.test(model)) return 'groq';
+  return null;
 }
 
 function pickModel(provider) {
   const wanted = process.env.JARVIS_MODEL?.trim();
   if (!wanted) return DEFAULT_MODEL[provider] || DEFAULT_MODEL.anthropic;
-  // Um JARVIS_MODEL sobrando do provedor anterior quebraria a chamada com um
-  // erro que nao explica nada. Ignora e usa o padrao do provedor atual.
-  const looksAnthropic = wanted.startsWith('claude');
-  if (provider === 'groq' && looksAnthropic) return DEFAULT_MODEL.groq;
-  if (provider === 'anthropic' && !looksAnthropic) return DEFAULT_MODEL.anthropic;
+  const guess = guessProvider(wanted);
+  if (guess && guess !== provider) return DEFAULT_MODEL[provider] || DEFAULT_MODEL.anthropic;
   return wanted;
 }
 
@@ -67,8 +88,8 @@ export const config = {
 
   llm: {
     provider: PROVIDER,
-    apiKey: PROVIDER === 'groq' ? GROQ_KEY : ANTHROPIC_KEY,
-    keyName: PROVIDER === 'groq' ? 'GROQ_API_KEY' : 'ANTHROPIC_API_KEY',
+    apiKey: KEY_OF[PROVIDER],
+    keyName: KEY_NAME[PROVIDER] || 'ANTHROPIC_API_KEY',
     model: pickModel(PROVIDER),
     fastModel:
       process.env.JARVIS_FAST_MODEL?.trim() ||
@@ -77,7 +98,9 @@ export const config = {
     // Teto de tokens gasto so com definicao de tool. Acima dele o router
     // pre-seleciona skills em vez de mandar as 99. O free tier do Groq da
     // 12k tokens por minuto e o loop faz varias chamadas dentro do mesmo
-    // minuto — por isso o teto e bem abaixo disso. 0 desliga.
+    // minuto — por isso o teto e bem abaixo disso. Nos pagos o limite nao
+    // aperta, entao o padrao e mandar tudo (0 desliga) e deixar o modelo
+    // escolher entre as 99, que e onde ele acerta mais.
     toolBudget: Number(process.env.JARVIS_TOOL_BUDGET ?? (PROVIDER === 'groq' ? 3000 : 0)),
   },
 
