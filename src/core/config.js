@@ -25,9 +25,13 @@ function list(value) {
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY;
 const GROQ_KEY = process.env.GROQ_API_KEY;
 
+// Anthropic e paga, entao o padrao e o modelo mais barato que da conta:
+// Haiku 4.5, a $1/$5 por milhao de tokens. Com o cache de prompt segurando as
+// 99 tools, um comando sai por menos de meio centavo. Quem quiser roteamento
+// melhor troca por claude-sonnet-5 no .env — custa 3x e erra menos de tool.
 const DEFAULT_MODEL = {
   groq: 'llama-3.3-70b-versatile',
-  anthropic: 'claude-sonnet-5',
+  anthropic: 'claude-haiku-4-5',
 };
 
 // Modelo pequeno pras tarefas que nao precisam de raciocinio — hoje so a
@@ -35,7 +39,7 @@ const DEFAULT_MODEL = {
 // modelo grande e latencia jogada fora.
 const DEFAULT_FAST_MODEL = {
   groq: 'llama-3.1-8b-instant',
-  anthropic: 'claude-haiku-4-5-20251001',
+  anthropic: 'claude-haiku-4-5',
 };
 
 function pickProvider() {

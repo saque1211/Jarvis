@@ -68,6 +68,40 @@ function anthropicMessages(messages) {
   });
 }
 
+// Cada geracao da Anthropic aceita campos diferentes pra controlar raciocinio,
+// e mandar o que o modelo nao conhece volta 400 na hora. Por familia:
+//
+//   Opus 5, Opus 4.6+,  vem com raciocinio ADAPTATIVO ligado quando o campo
+//   Sonnet 5, Sonnet4.6 falta — token de saida cobrado em toda escolha de tool.
+//   Fable/Mythos 5      pensam sempre; `thinking: disabled` neles e 400, por
+//                       isso ficam de fora da lista de baixo.
+//   Haiku 4.5 e antigos ja vem sem raciocinio, e nao conhecem `effort`.
+const PENSA_POR_PADRAO = /^claude-(opus-5|opus-4-[678]|sonnet-5|sonnet-4-6)/;
+const ACEITA_EFFORT = /^claude-(fable-5|mythos-5|opus-5|opus-4-[5678]|sonnet-5|sonnet-4-6)/;
+
+/**
+ * Escolher entre 99 tools e classificacao, nao raciocinio: o modelo le a
+ * `description`, acha a que casa e devolve. Deixar o raciocinio adaptativo
+ * ligado aqui e pagar token de saida — o mais caro que existe — por uma
+ * decisao que ja sai certa sem ele.
+ *
+ * Entao o padrao e o mais barato que cada modelo permite. `JARVIS_THINKING=1`
+ * devolve os padroes do proprio modelo, pra quando valer comparar qualidade.
+ */
+function anthropicTuning(model) {
+  if (['1', 'true', 'yes', 'on'].includes(String(process.env.JARVIS_THINKING).toLowerCase())) {
+    return {};
+  }
+
+  const extra = {};
+  if (PENSA_POR_PADRAO.test(model)) extra.thinking = { type: 'disabled' };
+  // Com raciocinio desligado, `effort` ainda governa o quanto o modelo se
+  // estende na resposta. "low" e o que queremos numa frase de 1-2 linhas.
+  // (No Opus 5, `disabled` so e aceito ate effort "high" — "low" fica dentro.)
+  if (ACEITA_EFFORT.test(model)) extra.output_config = { effort: 'low' };
+  return extra;
+}
+
 async function callAnthropic({ system, context, messages, tools, model, maxTokens }) {
   if (!client) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
@@ -77,6 +111,7 @@ async function callAnthropic({ system, context, messages, tools, model, maxToken
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
+    ...anthropicTuning(model),
 
     // Cache de prompt. A ordem que a Anthropic monta e tools -> system ->
     // messages, entao um marcador no fim da parte estatica do system guarda as
