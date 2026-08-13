@@ -24,6 +24,56 @@ let client = null;
 
 const SEM_USO = { entrada: 0, saida: 0, cacheEscrito: 0, cacheLido: 0 };
 
+/**
+ * O fetch do Node falha com a mensagem inutil "fetch failed" e esconde o
+ * motivo em `err.cause` — as vezes com mais de um nivel. Esta funcao cava ate
+ * o codigo do sistema e devolve uma frase que diz o que fazer.
+ *
+ * Sem isso, "sem internet", "porta fechada" e "endereco errado no .env" viram
+ * todos a mesma mensagem, e nao da pra saber qual dos tres e.
+ */
+export function explicarFalhaDeRede(err, alvo) {
+  let causa = err;
+  const codigos = [];
+  let ultimaMensagem = '';
+  for (let i = 0; i < 5 && causa; i++) {
+    if (causa.code) codigos.push(causa.code);
+    // A causa mais funda costuma ser a unica especifica ("bad port", "unable
+    // to connect"). Guardada, ela salva o caso sem codigo de sistema.
+    if (causa.message && !/^(fetch failed|Connection error\.?)$/i.test(causa.message)) {
+      ultimaMensagem = causa.message;
+    }
+    causa = causa.cause;
+  }
+  const code = codigos[codigos.length - 1] || codigos[0];
+  const onde = alvo ? ` (${alvo})` : '';
+
+  switch (code) {
+    case 'ECONNREFUSED':
+      return (
+        `Ninguem atendeu em ${alvo || 'no endereco configurado'}. ` +
+        'Se voce apontou pra um servidor local (Ollama, LM Studio), ele precisa ' +
+        'estar rodando ANTES; se nao usa mais, tire OPENAI_BASE_URL do .env.'
+      );
+    case 'ENOTFOUND':
+    case 'EAI_AGAIN':
+      return `Nao consegui resolver o endereco${onde}. Ou o .env tem um endereco errado, ou a internet caiu.`;
+    case 'ETIMEDOUT':
+    case 'UND_ERR_CONNECT_TIMEOUT':
+      return `A conexao${onde} estourou o tempo. Rede lenta, firewall ou antivirus segurando o Node.`;
+    case 'CERT_HAS_EXPIRED':
+    case 'UNABLE_TO_VERIFY_LEAF_SIGNATURE':
+    case 'SELF_SIGNED_CERT_IN_CHAIN':
+      return `O certificado TLS${onde} nao passou na verificacao — costuma ser antivirus ou proxy inspecionando o trafego.`;
+    default:
+      return (
+        `Nao consegui falar com o provedor${onde}` +
+        (code || ultimaMensagem ? ` — ${code || ultimaMensagem}` : '') +
+        '. Verifique a internet e, se houver, o endereco no .env.'
+      );
+  }
+}
+
 function parseArgs(raw) {
   // Groq devolve os argumentos como string JSON. Modelo pequeno as vezes manda
   // string vazia quando a tool nao tem parametro.
@@ -195,14 +245,24 @@ const OPENAI_BASE = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1')
  * limite e o tradutor de erro sirvam aos dois caminhos sem saber a diferenca.
  */
 async function postChatCompletions(request) {
-  const res = await fetch(`${OPENAI_BASE}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${config.llm.apiKey}`,
-    },
-    body: JSON.stringify(request),
-  });
+  const url = `${OPENAI_BASE}/chat/completions`;
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${config.llm.apiKey}`,
+      },
+      body: JSON.stringify(request),
+    });
+  } catch (err) {
+    const claro = new Error(explicarFalhaDeRede(err, OPENAI_BASE));
+    claro.cause = err;
+    claro.rede = true;
+    throw claro;
+  }
 
   const texto = await res.text();
   let corpo;
@@ -391,6 +451,10 @@ async function callOpenAICompat({ system, context, messages, tools, model, maxTo
   try {
     response = await comEsperaNoLimite(enviar);
   } catch (err) {
+    // Falha de rede ja vem explicada — o tradutor abaixo so entende erro de
+    // API, e passar por ele transformaria a explicacao boa em generica.
+    if (err.rede) throw err;
+
     // Quando o Llama escreve uma chamada malformada, o Groq recusa com 400 mas
     // devolve em `failed_generation` o texto exato que ele tentou gerar. Quase
     // sempre e o mesmo `<function=nome>{...}</function>` que ja sabemos ler —
@@ -491,6 +555,14 @@ const PROVIDERS = {
   openai: callOpenAICompat,
 };
 
+// Pra que a mensagem de falha de rede diga QUAL endereco nao respondeu — e a
+// diferenca entre "sem internet" e "o .env aponta pro lugar errado".
+export const ENDPOINT = {
+  anthropic: process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com',
+  groq: process.env.GROQ_BASE_URL || 'https://api.groq.com',
+  openai: OPENAI_BASE,
+};
+
 /**
  * `fast: true` troca pro modelo pequeno. Use nas etapas que sao classificacao,
  * nao raciocinio — o modelo grande ali e so latencia.
@@ -511,12 +583,30 @@ export async function chat({
       `Provedor desconhecido: "${config.llm.provider}". Use LLM_PROVIDER=groq, openai ou anthropic.`
     );
   }
-  return call({
-    system,
-    context,
-    messages,
-    tools,
-    model: fast ? config.llm.fastModel : config.llm.model,
-    maxTokens,
-  });
+
+  try {
+    return await call({
+      system,
+      context,
+      messages,
+      tools,
+      model: fast ? config.llm.fastModel : config.llm.model,
+      maxTokens,
+    });
+  } catch (err) {
+    // Os SDKs tambem usam fetch por baixo e reembalam a falha de conexao como
+    // APIConnectionError, com o motivo real enterrado em `cause`. Mesmo
+    // tratamento do caminho de fetch direto. (O `name` deles fica "Error" — a
+    // classe so aparece no constructor, entao a checagem vai pelos dois.)
+    const deRede =
+      /^(fetch failed|Connection error\.?)$/i.test(err.message || '') ||
+      err.constructor?.name === 'APIConnectionError';
+    if (!err.rede && deRede) {
+      const claro = new Error(explicarFalhaDeRede(err, ENDPOINT[config.llm.provider]));
+      claro.cause = err;
+      claro.rede = true;
+      throw claro;
+    }
+    throw err;
+  }
 }

@@ -3,6 +3,7 @@ import path from 'node:path';
 import pc from 'picocolors';
 import { config } from '../src/core/config.js';
 import { route } from '../src/core/router.js';
+import { ENDPOINT } from '../src/core/llm.js';
 import { loadSkills, toolSpecs } from '../src/core/registry.js';
 import { estimateTokens } from '../src/core/preselect.js';
 
@@ -83,9 +84,11 @@ async function main() {
   console.log(`    provedor    ${pc.bold(provider)}`);
   console.log(`    modelo      ${model}`);
   console.log(`    modelo leve ${fastModel} ${pc.dim('(so quando ha pre-selecao)')}`);
-  if (provider === 'openai' && process.env.OPENAI_BASE_URL) {
-    console.log(`    endpoint    ${process.env.OPENAI_BASE_URL} ${pc.dim('(nao e a OpenAI oficial)')}`);
-  }
+  // Sempre visivel: um endereco sobrando no .env e a causa mais comum de
+  // "fetch failed", e sem ver pra onde ele aponta nao da pra desconfiar.
+  const alvo = ENDPOINT[provider];
+  const oficial = /api\.(anthropic|groq)\.com|api\.openai\.com/.test(alvo || '');
+  console.log(`    endpoint    ${alvo}${oficial ? '' : pc.yellow('  ← nao e o oficial, veio do .env')}`);
 
   if (!apiKey) {
     console.log(`\n  ${pc.red('X')}  ${keyName} ausente no .env — o teste para aqui.\n`);
@@ -118,6 +121,14 @@ async function main() {
     });
   } catch (err) {
     console.log(`\n  ${pc.red('X')}  ${err.message}\n`);
+    // A cadeia de `cause` e onde mora o motivo de verdade. Escondida, todo
+    // problema de rede vira a mesma mensagem sem saida.
+    let causa = err.cause;
+    for (let i = 0; i < 4 && causa; i++) {
+      const detalhe = [causa.code, causa.message].filter(Boolean).join(': ');
+      if (detalhe) console.log(pc.dim(`       causa: ${detalhe}`));
+      causa = causa.cause;
+    }
     process.exit(1);
   }
 
