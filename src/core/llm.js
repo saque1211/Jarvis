@@ -128,6 +128,14 @@ function translateGroqError(err) {
     );
   }
 
+  if (code === 'tool_use_failed') {
+    return new Error(
+      'O modelo tentou chamar uma ferramenta e escreveu errado — acontece com ' +
+        'modelos abertos. Repita o comando; se insistir, baixe JARVIS_TOOL_BUDGET ' +
+        'no .env (menos ferramentas por vez = menos confusao) ou troque pra Anthropic.'
+    );
+  }
+
   return new Error(raw || 'Falha na chamada ao Groq.');
 }
 
@@ -201,6 +209,15 @@ async function callGroq({ system, messages, tools, model, maxTokens }) {
   try {
     response = await client.chat.completions.create(request);
   } catch (err) {
+    // Quando o Llama escreve uma chamada malformada, o Groq recusa com 400 mas
+    // devolve em `failed_generation` o texto exato que ele tentou gerar. Quase
+    // sempre e o mesmo `<function=nome>{...}</function>` que ja sabemos ler —
+    // entao da pra aproveitar em vez de perder o comando.
+    const bruto = err?.error?.error?.failed_generation || err?.failed_generation;
+    if (bruto) {
+      const { calls, cleaned } = extractInlineCalls(String(bruto));
+      if (calls.length) return { text: cleaned, toolUses: calls, stopReason: 'tool_use' };
+    }
     throw translateGroqError(err);
   }
 
