@@ -68,7 +68,7 @@ function anthropicMessages(messages) {
   });
 }
 
-async function callAnthropic({ system, messages, tools, model, maxTokens }) {
+async function callAnthropic({ system, context, messages, tools, model, maxTokens }) {
   if (!client) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     client = new Anthropic({ apiKey: config.llm.apiKey });
@@ -77,7 +77,17 @@ async function callAnthropic({ system, messages, tools, model, maxTokens }) {
   const response = await client.messages.create({
     model,
     max_tokens: maxTokens,
-    system,
+
+    // Cache de prompt. A ordem que a Anthropic monta e tools -> system ->
+    // messages, entao um marcador no fim da parte estatica do system guarda as
+    // 99 tools junto — sao ~14 mil tokens que iriam inteiros em toda chamada.
+    // O contexto do vault vem DEPOIS do marcador de proposito: ele muda a cada
+    // comando, e qualquer byte diferente antes do marcador invalidaria tudo.
+    system: [
+      { type: 'text', text: system, cache_control: { type: 'ephemeral' } },
+      ...(context ? [{ type: 'text', text: context }] : []),
+    ],
+
     tools: tools.map((t) => ({
       name: t.name,
       description: t.description,
@@ -85,6 +95,16 @@ async function callAnthropic({ system, messages, tools, model, maxTokens }) {
     })),
     messages: anthropicMessages(messages),
   });
+
+  // Leitura de cache custa ~10% do preco de entrada. Zero aqui, em chamadas
+  // seguidas, significa que alguma coisa esta invalidando o prefixo.
+  if (process.env.JARVIS_LLM_DEBUG) {
+    const u = response.usage;
+    console.error(
+      `[llm] entrada ${u.input_tokens} · cache escrito ${u.cache_creation_input_tokens ?? 0}` +
+        ` · cache lido ${u.cache_read_input_tokens ?? 0}`
+    );
+  }
 
   const text = response.content
     .filter((b) => b.type === 'text')
@@ -100,6 +120,34 @@ async function callAnthropic({ system, messages, tools, model, maxTokens }) {
 }
 
 // ─── Groq ───────────────────────────────────────────────────────────────────
+
+/**
+ * O limite do Groq e por minuto e se recompoe sozinho. Esperar alguns segundos
+ * e tentar de novo resolve o caso comum — dois comandos seguidos — sem exigir
+ * nada do usuario. So a segunda falha vira erro.
+ */
+async function comEsperaNoLimite(chamada) {
+  try {
+    return await chamada();
+  } catch (err) {
+    const limite =
+      err?.status === 429 || err?.error?.error?.code === 'rate_limit_exceeded';
+    if (!limite) throw err;
+
+    // O Groq diz quanto esperar, no cabecalho ou na propria mensagem.
+    const cabecalho = Number(err?.headers?.['retry-after']);
+    const naMensagem = String(err?.error?.error?.message || '').match(/try again in ([\d.]+)s/i);
+    const segundos = cabecalho || (naMensagem ? Number(naMensagem[1]) : 12);
+
+    // Acima disso a espera incomoda mais que o erro — melhor devolver a
+    // mensagem e deixar a pessoa decidir.
+    if (!Number.isFinite(segundos) || segundos > 30) throw err;
+
+    console.error(`[llm] limite do Groq atingido, tentando de novo em ${segundos.toFixed(0)}s...`);
+    await new Promise((r) => setTimeout(r, segundos * 1000 + 500));
+    return chamada();
+  }
+}
 
 /** O erro cru da Groq vem como JSON dentro da mensagem. Traduz pro humano. */
 function translateGroqError(err) {
@@ -170,7 +218,7 @@ function groqMessages(system, messages) {
   return out;
 }
 
-async function callGroq({ system, messages, tools, model, maxTokens }) {
+async function callGroq({ system, context, messages, tools, model, maxTokens }) {
   if (!client) {
     let Groq;
     try {
@@ -189,7 +237,8 @@ async function callGroq({ system, messages, tools, model, maxTokens }) {
   const request = {
     model,
     max_tokens: maxTokens,
-    messages: groqMessages(system, messages),
+    // O Groq nao tem cache de prompt, entao os dois pedacos vao juntos.
+    messages: groqMessages(context ? `${system}\n\n${context}` : system, messages),
   };
 
   // Groq rejeita tools: [] — omite o campo quando nao ha ferramenta nenhuma.
@@ -207,7 +256,7 @@ async function callGroq({ system, messages, tools, model, maxTokens }) {
 
   let response;
   try {
-    response = await client.chat.completions.create(request);
+    response = await comEsperaNoLimite(() => client.chat.completions.create(request));
   } catch (err) {
     // Quando o Llama escreve uma chamada malformada, o Groq recusa com 400 mas
     // devolve em `failed_generation` o texto exato que ele tentou gerar. Quase
@@ -295,7 +344,16 @@ const PROVIDERS = { anthropic: callAnthropic, groq: callGroq };
  * `fast: true` troca pro modelo pequeno. Use nas etapas que sao classificacao,
  * nao raciocinio — o modelo grande ali e so latencia.
  */
-export async function chat({ system, messages, tools = [], fast = false, maxTokens = 2048 }) {
+export async function chat({
+  system,
+  // Parte que muda a cada comando. Fica separada pra nao invalidar o cache do
+  // que e estavel — veja o adapter da Anthropic.
+  context = null,
+  messages,
+  tools = [],
+  fast = false,
+  maxTokens = 2048,
+}) {
   const call = PROVIDERS[config.llm.provider];
   if (!call) {
     throw new Error(
@@ -304,6 +362,7 @@ export async function chat({ system, messages, tools = [], fast = false, maxToke
   }
   return call({
     system,
+    context,
     messages,
     tools,
     model: fast ? config.llm.fastModel : config.llm.model,

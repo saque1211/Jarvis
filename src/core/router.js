@@ -19,10 +19,7 @@ Regras:
 - Antes de qualquer coisa destrutiva (deletar, sobrescrever, matar processo, force push),
   pergunte primeiro em uma frase curta. Nao execute e avise depois.
 - Se faltar credencial pra uma integracao, diga em uma frase qual variavel de ambiente falta.
-- Fale portugues do Brasil, direto, sem formalidade.
-
-Contexto do vault hoje:
-{{TODAY}}`;
+- Fale portugues do Brasil, direto, sem formalidade.`;
 
 // Pistas de que o comando tem mais de uma intencao. Na duvida o router faz a
 // viagem extra ao modelo — errar aqui pro lado do "otimiza" perderia acao.
@@ -90,7 +87,10 @@ export async function route(userInput, options = {}) {
   for (let turn = 0; turn < config.maxTurns; turn++) {
     const t = Date.now();
     const response = await chat({
-      system: SYSTEM.replace('{{TODAY}}', todayContext()),
+      // Estatico e volatil separados: o system nunca muda, entao ele e as tools
+      // podem ficar em cache. O vault muda a cada comando e vai depois.
+      system: SYSTEM,
+      context: `Contexto do vault hoje:\n${todayContext()}`,
       messages,
       tools: active,
     });
