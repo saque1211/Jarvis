@@ -93,6 +93,36 @@ async function main() {
   if (!apiKey) {
     console.log(`\n  ${pc.red('X')}  ${keyName} ausente no .env — o teste para aqui.\n`);
     console.log(pc.dim(`     O .env fica em ${path.join(config.root, '.env')}`));
+
+    // Dizer so o que falta manda a pessoa atras de uma chave que ela talvez ja
+    // tenha noutro provedor. Mostra o que EXISTE e como trocar numa linha.
+    const outros = [
+      ['groq', 'GROQ_API_KEY', process.env.GROQ_API_KEY],
+      ['openai', 'OPENAI_API_KEY', process.env.OPENAI_API_KEY],
+      ['anthropic', 'ANTHROPIC_API_KEY', process.env.ANTHROPIC_API_KEY || process.env.CLAUDE_API_KEY],
+    ].filter(([nome, , chave]) => chave && nome !== provider);
+
+    if (outros.length) {
+      console.log(`\n     Voce ja tem chave de: ${outros.map(([n]) => pc.bold(n)).join(', ')}.`);
+      console.log('     Pra usar uma delas, acrescente no fim do .env:');
+      for (const [nome] of outros) {
+        // Um provedor apontado pra endereco proprio depende de um servidor
+        // ligado na maquina — sugerir sem avisar so troca um erro por outro.
+        const destino = ENDPOINT[nome];
+        const proprio = destino && !/api\.(anthropic|groq|openai)\.com/.test(destino);
+        console.log(
+          pc.cyan(`       Add-Content .env 'LLM_PROVIDER=${nome}'`) +
+            (proprio ? pc.yellow(`   ← aponta pra ${destino}, precisa estar rodando`) : '')
+        );
+      }
+      console.log(pc.dim('     (chave repetida no .env: vale a ultima linha)'));
+    } else {
+      console.log('\n     Nenhum provedor tem chave configurada. Pegue uma em:');
+      console.log(pc.dim('       Groq (gratis)  console.groq.com/keys'));
+      console.log(pc.dim('       Anthropic      platform.claude.com/settings/keys'));
+      console.log(pc.dim('       OpenAI         platform.openai.com/api-keys'));
+    }
+    console.log(pc.dim('\n     Cole a chave no .env, nunca num chat ou print.'));
     process.exit(1);
   }
   // Nunca imprime a chave: este output costuma virar print pra pedir ajuda.
