@@ -103,10 +103,16 @@ async function main() {
       } catch {
         // Fora do ar so e falha quando nao ha comando local pra assumir.
         const aviso = config.voice.sttCommand ? warn : fail;
-        aviso(`  whisper-server fora do ar em ${config.voice.sttServerUrl}`);
+        aviso(`  whisper-server nao esta no ar em ${config.voice.sttServerUrl}`);
         if (config.voice.sttCommand) {
-          console.log(pc.dim('       Sem problema: cai no STT_COMMAND, so fica mais lento.'));
-          console.log(pc.dim('       Pra acelerar, suba num terminal separado: npm run whisper:server'));
+          // Alarme falso se o listen nao esta rodando: quem sobe o servidor e
+          // o daemon, e o doctor roda sozinho. Dizer isso evita a pessoa sair
+          // atras de um problema que nao existe.
+          console.log(pc.dim('       Normal se o "npm run listen" nao esta rodando — quem sobe'));
+          console.log(pc.dim('       o servidor e ele. Confira a linha [whisper] quando subir.'));
+          console.log(pc.dim('       Se estiver fora do ar COM o listen rodando, ai sim tem algo'));
+          console.log(pc.dim('       errado: cada frase custa ~2s a mais recarregando o modelo.'));
+          console.log(pc.dim('       Nesse caso suba na mao: npm run whisper:server'));
         } else {
           console.log(pc.dim('       Suba num terminal separado: npm run whisper:server'));
           console.log(pc.dim('       Ou configure STT_COMMAND como reserva.'));

@@ -29,14 +29,39 @@ const VOCAB_BASE =
   'Screenshot, gravar tela, area de transferencia. ' +
   'Commit, push, branch, build, deploy, terminal, projeto.';
 
-/** Nomes de app cadastrados — a parte do vocabulario que e so sua. */
+/**
+ * Nomes de app cadastrados — a parte do vocabulario que e so sua.
+ *
+ * Um alvo tem varios apelidos, e alguns existem de proposito ERRADOS: "cromo",
+ * "espotifai", "uatsap" servem pro resolvedor entender voz torta. Mandar essas
+ * grafias pro whisper faz o contrario do que queremos — ensina ele a ESCREVER
+ * "espotifai". Entao aqui sai um nome por alvo, e o escolhido e o que parece
+ * nome de verdade: aquele que aparece dentro do proprio alvo
+ * ("spotify" esta em "spotify:", "cromo" nao esta em "chrome").
+ */
 export function nomesDeApps() {
+  let apps;
   try {
-    const apps = JSON.parse(fs.readFileSync(config.paths.apps, 'utf8'));
-    return Object.keys(apps);
+    apps = JSON.parse(fs.readFileSync(config.paths.apps, 'utf8'));
   } catch {
     return [];
   }
+
+  const simples = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const porAlvo = new Map();
+
+  for (const [apelido, alvo] of Object.entries(apps)) {
+    const chave = String(alvo).toLowerCase();
+    const pareceNome = simples(chave).includes(simples(apelido));
+    const atual = porAlvo.get(chave);
+    // Entre dois candidatos "de verdade", o mais curto e o que a pessoa fala.
+    if (!atual || (pareceNome && !atual.pareceNome) ||
+        (pareceNome === atual.pareceNome && apelido.length < atual.apelido.length)) {
+      porAlvo.set(chave, { apelido, pareceNome });
+    }
+  }
+
+  return [...porAlvo.values()].map((e) => e.apelido);
 }
 
 /**
@@ -63,10 +88,13 @@ export function promptDeVocabulario() {
   const partes = [];
   const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
   if (doUsuario) partes.push(doUsuario);
-  partes.push(VOCAB_BASE);
 
+  // Os nomes de app vem ANTES do vocabulario generico. O texto e cortado no
+  // fim, e cortar "abrir, fechar, tocar" custa pouco: sao palavras comuns que
+  // o whisper ja acerta. Cortar nome de app custa o comando inteiro.
   const apps = nomesDeApps();
   if (apps.length) partes.push(`Aplicativos: ${apps.join(', ')}.`);
+  partes.push(VOCAB_BASE);
 
   const texto = partes.join(' ');
   if (texto.length <= 900) return texto;
