@@ -16,6 +16,7 @@
     "whisper:server": "node scripts/whisper-server.js",
     "whisper:model": "node scripts/setup-whisper.js",
     "apps:find": "node scripts/find-apps.js",
+    "sons": "node scripts/sons.js",
     "voices": "node scripts/voices.js",
     "voices:edge": "node scripts/voices-edge.js",
     "voice:piper": "node scripts/setup-piper.js",

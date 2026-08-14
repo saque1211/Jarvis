@@ -1,8 +1,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { toast, ps } from '../platform/win32.js';
+import { toast, ps, psQuote } from '../platform/win32.js';
 import { config, ensureDirs } from '../core/config.js';
 import { appendDaily } from '../core/vault.js';
+
+// Os .wav que vem com o Windows. Sao os que a pessoa ja conhece de ouvido, e
+// nao exigem baixar nada.
+const PASTA_SONS = 'C:/Windows/Media';
+
+/**
+ * Toca o alarme do timer conforme JARVIS_TIMER_SOM.
+ *
+ * O beep de console e onda quadrada pura: corta bem, mas e agressivo pra um
+ * timer que dispara varias vezes ao dia. Por isso da pra trocar por um .wav —
+ * de preferencia um dos que ja existem em C:/Windows/Media.
+ */
+export async function tocarAlarme(escolha = config.voice.timerSound) {
+  const som = String(escolha || 'beep').trim();
+  if (som.toLowerCase() === 'off') return;
+
+  if (som.toLowerCase() === 'beep') {
+    await ps('for ($i=0; $i -lt 3; $i++) { [console]::beep(880, 250); Start-Sleep -Milliseconds 120 }');
+    return;
+  }
+
+  // Nome curto ("tada") vira o caminho do .wav do Windows; caminho completo
+  // passa direto, pra quem quiser um som proprio.
+  const arquivo = /[\\/]/.test(som) ? som : `${PASTA_SONS}/${som}.wav`;
+
+  // PlaySync espera terminar. Sem isso o processo do PowerShell morre antes do
+  // som sair e o alarme fica mudo.
+  const r = await ps(`(New-Object System.Media.SoundPlayer ${psQuote(arquivo)}).PlaySync()`);
+
+  // Arquivo faltando nao pode significar timer silencioso: o beep assume.
+  if (!r.ok) {
+    await ps('for ($i=0; $i -lt 3; $i++) { [console]::beep(880, 250); Start-Sleep -Milliseconds 120 }');
+  }
+}
 
 /**
  * Skill: timers, cronometros e pomodoro.
@@ -212,9 +246,7 @@ export async function checkDueTimers() {
     // e fica repetindo pra sempre.
     try {
       await toast('JARVIS', message);
-      if (timer.alarm) {
-        await ps(`for ($i=0; $i -lt 3; $i++) { [console]::beep(880, 250); Start-Sleep -Milliseconds 120 }`);
-      }
+      if (timer.alarm) await tocarAlarme();
     } catch {
       // Segue em frente — quem chamou ainda recebe o anuncio pra falar.
     }

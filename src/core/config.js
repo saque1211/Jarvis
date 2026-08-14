@@ -173,6 +173,13 @@ export const config = {
     speakerPort: Number(process.env.JARVIS_SPEAKER_PORT || 8790),
   },
 
+  // Som que toca quando um timer vence. Aceita:
+  //   beep                    o de sempre (console beep, seco)
+  //   off                     silencioso, so a notificacao do Windows
+  //   alarm03, tada, chimes   um .wav de C:/Windows/Media (ouca: npm run sons)
+  //   C:/caminho/meu.wav      qualquer arquivo seu
+  timerSound: (process.env.JARVIS_TIMER_SOM || 'beep').trim(),
+
   // Seguranca: o exec e o files sao as skills perigosas.
   safety: {
     // Diretorios onde o JARVIS pode escrever/mexer em arquivos.
