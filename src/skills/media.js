@@ -9,8 +9,46 @@ import { spotify, isConfigured } from '../integrations/spotify.js';
  * que funcionam em qualquer player mas nao sabem o que esta tocando.
  */
 
+/**
+ * Descobre o primeiro resultado de uma busca no YouTube sem API nem chave: a
+ * pagina de resultados traz os videoId embutidos no HTML.
+ *
+ * Nao lanca. E raspagem — o dia que o YouTube mudar o HTML, isto devolve null
+ * e quem chama abre a busca, que e o comportamento de sempre.
+ */
+async function primeiroVideo(query) {
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          // Sem User-Agent de navegador o YouTube devolve uma pagina sem os IDs.
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'accept-language': 'pt-BR,pt;q=0.9',
+        },
+        signal: AbortSignal.timeout(8000),
+      }
+    );
+    if (!res.ok) return null;
+    const html = await res.text();
+    // 11 caracteres e o formato do ID; o primeiro que aparece e o primeiro
+    // resultado da lista.
+    return html.match(/"videoId":"([\w-]{11})"/)?.[1] || null;
+  } catch {
+    return null;
+  }
+}
+
 async function withSpotify(action, fallback) {
-  if (!isConfigured()) return fallback ? fallback() : 'Spotify nao autorizado. Rode: npm run auth:spotify';
+  if (!isConfigured()) {
+    if (fallback) return fallback();
+    // Diz ao modelo o que fazer em vez de so reclamar: pedir musica pelo nome
+    // funciona no YouTube sem configurar nada, e e isso que a pessoa quer.
+    return (
+      'Spotify nao autorizado. Use a tool play_youtube pra tocar isso agora, ' +
+      'e avise que da pra ligar o Spotify com: npm run auth:spotify'
+    );
+  }
   try {
     return await action();
   } catch (err) {
@@ -196,7 +234,11 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     {
       name: 'play_youtube',
       speaks: true,
-      description: 'Abre uma busca ou video do YouTube no navegador padrao.',
+      description:
+        'Toca uma musica ou video no YouTube pelo nome, direto no navegador. ' +
+        'Nao precisa de conta nem chave nenhuma. Use pra "toca <musica>", ' +
+        '"poe <artista>", "quero ouvir <album>" — e SEMPRE que o Spotify nao ' +
+        'estiver autorizado. Aceita tambem uma URL de video.',
       input_schema: {
         type: 'object',
         properties: {
@@ -205,11 +247,21 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
         required: ['query'],
       },
       handler: async ({ query }) => {
-        const url = /^https?:\/\//.test(query)
-          ? query
-          : `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`;
-        await startProcess(url);
-        return `Abri o YouTube${/^https?:\/\//.test(query) ? '' : ` buscando ${query}`}.`;
+        if (/^https?:\/\//.test(query)) {
+          await startProcess(query);
+          return 'Abri o video.';
+        }
+
+        const video = await primeiroVideo(query);
+        if (video) {
+          await startProcess(`https://www.youtube.com/watch?v=${video}`);
+          return `Tocando ${query} no YouTube.`;
+        }
+
+        // Nao deu pra descobrir o primeiro resultado: abre a busca, que e o
+        // comportamento antigo. Pior caso e igual ao que ja existia.
+        await startProcess(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
+        return `Abri o YouTube buscando ${query} — escolhe o video que quiser.`;
       },
     },
   ],
