@@ -255,21 +255,37 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
         required: ['query'],
       },
       handler: async ({ query }) => {
-        if (/^https?:\/\//.test(query)) {
-          await startProcess(query);
-          return 'Abri o video.';
-        }
+        // Erro do Start-Process era descartado: quando o navegador nao abria,
+        // a frase dizia "abri" do mesmo jeito e a pessoa ficava procurando uma
+        // janela que nunca existiu.
+        const abrir = async (url, frase) => {
+          const r = await startProcess(url);
+          if (!r.ok) {
+            return `Nao consegui abrir o navegador. ${r.stderr || ''}`.trim();
+          }
+          return frase;
+        };
+
+        if (/^https?:\/\//.test(query)) return abrir(query, 'Abri o video.');
 
         const video = await primeiroVideo(query);
         if (video) {
-          await startProcess(`https://www.youtube.com/watch?v=${video}`);
-          return `Tocando ${query} no YouTube.`;
+          // autoplay=1 pede pro YouTube comecar sozinho. O navegador pode
+          // recusar (politica de reproducao automatica), por isso a frase
+          // abaixo diz "abri", nao "tocando" — prometer play e mentir quando
+          // depende de uma decisao do Chrome que a gente nao controla.
+          return abrir(
+            `https://www.youtube.com/watch?v=${video}&autoplay=1`,
+            `Abri ${query} no YouTube. Se nao comecar sozinho, e so dar play.`
+          );
         }
 
         // Nao deu pra descobrir o primeiro resultado: abre a busca, que e o
         // comportamento antigo. Pior caso e igual ao que ja existia.
-        await startProcess(`https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`);
-        return `Abri o YouTube buscando ${query} — escolhe o video que quiser.`;
+        return abrir(
+          `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+          `Abri o YouTube buscando ${query} — escolhe o video que quiser.`
+        );
       },
     },
   ],
