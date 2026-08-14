@@ -84,22 +84,55 @@ export function limparPrompt(texto) {
  * Monta o prompt inicial do whisper. O limite util e ~224 tokens: passando
  * disso ele corta, e prompt cortado no meio atrapalha mais do que ajuda.
  */
+/**
+ * Nome que alguem fala em voz alta, e nao entrada de instalador. Depois do
+ * apps:find o registro enche de "microsoft visual c++ 2015 redistributable" e
+ * "nvidia control panel 3d" — ninguem pede isso falando, e cada um desses
+ * empurra pra fora do prompt um nome que voce usa de verdade.
+ */
+function faladoPorGente(nome) {
+  if (nome.length > 22) return false;
+  if (nome.split(/\s+/).length > 3) return false;
+  // Versao, arquitetura, ano: marca de entrada tecnica.
+  if (/\d{2,}|x64|x86|32.?bit|64.?bit|redistribut|runtime|sdk|driver/i.test(nome)) return false;
+  return true;
+}
+
+// Teto do prompt inicial do whisper (~224 tokens). Passando disso ele corta
+// sozinho, e corte no meio de um nome ensina o nome errado.
+const TETO = 900;
+// Reserva pro vocabulario de comandos. Sem isso uma lista grande de apps come
+// o prompt inteiro, e some justamente "pomodoro", "cronometro", "screenshot" —
+// as palavras que o whisper mais erra e que a lista existe pra proteger.
+const RESERVA_COMANDOS = 380;
+
 export function promptDeVocabulario() {
   const partes = [];
   const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
   if (doUsuario) partes.push(doUsuario);
 
-  // Os nomes de app vem ANTES do vocabulario generico. O texto e cortado no
-  // fim, e cortar "abrir, fechar, tocar" custa pouco: sao palavras comuns que
-  // o whisper ja acerta. Cortar nome de app custa o comando inteiro.
-  const apps = nomesDeApps();
-  if (apps.length) partes.push(`Aplicativos: ${apps.join(', ')}.`);
+  // Nomes curtos primeiro: sao os mais provaveis de serem falados, e cabem
+  // mais deles no espaco que sobrar.
+  const apps = nomesDeApps()
+    .filter(faladoPorGente)
+    .sort((a, b) => a.length - b.length);
+
+  const espacoDeApps = TETO - RESERVA_COMANDOS - partes.join(' ').length - 20;
+  const cabem = [];
+  let usado = 0;
+  for (const app of apps) {
+    if (usado + app.length + 2 > espacoDeApps) break;
+    cabem.push(app);
+    usado += app.length + 2;
+  }
+  if (cabem.length) partes.push(`Aplicativos: ${cabem.join(', ')}.`);
+
   partes.push(VOCAB_BASE);
 
   const texto = partes.join(' ');
-  if (texto.length <= 900) return texto;
+  if (texto.length <= TETO) return texto;
   // Corta em fronteira de palavra — metade de um nome ensina o nome errado.
-  return texto.slice(0, 900).replace(/\s\S*$/, '');
+  return texto.slice(0, TETO).replace(/\s\S*$/, '');
 }
 
 const CANDIDATES = [
