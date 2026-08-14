@@ -23,6 +23,9 @@ import { config, loadJson, saveJson } from '../src/core/config.js';
 const IGNORAR =
   /uninstall|desinstalar|readme|leia-?me|licen[cs]a|license|help|ajuda|manual|documenta|report a bug|website|site oficial/i;
 
+// O resultado sai numa VARIAVEL e a ultima linha e ela sozinha. Um `foreach`
+// do PowerShell e comando, nao expressao: canalizar ele direto pro
+// ConvertTo-Json e erro de sintaxe, nao de execucao — falha antes de rodar.
 const SCRIPT = String.raw`
 $sh = New-Object -ComObject WScript.Shell
 $pastas = @(
@@ -30,19 +33,22 @@ $pastas = @(
   "$env:ProgramData\Microsoft\Windows\Start Menu\Programs"
 )
 $vistos = @{}
-foreach ($p in $pastas) {
-  if (-not (Test-Path $p)) { continue }
-  Get-ChildItem -Path $p -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
-    try {
-      $alvo = $sh.CreateShortcut($_.FullName).TargetPath
-      if ($alvo -and -not $vistos.ContainsKey($_.BaseName)) {
-        $vistos[$_.BaseName] = $true
-        [PSCustomObject]@{ nome = $_.BaseName; alvo = $alvo }
-      }
-    } catch {}
+$achados = @(
+  foreach ($p in $pastas) {
+    if (-not (Test-Path $p)) { continue }
+    Get-ChildItem -Path $p -Filter *.lnk -Recurse -ErrorAction SilentlyContinue | ForEach-Object {
+      try {
+        $alvo = $sh.CreateShortcut($_.FullName).TargetPath
+        if ($alvo -and -not $vistos.ContainsKey($_.BaseName)) {
+          $vistos[$_.BaseName] = $true
+          [PSCustomObject]@{ nome = $_.BaseName; alvo = $alvo }
+        }
+      } catch {}
+    }
   }
-}
-`;
+)
+$achados
+`.trim();
 
 function normalizar(nome) {
   return nome

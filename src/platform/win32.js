@@ -151,7 +151,10 @@ export function startBackground(command, args = [], options = {}) {
 }
 
 export async function psJson(script, options = {}) {
-  const wrapped = `${script} | ConvertTo-Json -Depth 6 -Compress`;
+  // O trim nao e cosmetico: com quebra de linha no fim, o pipe cai na linha
+  // seguinte e o PowerShell recusa com "elemento pipe vazio" — erro que fala
+  // do pipe e nao do espaco em branco que o causou.
+  const wrapped = `${script.trim()} | ConvertTo-Json -Depth 6 -Compress`;
   const result = await ps(wrapped, options);
   if (!result.ok) return { ok: false, error: result.stderr || `exit ${result.code}`, data: null };
   if (!result.stdout) return { ok: true, data: null };
