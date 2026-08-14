@@ -13,21 +13,92 @@ function appRegistry() {
   return loadJson(config.paths.apps, {});
 }
 
+/**
+ * Tira acento antes de tirar pontuacao. Na ordem contraria, "discordia" vira
+ * "discrdia" — a vogal acentuada some junto com a pontuacao e o match morre.
+ */
+function normalizar(texto) {
+  return texto
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]/g, '');
+}
+
+/** Levenshtein. Duas linhas de matriz bastam e o registro e pequeno. */
+function distancia(a, b) {
+  if (a === b) return 0;
+  if (!a.length || !b.length) return Math.max(a.length, b.length);
+
+  let anterior = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    const atual = [i];
+    for (let j = 1; j <= b.length; j++) {
+      atual[j] = Math.min(
+        anterior[j] + 1,
+        atual[j - 1] + 1,
+        anterior[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    anterior = atual;
+  }
+  return anterior[b.length];
+}
+
+/**
+ * Quanto erro tolerar. Palavra curta erra por acaso: em 3 letras, distancia 1
+ * ja transforma "obs" em "abs". Quanto mais longa, mais seguro relevar.
+ */
+function tolerancia(tamanho) {
+  if (tamanho <= 4) return 0;
+  if (tamanho <= 7) return 2;
+  return 3;
+}
+
+/**
+ * Resolve o apelido falado no alvo real. Devolve tambem o apelido canonico,
+ * pra resposta confirmar o que ele entendeu — "abre o discordia" responde
+ * "Abri o discord", e voce percebe na hora se ele pegou o app errado.
+ *
+ * A transcricao de voz erra letra: sem tolerar isso, "discordia" custa o
+ * comando inteiro so porque o whisper ouviu uma silaba a mais.
+ */
 function resolveApp(name) {
   const registry = appRegistry();
   const key = name.toLowerCase().trim();
+  if (registry[key]) return { target: registry[key], alias: key };
 
-  if (registry[key]) return registry[key];
+  const alvo = normalizar(name);
+  if (!alvo) return null;
 
-  // Match parcial: "code" acha "vscode", "vs code" acha "vscode".
-  const stripped = key.replace(/[^a-z0-9]/g, '');
-  for (const [alias, target] of Object.entries(registry)) {
-    const aliasStripped = alias.replace(/[^a-z0-9]/g, '');
-    if (aliasStripped === stripped || aliasStripped.includes(stripped) || stripped.includes(aliasStripped)) {
-      return target;
+  const entradas = Object.entries(registry).map(([alias, target]) => ({
+    alias,
+    target,
+    norm: normalizar(alias),
+  }));
+
+  const exato = entradas.find((e) => e.norm === alvo);
+  if (exato) return { target: exato.target, alias: exato.alias };
+
+  // Match parcial: "code" acha "vscode". So com 4+ letras — abaixo disso
+  // "obs" casaria com "obsidian" e "cmd" com qualquer coisa que os contenha.
+  const parcial = entradas.find(
+    (e) =>
+      (e.norm.length >= 4 && alvo.includes(e.norm)) ||
+      (alvo.length >= 4 && e.norm.includes(alvo))
+  );
+  if (parcial) return { target: parcial.target, alias: parcial.alias };
+
+  // Ultimo recurso: o mais parecido, se estiver perto o bastante.
+  let melhor = null;
+  for (const e of entradas) {
+    const d = distancia(alvo, e.norm);
+    if (d <= tolerancia(Math.max(alvo.length, e.norm.length)) && (!melhor || d < melhor.d)) {
+      melhor = { ...e, d };
     }
   }
-  return null;
+  return melhor ? { target: melhor.target, alias: melhor.alias } : null;
 }
 
 export default {
@@ -39,8 +110,10 @@ export default {
       speaks: true,
       description:
         'Abre um aplicativo pelo apelido (discord, vscode, spotify, chrome, steam...). ' +
-        'Opcionalmente abre com um arquivo ou pasta como argumento. ' +
-        'Se o app nao estiver no registro, tenta abrir pelo nome direto.',
+        'Use pra "abre o X", "inicia o X", "poe o X pra rodar". ' +
+        'Pode passar o nome como o usuario falou, mesmo torto: erro de transcricao ' +
+        'e resolvido aqui ("discordia" abre o Discord). Nao tente adivinhar o ' +
+        'executavel. Opcionalmente abre com um arquivo ou pasta como argumento.',
       input_schema: {
         type: 'object',
         properties: {
@@ -53,14 +126,27 @@ export default {
         required: ['app'],
       },
       handler: async ({ app, argument }) => {
-        const target = resolveApp(app) || app;
+        const achado = resolveApp(app);
+        const target = achado?.target || app;
         const args = argument ? [argument] : [];
         const result = await startProcess(target, args);
         if (!result.ok) {
-          return `Falhou ao abrir "${app}" (alvo: ${target}). ${result.stderr}. ` +
-            `Se o app existe mas nao esta mapeado, adicione em config/apps.json.`;
+          // Sem apelido parecido, o nome veio de uma transcricao que errou
+          // feio. Listar o que existe deixa o modelo tentar de novo com um
+          // nome de verdade em vez de repetir o mesmo erro.
+          if (!achado) {
+            const conhecidos = Object.keys(appRegistry()).slice(0, 12).join(', ');
+            return (
+              `Nao conheco nenhum app parecido com "${app}". Conheco: ${conhecidos}. ` +
+              `Se for um app novo, use register_app pra salvar o apelido e o caminho.`
+            );
+          }
+          return `Falhou ao abrir "${achado.alias}" (alvo: ${target}). ${result.stderr}.`;
         }
-        return `Abri ${app}${argument ? ` com ${argument}` : ''}.`;
+        // Fala o nome canonico, nao o que foi transcrito: se a voz virou
+        // "discordia" e ele abriu o Discord, voce ouve "Abri discord" e sabe
+        // que acertou. Ouvir a propria palavra errada de volta nao diz nada.
+        return `Abri ${achado?.alias || app}${argument ? ` com ${argument}` : ''}.`;
       },
     },
     {

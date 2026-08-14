@@ -22,5 +22,19 @@
   "gerenciador de tarefas": "taskmgr.exe",
   "oculus": "C:\\Program Files\\Oculus\\Support\\oculus-client\\OculusClient.exe",
   "steamvr": "steam://rungameid/250820",
-  "virtual desktop": "steam://rungameid/382110"
+  "virtual desktop": "steam://rungameid/382110",
+  "navegador": "chrome",
+  "bloco de notas": "notepad.exe",
+  "explorador": "explorer.exe",
+  "explorador de arquivos": "explorer.exe",
+  "meus arquivos": "explorer.exe",
+  "prompt de comando": "cmd.exe",
+  "editor": "code",
+  "visual studio code": "code",
+  "vs code": "code",
+  "zap": "whatsapp:",
+  "musica": "spotify:",
+  "jogos": "steam://open/main",
+  "gravador": "obs64.exe",
+  "calculadora do windows": "calc.exe"
 }
