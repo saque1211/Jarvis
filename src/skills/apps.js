@@ -131,6 +131,28 @@ function resolveApp(name) {
   return { target: empatados[0].target, alias: empatados[0].alias };
 }
 
+/**
+ * Os apelidos mais parecidos, ignorando a tolerancia. Serve pra quando nada
+ * casou: sem candidatos de verdade o modelo inventa opcao ("voce quis dizer
+ * Destination?" — nome que nao existe no registro), e a pessoa fica escolhendo
+ * entre coisas que nao vao abrir.
+ */
+function sugestoes(name, quantas = 4) {
+  const alvo = normalizar(name);
+  if (!alvo) return [];
+
+  const registry = appRegistry();
+  const vistos = new Set();
+  return Object.entries(registry)
+    .map(([alias, target]) => ({ alias, target, d: distancia(alvo, normalizar(alias)) }))
+    .sort((a, b) => a.d - b.d)
+    // Um alvo aparece com varios apelidos (estim, istim, esteam -> Steam).
+    // Oferecer os tres como opcoes diferentes nao ajuda ninguem a escolher.
+    .filter((e) => !vistos.has(e.target) && vistos.add(e.target))
+    .slice(0, quantas)
+    .map((e) => e.alias);
+}
+
 export default {
   name: 'apps',
   description: 'Abrir e fechar aplicativos do Windows.',
@@ -165,10 +187,12 @@ export default {
           // feio. Listar o que existe deixa o modelo tentar de novo com um
           // nome de verdade em vez de repetir o mesmo erro.
           if (!achado) {
-            const conhecidos = Object.keys(appRegistry()).slice(0, 12).join(', ');
+            const perto = sugestoes(app);
             return (
-              `Nao conheco nenhum app parecido com "${app}". Conheco: ${conhecidos}. ` +
-              `Se for um app novo, use register_app pra salvar o apelido e o caminho.`
+              `Nao achei app com o nome "${app}". Os mais parecidos que tenho: ` +
+              `${perto.join(', ')}. Pergunte ao usuario qual deles e — ` +
+              `NAO invente outros nomes, so esses existem. Se for um app novo, ` +
+              `use register_app com o apelido e o caminho.`
             );
           }
           return `Falhou ao abrir "${achado.alias}" (alvo: ${target}). ${result.stderr}.`;
