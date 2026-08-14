@@ -31,7 +31,13 @@ function guessFromSttCommand() {
 const guessed = guessFromSttCommand();
 const bin = process.env.WHISPER_SERVER_BIN || guessed.bin;
 const model = process.env.WHISPER_MODEL_PATH || guessed.model;
-const port = process.env.WHISPER_SERVER_PORT || '8080';
+// A porta tem que ser a MESMA que o STT_SERVER_URL do .env, senao o servidor
+// sobe num lugar e o JARVIS procura noutro — ele diz "fora do ar" com o
+// processo rodando na frente da pessoa. Por isso o .env manda aqui.
+const portaDoEnv = config.voice.sttServerUrl
+  ? new URL(config.voice.sttServerUrl).port
+  : null;
+const port = process.env.WHISPER_SERVER_PORT || portaDoEnv || '8080';
 
 if (!bin || !model) {
   console.error(
@@ -53,9 +59,16 @@ for (const [label, file] of [['binario', bin], ['modelo', model]]) {
 console.log(pc.bold(pc.cyan('\n  whisper-server')));
 console.log(pc.dim(`  binario: ${bin}`));
 console.log(pc.dim(`  modelo:  ${path.basename(model)}`));
-console.log(pc.dim(`  porta:   ${port}\n`));
-console.log(pc.bold('  Ponha isto no .env pro JARVIS usar o servidor:'));
-console.log(pc.green(`    STT_SERVER_URL=http://127.0.0.1:${port}\n`));
+console.log(pc.dim(`  porta:   ${port}${portaDoEnv === port ? ' (a do seu STT_SERVER_URL)' : ''}\n`));
+if (portaDoEnv && portaDoEnv !== port) {
+  console.log(
+    pc.yellow(`  Atencao: seu STT_SERVER_URL aponta pra porta ${portaDoEnv}, e este vai subir na ${port}.`)
+  );
+  console.log(pc.dim('  O JARVIS vai procurar na porta errada. Tire o WHISPER_SERVER_PORT do .env.\n'));
+} else if (!portaDoEnv) {
+  console.log(pc.bold('  Ponha isto no .env pro JARVIS usar o servidor:'));
+  console.log(pc.green(`    STT_SERVER_URL=http://127.0.0.1:${port}\n`));
+}
 console.log(pc.dim('  Deixe esta janela aberta. Ctrl+C encerra.\n'));
 
 const child = spawn(bin, ['-m', model, '-l', 'pt', '--port', port], { stdio: 'inherit' });

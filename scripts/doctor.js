@@ -124,15 +124,41 @@ async function main() {
     }
 
     // STT_COMMAND ser lido nao garante que o executavel e o modelo existem —
-    // e o erro so apareceria na primeira frase falada.
-    if (stt === 'STT_COMMAND') {
+    // e o erro so apareceria na primeira frase falada. Vale checar tambem
+    // quando ele e so a reserva do servidor: com o servidor fora do ar, e ele
+    // que transcreve TODO comando, e ninguem olhou pra ele.
+    if (stt === 'STT_COMMAND' || config.voice.sttCommand) {
       const parts = config.voice.sttCommand.match(/"([^"]*)"|(\S+)/g) || [];
       const paths = parts
         .map((p) => p.replace(/"/g, ''))
         .filter((p) => /[/\\]/.test(p) && !p.includes('{file}'));
+      const rotulo = stt === 'STT_COMMAND' ? '' : ' (reserva do servidor)';
       for (const p of paths) {
-        if (fs.existsSync(p)) ok(`  existe: ${p}`);
+        if (fs.existsSync(p)) ok(`  existe${rotulo}: ${p}`);
         else fail(`  NAO existe: ${p} — o STT vai falhar na primeira frase`);
+      }
+
+      // Qual modelo esta em uso e a pergunta que mais importa pra precisao, e
+      // ela estava invisivel: o nome do .bin so aparecia dentro do comando.
+      const bin = paths.find((p) => /\.bin$/i.test(p));
+      const tamanho = bin && fs.existsSync(bin) ? fs.statSync(bin).size / 1e6 : 0;
+      if (tamanho) {
+        const nome = /tiny/i.test(bin)
+          ? 'tiny'
+          : /base/i.test(bin)
+            ? 'base'
+            : /small/i.test(bin)
+              ? 'small'
+              : /medium/i.test(bin)
+                ? 'medium'
+                : /large/i.test(bin)
+                  ? 'large'
+                  : '?';
+        const linha = `  modelo do whisper: ${nome} (${Math.round(tamanho)} MB)`;
+        if (nome === 'tiny' || nome === 'base') {
+          warn(`${linha} — erra nome proprio em portugues`);
+          console.log(pc.dim('       Melhore com: npm run whisper:model small'));
+        } else ok(linha);
       }
     }
   } else {
