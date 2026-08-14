@@ -160,14 +160,15 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'spotify_play_search',
-      // Funcao, nao `true`: com o Spotify autorizado a saida ja e a frase
-      // final. Sem autorizacao ela e um recado PRO MODELO ("use o
-      // play_youtube"), e ai o router precisa fazer a viagem de volta em vez
-      // de mandar esse texto direto pro alto-falante.
-      speaks: () => isConfigured(),
+      // Os dois caminhos terminam em frase falavel — tocando de verdade, ou
+      // "abri no Spotify, e so dar play". Nenhum precisa de outra ida ao
+      // modelo pra virar resposta.
+      speaks: true,
       description:
-        'Busca no Spotify e toca o primeiro resultado. Use quando o usuario pedir uma musica, ' +
-        'artista, album ou playlist pelo nome.',
+        'Toca uma musica, artista, album ou playlist NO SPOTIFY pelo nome. ' +
+        'E a tool preferida pra "toca <musica>", "poe <artista>" — o usuario ' +
+        'quer o Spotify. So use play_youtube se ele pedir YouTube, ou se esta ' +
+        'aqui falhar.',
       input_schema: {
         type: 'object',
         properties: {
@@ -181,19 +182,34 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
         required: ['query'],
       },
       handler: async ({ query, type = 'track' }) =>
-        withSpotify(async () => {
-          const results = await spotify.search(query, type, 1);
-          const items = results?.[`${type}s`]?.items;
-          if (!items?.length) return `Nao achei "${query}" no Spotify.`;
+        withSpotify(
+          async () => {
+            const results = await spotify.search(query, type, 1);
+            const items = results?.[`${type}s`]?.items;
+            if (!items?.length) return `Nao achei "${query}" no Spotify.`;
 
-          const item = items[0];
-          if (type === 'track') {
-            await spotify.play([item.uri]);
-            return `Tocando ${item.name}, de ${item.artists.map((a) => a.name).join(', ')}.`;
+            const item = items[0];
+            if (type === 'track') {
+              await spotify.play([item.uri]);
+              return `Tocando ${item.name}, de ${item.artists.map((a) => a.name).join(', ')}.`;
+            }
+            await spotify.playContext(item.uri);
+            return `Tocando ${type === 'artist' ? '' : 'o '}${item.name}.`;
+          },
+          // Sem autorizacao nao da pra BUSCAR (a API do Spotify exige token),
+          // mas da pra abrir o app ja com a busca feita: fica faltando so o
+          // play. E melhor que jogar pro YouTube, que e outro tocador.
+          async () => {
+            const r = await startProcess(`spotify:search:${encodeURIComponent(query)}`);
+            if (!r.ok) {
+              return (
+                `Nao consegui abrir o Spotify. Pra ele tocar sozinho, rode ` +
+                `npm run auth:spotify no terminal.`
+              );
+            }
+            return `Abri ${query} no Spotify. E so dar play.`;
           }
-          await spotify.playContext(item.uri);
-          return `Tocando ${type === 'artist' ? '' : 'o '}${item.name}.`;
-        }),
+        ),
     },
     {
       name: 'spotify_now_playing',
@@ -243,10 +259,10 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
       name: 'play_youtube',
       speaks: true,
       description:
-        'Toca uma musica ou video no YouTube pelo nome, direto no navegador. ' +
-        'Nao precisa de conta nem chave nenhuma. Use pra "toca <musica>", ' +
-        '"poe <artista>", "quero ouvir <album>" — e SEMPRE que o Spotify nao ' +
-        'estiver autorizado. Aceita tambem uma URL de video.',
+        'Toca uma musica ou video NO YOUTUBE, no navegador. Use quando o ' +
+        'usuario pedir YouTube por nome, quando quiser assistir um video, ou ' +
+        'se a tool do Spotify falhar. Pra pedido de musica sem provedor dito, ' +
+        'prefira spotify_play_search. Aceita tambem uma URL de video.',
       input_schema: {
         type: 'object',
         properties: {
