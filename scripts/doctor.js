@@ -122,8 +122,21 @@ async function main() {
     // O vocabulario e o que decide entre "vesse code" e "VS Code". Mostrar o
     // texto real evita descobrir tarde que ele esta vazio ou com lixo colado.
     const vocab = promptDeVocabulario();
-    ok(`  vocabulario: ${vocab.length} caracteres, ${nomesDeApps().length} apps cadastrados`);
+    // Quantos apps EXISTEM e quantos couberam sao numeros diferentes: o prompt
+    // tem teto, e entrada de instalador nao entra. Mostrar so o primeiro faz
+    // parecer que tudo foi mandado.
+    const noPrompt = (vocab.match(/Aplicativos: (.*?)\./) || [, ''])[1].split(', ').filter(Boolean);
+    const total = nomesDeApps().length;
+    const comandosInteiros = vocab.trimEnd().endsWith('projeto.');
+    ok(
+      `  vocabulario: ${vocab.length} caracteres — ${noPrompt.length} de ${total} apps` +
+        `, comandos ${comandosInteiros ? 'completos' : 'CORTADOS'}`
+    );
     console.log(pc.dim(`       "${vocab.slice(0, 110)}..."`));
+    if (!comandosInteiros) {
+      console.log(pc.dim('       O prompt bateu no teto. Palavras como "pomodoro" e "screenshot"'));
+      console.log(pc.dim('       ficaram de fora — o whisper vai errar mais nelas.'));
+    }
     if (config.voice.sttPrompt && limparPrompt(config.voice.sttPrompt) !== config.voice.sttPrompt.trim()) {
       warn('  seu STT_PROMPT tinha linha de comando colada — cortei o pedaco');
       console.log(pc.dim('       Vale limpar a linha no .env pra nao confundir depois.'));
