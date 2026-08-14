@@ -29,6 +29,10 @@ export function run(command, args = [], options = {}) {
       env: { ...process.env, ...(options.env || {}) },
       windowsHide: true,
       shell: false,
+      // `detached` poe o filho num grupo de processos proprio. Importa pra
+      // quem LANCA app: sem isso o app nasce no grupo do JARVIS e pode morrer
+      // junto com o PowerShell que o abriu — abre e fecha na hora.
+      detached: options.detached === true,
     });
 
     let stdout = '';
@@ -82,6 +86,28 @@ export async function ps(script, options = {}) {
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
     options
   );
+}
+
+/** Nome provavel do processo a partir do alvo, pra conferir se ele ficou de pe. */
+export function nomeDeProcesso(target) {
+  const t = String(target).trim();
+  // URI de app ("spotify:", "discord:", "steam://open/main")
+  const uri = t.match(/^([a-z][a-z0-9+.-]*):/i);
+  if (uri && !/^[a-z]:[\\/]/i.test(t)) return uri[1];
+  // Caminho ou executavel
+  return t.split(/[\\/]/).pop().replace(/\.exe$/i, '');
+}
+
+/**
+ * Diz se existe processo com esse nome. O Windows nomeia o processo sem o
+ * .exe, e nem sempre igual ao atalho — por isso quem chama trata "nao achei"
+ * como duvida, nao como falha.
+ */
+export async function processoVivo(nome) {
+  const { ok, stdout } = await ps(
+    `@(Get-Process -Name ${psQuote(nome)} -ErrorAction SilentlyContinue).Count`
+  );
+  return ok && Number(stdout.trim()) > 0;
 }
 
 /** Roda PowerShell e faz parse do stdout como JSON. */
@@ -183,7 +209,8 @@ export async function startProcess(target, args = [], options = {}) {
   if (options.windowStyle) {
     parts.push(`-WindowStyle ${options.windowStyle}`);
   }
-  return ps(parts.join(' '));
+  // detached: o app aberto nao pode depender de quem o abriu continuar vivo.
+  return ps(parts.join(' '), { detached: true });
 }
 
 /**

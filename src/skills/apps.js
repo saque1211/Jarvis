@@ -1,4 +1,12 @@
-import { startProcess, listProcesses, killProcess, ps, psQuote } from '../platform/win32.js';
+import {
+  startProcess,
+  listProcesses,
+  killProcess,
+  ps,
+  psQuote,
+  nomeDeProcesso,
+  processoVivo,
+} from '../platform/win32.js';
 import { config, loadJson, saveJson } from '../core/config.js';
 
 /**
@@ -197,10 +205,24 @@ export default {
           }
           return `Falhou ao abrir "${achado.alias}" (alvo: ${target}). ${result.stderr}.`;
         }
-        // Fala o nome canonico, nao o que foi transcrito: se a voz virou
-        // "discordia" e ele abriu o Discord, voce ouve "Abri discord" e sabe
-        // que acertou. Ouvir a propria palavra errada de volta nao diz nada.
-        return `Abri ${achado?.alias || app}${argument ? ` com ${argument}` : ''}.`;
+        const nome = achado?.alias || app;
+        const comArgumento = argument ? ` com ${argument}` : '';
+
+        // `Start-Process` volta com sucesso assim que ENTREGA o pedido ao
+        // Windows — o app pode subir e morrer logo depois, e a gente estaria
+        // dizendo "abri" pra uma janela que sumiu. Confere antes de afirmar.
+        await new Promise((r) => setTimeout(r, 2500));
+        const processo = nomeDeProcesso(target);
+        const vivo = await processoVivo(processo);
+        if (!vivo) {
+          // Nome de processo nem sempre bate com o alvo (o alias "vscode" vira
+          // "Code"), entao isto e duvida, nao veredito.
+          return (
+            `Mandei abrir ${nome}, mas nao vejo processo "${processo}" rodando — ` +
+            `pode ter fechado sozinho, ou so ter outro nome. Pergunte se abriu.`
+          );
+        }
+        return `Abri ${nome}${comArgumento}.`;
       },
     },
     {
