@@ -158,13 +158,65 @@ function anthropicTuning(model) {
   return extra;
 }
 
+/**
+ * O erro da Anthropic chega como JSON cru, com request_id e tudo. Num comando
+ * falado o TTS leria isso inteiro em voz alta — e mesmo lido na tela, "400
+ * invalid_request_error" nao diz o que fazer.
+ */
+function translateAnthropicError(err) {
+  const tipo = err?.error?.error?.type;
+  const raw = err?.error?.error?.message || err?.message || '';
+
+  if (/credit balance is too low/i.test(raw)) {
+    return new Error(
+      'A conta da Anthropic esta sem credito. A chave e valida, mas nao da pra ' +
+        'usar sem saldo — compre em platform.claude.com/settings/billing. Se ' +
+        'quiser voltar pro gratis enquanto isso, ponha LLM_PROVIDER=groq no .env.'
+    );
+  }
+
+  if (err?.status === 401 || tipo === 'authentication_error') {
+    return new Error(
+      'ANTHROPIC_API_KEY invalida ou revogada. Gere outra em platform.claude.com/settings/keys.'
+    );
+  }
+
+  if (err?.status === 403 || tipo === 'permission_error') {
+    return new Error('A chave da Anthropic nao tem permissao pra esse modelo ou recurso.');
+  }
+
+  if (err?.status === 404 || tipo === 'not_found_error') {
+    return new Error(
+      `Modelo "${config.llm.model}" nao existe na Anthropic. Ajuste JARVIS_MODEL — ` +
+        'claude-haiku-4-5 e o mais barato, claude-sonnet-5 roteia melhor.'
+    );
+  }
+
+  if (err?.status === 429 || tipo === 'rate_limit_error') {
+    return new Error('Limite de uso da Anthropic atingido. Espere um minuto e tente de novo.');
+  }
+
+  if (err?.status === 529 || tipo === 'overloaded_error') {
+    return new Error('A Anthropic esta sobrecarregada agora. Tente de novo em alguns segundos.');
+  }
+
+  if (/prompt is too long|max_tokens/i.test(raw)) {
+    return new Error(
+      'O pedido passou do tamanho que o modelo aceita. Baixe JARVIS_VAULT_CONTEXT no ' +
+        '.env, ou ponha JARVIS_TOOL_BUDGET=3000 pra mandar menos ferramentas por comando.'
+    );
+  }
+
+  return new Error(raw || 'Falha na chamada a Anthropic.');
+}
+
 async function callAnthropic({ system, context, messages, tools, model, maxTokens }) {
   if (!client) {
     const { default: Anthropic } = await import('@anthropic-ai/sdk');
     client = new Anthropic({ apiKey: config.llm.apiKey });
   }
 
-  const response = await client.messages.create({
+  const pedido = {
     model,
     max_tokens: maxTokens,
     ...anthropicTuning(model),
@@ -185,7 +237,16 @@ async function callAnthropic({ system, context, messages, tools, model, maxToken
       input_schema: normalizeSchema(t.input_schema),
     })),
     messages: anthropicMessages(messages),
-  });
+  };
+
+  let response;
+  try {
+    response = await client.messages.create(pedido);
+  } catch (err) {
+    // Falha de rede ja vem explicada la em cima, no `chat`.
+    if (err.rede || /^(fetch failed|Connection error\.?)$/i.test(err.message || '')) throw err;
+    throw translateAnthropicError(err);
+  }
 
   // Leitura de cache custa ~10% do preco de entrada. Zero aqui, em chamadas
   // seguidas, significa que alguma coisa esta invalidando o prefixo.
