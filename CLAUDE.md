@@ -65,9 +65,16 @@ npm run doctor             # diagnóstico de setup
 npm run test:voice         # mic + STT + TTS isolados do resto
 npm run voices             # lista e fala com cada voz do Windows
 npm run whisper:server     # whisper.cpp com o modelo carregado, pra latência
+npm run whisper:model      # baixa o modelo do whisper que cabe na RAM
+npm run llm:test           # uma chamada real: tools, tempo, tokens e custo
 npm run hud:state          # snapshot que o HUD consome (add "-- watch")
 npm run auth:spotify       # OAuth do Spotify, uma vez só
 ```
+
+Todos exigem estar na raiz do projeto. `jarvis.cmd` faz o `cd` sozinho
+(`jarvis doctor`, `jarvis listen`) — existe porque o terminal aberto como
+administrador cai em `C:\WINDOWS\system32`, e ali o npm falha com um ENOENT que
+não diz que o problema é a pasta.
 
 ## Estado atual
 
