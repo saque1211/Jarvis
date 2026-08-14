@@ -160,7 +160,11 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'spotify_play_search',
-      speaks: true,
+      // Funcao, nao `true`: com o Spotify autorizado a saida ja e a frase
+      // final. Sem autorizacao ela e um recado PRO MODELO ("use o
+      // play_youtube"), e ai o router precisa fazer a viagem de volta em vez
+      // de mandar esse texto direto pro alto-falante.
+      speaks: () => isConfigured(),
       description:
         'Busca no Spotify e toca o primeiro resultado. Use quando o usuario pedir uma musica, ' +
         'artista, album ou playlist pelo nome.',
@@ -193,7 +197,11 @@ for ($i = 0; $i -lt ${Math.round(clamped / 2)}; $i++) { $obj.SendKeys([char]175)
     },
     {
       name: 'spotify_now_playing',
-      speaks: true,
+      // Funcao, nao `true`: com o Spotify autorizado a saida ja e a frase
+      // final. Sem autorizacao ela e um recado PRO MODELO ("use o
+      // play_youtube"), e ai o router precisa fazer a viagem de volta em vez
+      // de mandar esse texto direto pro alto-falante.
+      speaks: () => isConfigured(),
       description: 'Diz o que esta tocando agora no Spotify.',
       input_schema: { type: 'object', properties: {} },
       handler: async () =>
