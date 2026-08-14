@@ -76,13 +76,26 @@ function resolveApp(name) {
     alias,
     target,
     norm: normalizar(alias),
+    // Nome composto tambem responde por cada palavra: "roblox player" precisa
+    // atender por "roblox". Sem isso, o apelido que o Menu Iniciar da (quase
+    // sempre com sobrenome) so funcionaria dito por inteiro.
+    palavras: alias
+      .toLowerCase()
+      .split(/[^\p{L}\p{N}]+/u)
+      .map(normalizar)
+      .filter(Boolean),
   }));
 
   const exato = entradas.find((e) => e.norm === alvo);
   if (exato) return { target: exato.target, alias: exato.alias };
 
-  // Match parcial: "code" acha "vscode". So com 4+ letras — abaixo disso
-  // "obs" casaria com "obsidian" e "cmd" com qualquer coisa que os contenha.
+  // Palavra inteira do apelido: "obs" acha "obs studio". Aqui o tamanho nao
+  // importa, porque bater uma palavra completa ja e evidencia suficiente.
+  const porPalavra = entradas.find((e) => e.palavras.includes(alvo));
+  if (porPalavra) return { target: porPalavra.target, alias: porPalavra.alias };
+
+  // Match parcial dentro da palavra: "code" acha "vscode". So com 4+ letras —
+  // abaixo disso "obs" casaria com "obsidian" e "cmd" com meio registro.
   const parcial = entradas.find(
     (e) =>
       (e.norm.length >= 4 && alvo.includes(e.norm)) ||
@@ -90,12 +103,15 @@ function resolveApp(name) {
   );
   if (parcial) return { target: parcial.target, alias: parcial.alias };
 
-  // Ultimo recurso: o mais parecido, se estiver perto o bastante.
+  // Ultimo recurso: o mais parecido, comparando com o apelido inteiro e com
+  // cada palavra dele. "robloks" erra dentro de "roblox", nao no "player".
   let melhor = null;
   for (const e of entradas) {
-    const d = distancia(alvo, e.norm);
-    if (d <= tolerancia(Math.max(alvo.length, e.norm.length)) && (!melhor || d < melhor.d)) {
-      melhor = { ...e, d };
+    for (const candidato of [e.norm, ...e.palavras]) {
+      const d = distancia(alvo, candidato);
+      if (d <= tolerancia(Math.max(alvo.length, candidato.length)) && (!melhor || d < melhor.d)) {
+        melhor = { ...e, d };
+      }
     }
   }
   return melhor ? { target: melhor.target, alias: melhor.alias } : null;
