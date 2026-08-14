@@ -72,6 +72,14 @@ function tolerancia(tamanho) {
  * A transcricao de voz erra letra: sem tolerar isso, "discordia" custa o
  * comando inteiro so porque o whisper ouviu uma silaba a mais.
  */
+// Palavras que sobram da frase falada e nao nomeiam app nenhum. Sem tirar,
+// "abre" ficaria a distancia 2 de "brave" e abriria o navegador sozinho.
+const RUIDO = new Set([
+  'abre', 'abrir', 'abra', 'fecha', 'fechar', 'inicia', 'iniciar', 'roda',
+  'rodar', 'executa', 'executar', 'programa', 'aplicativo', 'app', 'agora',
+  'favor', 'jarvis', 'quero', 'por', 'pra', 'para', 'com', 'meu', 'minha',
+]);
+
 function resolveApp(name) {
   const registry = appRegistry();
   const key = name.toLowerCase().trim();
@@ -79,6 +87,25 @@ function resolveApp(name) {
 
   const alvo = normalizar(name);
   if (!alvo) return null;
+
+  // O que foi falado tambem vira palavras. A transcricao gruda coisa que nao
+  // e nome ("cloud design" pra Claude), e comparando so a frase inteira o
+  // nome certo fica longe de tudo — "clouddesign" esta a 6 de "claude",
+  // mas "cloud" esta a 2.
+  const palavrasFaladas = name
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter((p) => p.length >= 2 && !RUIDO.has(p))
+    .map(normalizar)
+    .filter((p) => p && p !== alvo);
+
+  const candidatos = [alvo, ...palavrasFaladas];
+
+  // Pra comparacao APROXIMADA so entram palavras de 4+ letras: em 3 letras,
+  // uma diferenca ja troca a palavra inteira ("obs" vira "abs"). Na
+  // comparacao EXATA nao ha esse risco, e por isso ali entram todas — e o
+  // que faz "quero o obs studio" achar o OBS e nao o Visual Studio Code.
+  const candidatosFuzzy = [alvo, ...palavrasFaladas.filter((p) => p.length >= 4)];
 
   const entradas = Object.entries(registry).map(([alias, target]) => ({
     alias,
@@ -94,13 +121,28 @@ function resolveApp(name) {
       .filter(Boolean),
   }));
 
-  const exato = entradas.find((e) => e.norm === alvo);
+  const exato = entradas.find((e) => candidatos.includes(e.norm));
   if (exato) return { target: exato.target, alias: exato.alias };
 
-  // Palavra inteira do apelido: "obs" acha "obs studio". Aqui o tamanho nao
-  // importa, porque bater uma palavra completa ja e evidencia suficiente.
-  const porPalavra = entradas.find((e) => e.palavras.includes(alvo));
-  if (porPalavra) return { target: porPalavra.target, alias: porPalavra.alias };
+  // Palavra inteira batendo com palavra inteira: "obs" acha "obs studio",
+  // "quero o discord aberto" acha discord.
+  //
+  // Pegar o primeiro que bate nao serve: "obs studio" e "visual studio code"
+  // tem "studio" em comum, e a palavra generica ganharia do nome especifico.
+  // Entao vence quem casa MAIS palavras, e no empate a palavra mais longa —
+  // "studio" sozinho e fraco, "obs" + "studio" e forte.
+  const casados = entradas
+    .map((e) => {
+      const batem = e.palavras.filter((p) => candidatos.includes(p));
+      return { e, quantas: batem.length, maior: Math.max(0, ...batem.map((p) => p.length)) };
+    })
+    .filter((x) => x.quantas > 0)
+    .sort((a, b) => b.quantas - a.quantas || b.maior - a.maior);
+
+  if (casados.length) {
+    const melhor = casados[0];
+    return { target: melhor.e.target, alias: melhor.e.alias };
+  }
 
   // Match parcial dentro da palavra: "code" acha "vscode". So com 4+ letras —
   // abaixo disso "obs" casaria com "obsidian" e "cmd" com meio registro.
@@ -116,10 +158,12 @@ function resolveApp(name) {
   const perto = [];
   for (const e of entradas) {
     let melhorDaEntrada = Infinity;
-    for (const candidato of [e.norm, ...e.palavras]) {
-      const d = distancia(alvo, candidato);
-      if (d <= tolerancia(Math.max(alvo.length, candidato.length))) {
-        melhorDaEntrada = Math.min(melhorDaEntrada, d);
+    for (const falado of candidatosFuzzy) {
+      for (const candidato of [e.norm, ...e.palavras]) {
+        const d = distancia(falado, candidato);
+        if (d <= tolerancia(Math.max(falado.length, candidato.length))) {
+          melhorDaEntrada = Math.min(melhorDaEntrada, d);
+        }
       }
     }
     if (melhorDaEntrada < Infinity) perto.push({ ...e, d: melhorDaEntrada });
