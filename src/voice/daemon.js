@@ -231,8 +231,15 @@ async function main() {
   const engine = await sttEngineName();
   log('stt', engine ? pc.green(engine) : pc.red('nenhum motor encontrado'), engine ? pc.green : pc.red);
 
-  const servidor = await ensureWhisperServer();
-  if (servidor) log('whisper', servidor);
+  // Verde so quando ele esta de fato no ar. Qualquer outra coisa e amarelo:
+  // funciona, mas cada frase paga ~2s recarregando o modelo do disco — e isso
+  // precisa saltar aos olhos, nao se misturar ao resto do log de boot.
+  const servidor = await ensureWhisperServer((parcial) => log('whisper', parcial, pc.dim));
+  if (servidor) {
+    const bom = /no ar|ja estava/.test(servidor);
+    log('whisper', servidor, bom ? pc.green : pc.yellow);
+    if (!bom) log('whisper', 'sem ele, cada frase custa ~2s a mais', pc.yellow);
+  }
   log('tts', config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI (voz nativa do Windows)');
 
   if (config.voice.speakerMode === 'phone') {

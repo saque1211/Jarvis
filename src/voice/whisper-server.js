@@ -47,7 +47,7 @@ async function quemAtende(url, timeoutMs = 2000) {
  * subir o servidor e perda de velocidade, nao de funcao — o STT_COMMAND
  * assume.
  */
-export async function ensureWhisperServer() {
+export async function ensureWhisperServer(aoIniciar = () => {}) {
   const url = config.voice.sttServerUrl;
   if (!url) return null;
 
@@ -70,13 +70,16 @@ export async function ensureWhisperServer() {
   if (!fs.existsSync(modelo)) return `nao achei o modelo ${modelo}`;
 
   const porta = new URL(url).port || '8080';
+  // Carregar o modelo pode levar dezenas de segundos. Sem avisar aqui, o
+  // daemon fica mudo nesse tempo todo e parece travado.
+  aoIniciar(`carregando o modelo na porta ${porta}, aguarde...`);
   processo = startBackground(bin, ['-m', modelo, '-l', 'pt', '--port', porta]);
 
   // Carregar o modelo leva alguns segundos; espera ele atender antes de dizer
   // que subiu, senao a primeira frase falada cai na reserva lenta.
   for (let i = 0; i < 40; i++) {
     await new Promise((r) => setTimeout(r, 500));
-    if ((await quemAtende(url)) === 'whisper') return `subi na porta ${porta}`;
+    if ((await quemAtende(url)) === 'whisper') return `no ar na porta ${porta} — transcricao rapida`;
   }
 
   processo?.stop();
