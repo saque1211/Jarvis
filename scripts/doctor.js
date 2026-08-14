@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import pc from 'picocolors';
 import { config } from '../src/core/config.js';
 import { loadSkills, buildToolIndex } from '../src/core/registry.js';
-import { sttEngineName } from '../src/voice/stt.js';
+import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt } from '../src/voice/stt.js';
 import { run } from '../src/platform/win32.js';
 import { isConfigured as spotifyReady } from '../src/integrations/spotify.js';
 
@@ -113,6 +113,16 @@ async function main() {
         }
       }
     }
+    // O vocabulario e o que decide entre "vesse code" e "VS Code". Mostrar o
+    // texto real evita descobrir tarde que ele esta vazio ou com lixo colado.
+    const vocab = promptDeVocabulario();
+    ok(`  vocabulario: ${vocab.length} caracteres, ${nomesDeApps().length} apps cadastrados`);
+    console.log(pc.dim(`       "${vocab.slice(0, 110)}..."`));
+    if (config.voice.sttPrompt && limparPrompt(config.voice.sttPrompt) !== config.voice.sttPrompt.trim()) {
+      warn('  seu STT_PROMPT tinha linha de comando colada — cortei o pedaco');
+      console.log(pc.dim('       Vale limpar a linha no .env pra nao confundir depois.'));
+    }
+
     // STT_COMMAND ser lido nao garante que o executavel e o modelo existem —
     // e o erro so apareceria na primeira frase falada.
     if (stt === 'STT_COMMAND') {

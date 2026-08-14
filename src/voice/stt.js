@@ -13,6 +13,67 @@ import { config } from '../core/config.js';
  * mandar o audio pra nuvem por conta propria.
  */
 
+/**
+ * Vocabulario que o whisper recebe como "prompt inicial". Ele nao obriga nada:
+ * serve de desempate quando o audio e ambiguo. Sem isso "abre o VS Code" vira
+ * "abre o vesse code", e "Workana" vira qualquer coisa.
+ *
+ * O ganho grande vem dos nomes que SO existem nesta maquina — os apps que voce
+ * cadastrou. Um vocabulario generico ajuda pouco; o seu ajuda muito.
+ */
+const VOCAB_BASE =
+  'Comandos para o assistente Jarvis. ' +
+  'Abrir, fechar, iniciar, parar, tocar, pausar, pular, aumentar, diminuir. ' +
+  'Timer, pomodoro, cronometro, lembrete, tarefa, anotacao. ' +
+  'CPU, RAM, GPU, disco, bateria, volume, brilho, monitor. ' +
+  'Screenshot, gravar tela, area de transferencia. ' +
+  'Commit, push, branch, build, deploy, terminal, projeto.';
+
+/** Nomes de app cadastrados — a parte do vocabulario que e so sua. */
+export function nomesDeApps() {
+  try {
+    const apps = JSON.parse(fs.readFileSync(config.paths.apps, 'utf8'));
+    return Object.keys(apps);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Um STT_PROMPT com pedaco de linha de comando colado (aconteceu: o
+ * .env.example tinha duas linhas grudadas) faz o whisper transcrever fragmentos
+ * do proprio comando. Tira o que tem cara de flag, caminho ou executavel.
+ */
+export function limparPrompt(texto) {
+  // Nao adianta tirar pedaco por pedaco: o que sobra sao restos ("pt" de
+  // "-l pt") que o whisper trata como vocabulario. Como o defeito e sempre uma
+  // linha de comando colada NO FIM, o certo e cortar dali pra frente.
+  const inicioDoComando = texto.search(
+    /whisper|piper|ffmpeg|\s-{1,2}[a-z]|[\\/][\w.-]+\.(bin|exe|onnx)/i
+  );
+  const limpo = inicioDoComando >= 0 ? texto.slice(0, inicioDoComando) : texto;
+  return limpo.replace(/\{\w+\}/g, '').replace(/\s{2,}/g, ' ').trim();
+}
+
+/**
+ * Monta o prompt inicial do whisper. O limite util e ~224 tokens: passando
+ * disso ele corta, e prompt cortado no meio atrapalha mais do que ajuda.
+ */
+export function promptDeVocabulario() {
+  const partes = [];
+  const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
+  if (doUsuario) partes.push(doUsuario);
+  partes.push(VOCAB_BASE);
+
+  const apps = nomesDeApps();
+  if (apps.length) partes.push(`Aplicativos: ${apps.join(', ')}.`);
+
+  const texto = partes.join(' ');
+  if (texto.length <= 900) return texto;
+  // Corta em fronteira de palavra — metade de um nome ensina o nome errado.
+  return texto.slice(0, 900).replace(/\s\S*$/, '');
+}
+
 const CANDIDATES = [
   {
     name: 'whisper.cpp',
@@ -73,7 +134,7 @@ async function transcribeViaServer(wavPath) {
   form.append('file', blob, path.basename(wavPath));
   form.append('response_format', 'json');
   form.append('language', 'pt');
-  if (config.voice.sttPrompt) form.append('prompt', config.voice.sttPrompt);
+  form.append('prompt', promptDeVocabulario());
 
   let response;
   try {
@@ -121,7 +182,10 @@ async function resolveEngine() {
     // Muitos CLIs saem com codigo != 0 no --help mas existem; o que importa
     // e nao ter dado ENOENT.
     if (check.code !== -1) {
-      resolved = candidate;
+      // Nem toda build do whisper.cpp aceita prompt inicial, e mandar uma flag
+      // que ele nao conhece derruba a transcricao inteira. Pergunta antes.
+      const ajuda = `${check.stdout} ${check.stderr}`;
+      resolved = { ...candidate, aceitaPrompt: /--prompt\b/.test(ajuda) };
       return resolved;
     }
   }
@@ -172,7 +236,10 @@ export async function transcribe(wavPath) {
     return result.stdout.trim() || null;
   }
 
-  const result = await run(engine.bin, engine.args(wavPath), { timeoutMs: 120000 });
+  const args = engine.args(wavPath);
+  if (engine.aceitaPrompt) args.push('--prompt', promptDeVocabulario());
+
+  const result = await run(engine.bin, args, { timeoutMs: 120000 });
   if (result.code === -1) throw new Error(`Falha ao rodar ${engine.bin}: ${result.stderr}`);
 
   const text = engine.parse(result.stdout, wavPath);
