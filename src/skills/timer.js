@@ -4,9 +4,9 @@ import { toast, ps, psQuote } from '../platform/win32.js';
 import { config, ensureDirs } from '../core/config.js';
 import { appendDaily } from '../core/vault.js';
 
-// Os .wav que vem com o Windows. Sao os que a pessoa ja conhece de ouvido, e
-// nao exigem baixar nada.
-const PASTA_SONS = 'C:/Windows/Media';
+// Onde procurar um som pelo nome curto, nesta ordem. Os do projeto vem antes:
+// se alguem pos um alarme em assets/sons, e porque quer aquele.
+const PASTAS_DE_SOM = [path.join(config.root, 'assets', 'sons'), 'C:/Windows/Media'];
 
 /**
  * Toca o alarme do timer conforme JARVIS_TIMER_SOM.
@@ -24,18 +24,47 @@ export async function tocarAlarme(escolha = config.voice.timerSound) {
     return;
   }
 
-  // Nome curto ("tada") vira o caminho do .wav do Windows; caminho completo
-  // passa direto, pra quem quiser um som proprio.
-  const arquivo = /[\\/]/.test(som) ? som : `${PASTA_SONS}/${som}.wav`;
+  const arquivo = resolverSom(som);
+  if (!arquivo) return beepar();
 
-  // PlaySync espera terminar. Sem isso o processo do PowerShell morre antes do
-  // som sair e o alarme fica mudo.
-  const r = await ps(`(New-Object System.Media.SoundPlayer ${psQuote(arquivo)}).PlaySync()`);
+  // SoundPlayer so toca WAV. Pra qualquer outro formato entra o MediaPlayer,
+  // que abre de forma assincrona — sem esperar a duracao aparecer, o Play()
+  // retorna antes do som comecar e nao sai nada.
+  const script = /\.wav$/i.test(arquivo)
+    ? `(New-Object System.Media.SoundPlayer ${psQuote(arquivo)}).PlaySync()`
+    : `Add-Type -AssemblyName PresentationCore
+$p = New-Object System.Windows.Media.MediaPlayer
+$p.Open([System.Uri]::new(${psQuote(arquivo)}))
+$limite = (Get-Date).AddSeconds(5)
+while (-not $p.NaturalDuration.HasTimeSpan -and (Get-Date) -lt $limite) { Start-Sleep -Milliseconds 50 }
+$p.Play()
+if ($p.NaturalDuration.HasTimeSpan) { Start-Sleep -Milliseconds ($p.NaturalDuration.TimeSpan.TotalMilliseconds + 200) }
+$p.Close()`;
 
-  // Arquivo faltando nao pode significar timer silencioso: o beep assume.
-  if (!r.ok) {
-    await ps('for ($i=0; $i -lt 3; $i++) { [console]::beep(880, 250); Start-Sleep -Milliseconds 120 }');
+  const r = await ps(script);
+  // Falha ao tocar nao pode significar timer silencioso: o beep assume.
+  if (!r.ok) await beepar();
+}
+
+function beepar() {
+  return ps('for ($i=0; $i -lt 3; $i++) { [console]::beep(880, 250); Start-Sleep -Milliseconds 120 }');
+}
+
+/**
+ * Nome curto ("alarme", "tada") vira caminho; caminho completo passa direto.
+ * Devolve null quando o arquivo nao existe — assim quem chama cai no beep em
+ * vez de mandar um caminho inexistente pro PowerShell e receber erro cru.
+ */
+export function resolverSom(som) {
+  if (/[\\/]/.test(som)) return fs.existsSync(som) ? som : null;
+
+  for (const pasta of PASTAS_DE_SOM) {
+    for (const ext of ['.wav', '.mp3']) {
+      const caminho = path.join(pasta, som + ext);
+      if (fs.existsSync(caminho)) return caminho;
+    }
   }
+  return null;
 }
 
 /**

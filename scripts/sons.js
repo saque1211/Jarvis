@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
 import pc from 'picocolors';
 import { psJson } from '../src/platform/win32.js';
 import { tocarAlarme } from '../src/skills/timer.js';
@@ -14,6 +16,19 @@ import { config } from '../src/core/config.js';
  */
 
 const PASTA = 'C:/Windows/Media';
+
+/** Sons que vieram junto com o projeto — ficam no topo da lista. */
+function sonsDoProjeto() {
+  const dir = path.join(config.root, 'assets', 'sons');
+  try {
+    return fs
+      .readdirSync(dir)
+      .filter((f) => /\.(wav|mp3)$/i.test(f))
+      .map((f) => f.replace(/\.(wav|mp3)$/i, ''));
+  } catch {
+    return [];
+  }
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -32,7 +47,9 @@ async function main() {
     process.exit(1);
   }
 
-  const todos = (Array.isArray(data) ? data : data ? [data] : []).sort();
+  const doWindows = (Array.isArray(data) ? data : data ? [data] : []).sort();
+  // Os do projeto primeiro: sao os escolhidos de proposito, nao o catalogo.
+  const todos = [...sonsDoProjeto(), ...doWindows];
   const nomes = filtro ? todos.filter((n) => n.toLowerCase().includes(filtro)) : todos;
 
   if (!nomes.length) {
@@ -54,7 +71,7 @@ async function main() {
   }
 
   console.log(pc.bold('\n  Escolheu? Ponha no .env:\n'));
-  console.log(pc.cyan("    Add-Content .env 'JARVIS_TIMER_SOM=Alarm03'"));
+  console.log(pc.cyan("    Add-Content .env 'JARVIS_TIMER_SOM=alarme'"));
   console.log(pc.dim('\n  Vale tambem "beep" (o padrao), "off" (silencioso) ou'));
   console.log(pc.dim('  o caminho de um .wav seu.\n'));
 }
