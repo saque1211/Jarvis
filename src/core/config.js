@@ -171,14 +171,14 @@ export const config = {
     // ouvir de outro comodo. Sem ninguem com a pagina aberta, cai no local.
     speakerMode: (process.env.JARVIS_SPEAKER || 'local').toLowerCase().trim(),
     speakerPort: Number(process.env.JARVIS_SPEAKER_PORT || 8790),
-  },
 
-  // Som que toca quando um timer vence. Aceita:
-  //   beep                    o de sempre (console beep, seco)
-  //   off                     silencioso, so a notificacao do Windows
-  //   alarm03, tada, chimes   um .wav de C:/Windows/Media (ouca: npm run sons)
-  //   C:/caminho/meu.wav      qualquer arquivo seu
-  timerSound: (process.env.JARVIS_TIMER_SOM || 'beep').trim(),
+    // Som que toca quando um timer vence. Aceita:
+    //   beep                  o de sempre (console beep, seco)
+    //   off                   silencioso, so a notificacao do Windows
+    //   alarme, tada, Alarm03 um arquivo de assets/sons ou C:/Windows/Media
+    //   C:/caminho/meu.wav    qualquer arquivo seu (ouca: npm run sons)
+    timerSound: (process.env.JARVIS_TIMER_SOM || 'beep').trim(),
+  },
 
   // Seguranca: o exec e o files sao as skills perigosas.
   safety: {

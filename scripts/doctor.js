@@ -4,6 +4,7 @@ import pc from 'picocolors';
 import { config } from '../src/core/config.js';
 import { loadSkills, buildToolIndex } from '../src/core/registry.js';
 import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt } from '../src/voice/stt.js';
+import { resolverSom } from '../src/skills/timer.js';
 import { run } from '../src/platform/win32.js';
 import { isConfigured as spotifyReady } from '../src/integrations/spotify.js';
 
@@ -221,6 +222,21 @@ async function main() {
   }
   else if (process.platform === 'win32') ok('TTS: SAPI (voz nativa do Windows)');
   else warn('TTS: SAPI indisponivel fora do Windows');
+
+  // Som configurado e som que TOCA sao coisas diferentes: nome errado, arquivo
+  // faltando ou chave lida do lugar errado caem no beep em silencio. Sem esta
+  // linha, so um timer vencendo revelaria — e ai a pessoa culpa o .env.
+  const somDoTimer = config.voice.timerSound;
+  if (somDoTimer.toLowerCase() === 'off') ok('alarme do timer: silencioso (so a notificacao)');
+  else if (somDoTimer.toLowerCase() === 'beep') ok('alarme do timer: beep do console');
+  else {
+    const arquivo = resolverSom(somDoTimer);
+    if (arquivo) ok(`alarme do timer: ${somDoTimer} → ${arquivo}`);
+    else {
+      warn(`alarme do timer: "${somDoTimer}" nao existe — vai tocar o beep`);
+      console.log(pc.dim('       Veja os nomes validos com: npm run sons -- --so-lista'));
+    }
+  }
 
   console.log(pc.bold('\n  Ferramentas externas'));
   for (const [bin, why] of [
