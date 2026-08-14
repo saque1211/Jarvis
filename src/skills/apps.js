@@ -105,16 +105,30 @@ function resolveApp(name) {
 
   // Ultimo recurso: o mais parecido, comparando com o apelido inteiro e com
   // cada palavra dele. "robloks" erra dentro de "roblox", nao no "player".
-  let melhor = null;
+  const perto = [];
   for (const e of entradas) {
+    let melhorDaEntrada = Infinity;
     for (const candidato of [e.norm, ...e.palavras]) {
       const d = distancia(alvo, candidato);
-      if (d <= tolerancia(Math.max(alvo.length, candidato.length)) && (!melhor || d < melhor.d)) {
-        melhor = { ...e, d };
+      if (d <= tolerancia(Math.max(alvo.length, candidato.length))) {
+        melhorDaEntrada = Math.min(melhorDaEntrada, d);
       }
     }
+    if (melhorDaEntrada < Infinity) perto.push({ ...e, d: melhorDaEntrada });
   }
-  return melhor ? { target: melhor.target, alias: melhor.alias } : null;
+  if (!perto.length) return null;
+
+  const menor = Math.min(...perto.map((e) => e.d));
+  const empatados = perto.filter((e) => e.d === menor);
+
+  // Empate entre apps DIFERENTES e cara ou coroa, e abrir o app errado com
+  // confianca e pior que nao abrir: "estine" fica a 4 de steam, notion e edge.
+  // Devolver nada faz o modelo perguntar, que e a saida honesta.
+  // (Apelidos diferentes pro mesmo alvo — "estim" e "estima" — nao sao empate.)
+  const alvosDistintos = new Set(empatados.map((e) => e.target));
+  if (alvosDistintos.size > 1) return null;
+
+  return { target: empatados[0].target, alias: empatados[0].alias };
 }
 
 export default {
