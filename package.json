@@ -14,6 +14,7 @@
     "llm:test": "node scripts/llm-test.js",
     "test:voice": "node scripts/test-voice.js",
     "whisper:server": "node scripts/whisper-server.js",
+    "whisper:model": "node scripts/setup-whisper.js",
     "voices": "node scripts/voices.js",
     "voices:edge": "node scripts/voices-edge.js",
     "voice:piper": "node scripts/setup-piper.js",
