@@ -61,6 +61,7 @@ diga isso na `description` — não confie na ordem de execução.
 npm run jarvis "comando"   # uma vez
 npm run jarvis             # modo conversa
 npm run listen             # daemon de voz (wake word)
+npm run hud                # HUD como app (janela sem barra de endereço)
 npm run doctor             # diagnóstico de setup
 npm run test:voice         # mic + STT + TTS isolados do resto
 npm run voices             # lista e fala com cada voz do Windows
@@ -85,8 +86,13 @@ integrations, freelance, memory, voice.
 `src/core/state.js` monta o snapshot que o HUD consome — é o contrato entre
 dado e visual. Brief de design em `HUD-SPEC.md`.
 
-**Falta:** a camada visual do HUD (o contrato de dados já existe), integração
-de calendário e de e-mail.
+**HUD** (`src/hud/`): servidor HTTP + SSE e uma página só. Não é Electron de
+propósito — o navegador já está na máquina, e `--app` dá janela sem barra de
+endereço pelo mesmo efeito sem empacotar 200 MB de runtime. Como é HTTP, abre
+no celular pelo IP da rede de graça. Estado a cada 1s; vitais (CPU/GPU/disco,
+que custam um PowerShell cada) a cada 5s.
+
+**Falta:** integração de calendário e de e-mail.
 
 ## Limites conhecidos, documentados de propósito
 

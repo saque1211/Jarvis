@@ -175,12 +175,48 @@ export function snapshot() {
     // Painel ACTIVITY — as ultimas tools executadas.
     activity: (runtime.activity || []).slice(-12).reverse(),
 
+    // Painel COMMANDS — o que foi PEDIDO, na frase da pessoa.
+    commands: (runtime.commands || []).slice(-8).reverse(),
+
+    // Painel USO — quanto o dia custou ate agora.
+    uso: runtime.uso?.dia === today() ? runtime.uso : { dia: today(), entrada: 0, saida: 0, comandos: 0 },
+
     // Painel VAULT — memoria recente.
     vault: vaultPanel(),
 
     // Painel NOW PLAYING — preenchido pelo HUD via skill media, cadencia lenta.
     nowPlaying: runtime.nowPlaying || null,
   };
+}
+
+/**
+ * Guarda o comando como a pessoa disse, nao a tool que ele virou.
+ *
+ * `activity` ja registra as tools, mas "start_timer" nao e o que ela lembra
+ * ter pedido — ela lembra "poe 10 minutos". O painel mostra a frase.
+ */
+export function recordCommand(text, reply, usage = null) {
+  if (!text?.trim()) return;
+  const runtime = readRuntime();
+  const commands = [
+    ...(runtime.commands || []),
+    { text: text.trim(), reply: reply?.trim() || null, at: new Date().toISOString() },
+  ];
+
+  // Consumo acumulado do dia. O contador zera sozinho na virada da data: sem
+  // isso o numero cresceria pra sempre e deixaria de dizer alguma coisa.
+  const hoje = today();
+  const anterior = runtime.uso?.dia === hoje ? runtime.uso : { dia: hoje, entrada: 0, saida: 0, comandos: 0 };
+  const uso = usage
+    ? {
+        dia: hoje,
+        entrada: anterior.entrada + (usage.entrada || 0) + (usage.cacheLido || 0) + (usage.cacheEscrito || 0),
+        saida: anterior.saida + (usage.saida || 0),
+        comandos: anterior.comandos + 1,
+      }
+    : { ...anterior, comandos: anterior.comandos + 1 };
+
+  writeRuntime({ commands: commands.slice(-20), uso });
 }
 
 /** Registra uma tool executada no histórico do runtime (buffer de 30). */

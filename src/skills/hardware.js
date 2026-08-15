@@ -45,6 +45,36 @@ async function disks() {
   return Array.isArray(data) ? data : [data];
 }
 
+/**
+ * Vitais em formato de DADO, nao de frase — as tools daqui devolvem texto pra
+ * ser falado, e o HUD precisa de numero pra desenhar barra.
+ *
+ * Cada leitura falha sozinha (nvidia-smi so existe com placa NVIDIA), por isso
+ * vao em paralelo e o que falhar vira null: um painel com quatro barras e uma
+ * vazia e melhor que um painel vazio.
+ */
+export async function vitais() {
+  const [cpu, mem, video, discos] = await Promise.all([
+    cpuLoad().catch(() => null),
+    memory().catch(() => null),
+    gpu().catch(() => null),
+    disks().catch(() => []),
+  ]);
+
+  const disco = discos.find((d) => /^C:/i.test(d.DeviceID)) || discos[0] || null;
+
+  return {
+    cpu: cpu ? { nome: cpu.Name?.trim(), uso: cpu.LoadPercentage ?? null } : null,
+    memoria: mem
+      ? { totalGb: mem.TotalGB, usadoGb: +(mem.TotalGB - mem.FreeGB).toFixed(1) }
+      : null,
+    gpu: video,
+    disco: disco
+      ? { id: disco.DeviceID, totalGb: disco.TotalGB, usadoGb: +(disco.TotalGB - disco.FreeGB).toFixed(1) }
+      : null,
+  };
+}
+
 export default {
   name: 'hardware',
   description: 'Monitorar CPU/GPU/RAM/disco, controlar monitores, energia e headset VR.',

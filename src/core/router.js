@@ -4,7 +4,7 @@ import { loadSkills, buildToolIndex, toolSpecs } from './registry.js';
 import { pickSkills, estimateTokens } from './preselect.js';
 import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
-import { recordActivity, writeRuntime } from './state.js';
+import { recordActivity, recordCommand, writeRuntime } from './state.js';
 
 const SYSTEM = `Voce e o JARVIS, assistente pessoal do usuario, rodando na maquina dele (Windows 11).
 
@@ -111,6 +111,7 @@ export async function route(userInput, options = {}) {
       timings.total = since(started);
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
+      recordCommand(userInput, reply, usage);
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
       return { reply, steps, timings, usage };
     }
@@ -187,6 +188,7 @@ export async function route(userInput, options = {}) {
         ctx.onNote('resposta direta da tool');
         setLastReply(reply);
         writeRuntime({ lastTranscript: userInput, lastReply: reply });
+        recordCommand(userInput, reply, usage);
         appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
         return { reply, steps, timings, usage };
       }

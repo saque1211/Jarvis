@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>JARVIS</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Paleta e tipografia vem do mockup. Fonte da Google com queda pra system-ui:
+   sem internet o layout continua igual, so muda o desenho da letra. */
+:root{
+  --bg:#131517; --panel:#16191c; --text:#e8eaec; --accent:#94bce3;
+  --linha:rgba(232,234,236,.16); --fraco:rgba(232,234,236,.45);
+  --cond:'Barlow Condensed',system-ui,sans-serif;
+  --corpo:'Barlow',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+  font-family:var(--corpo);overflow:hidden}
+::selection{background:rgba(148,188,227,.3)}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(232,234,236,.16)}
+
+@keyframes jv-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes jv-pulse{0%{transform:scale(.9);opacity:.5}100%{transform:scale(1.7);opacity:0}}
+@keyframes jv-spin{to{transform:rotate(360deg)}}
+@keyframes jv-spin-r{to{transform:rotate(-360deg)}}
+@keyframes jv-wave{0%,100%{transform:scaleY(.16)}50%{transform:scaleY(1)}}
+@keyframes jv-blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* Marcas de registro nos cantos — a assinatura visual do mockup. */
+.bp{position:relative;border:1px solid var(--linha)}
+.bp>i{position:absolute;width:11px;height:11px;color:rgba(232,234,236,.55)}
+.bp>i::before,.bp>i::after{content:"";position:absolute;background:currentColor}
+.bp>i::before{left:5px;top:0;width:1px;height:100%}
+.bp>i::after{top:5px;left:0;width:100%;height:1px}
+.bp>i.tl{top:-6px;left:-6px}.bp>i.tr{top:-6px;right:-6px}
+.bp>i.bl{bottom:-6px;left:-6px}.bp>i.br{bottom:-6px;right:-6px}
+
+#fundo{position:fixed;inset:0;
+  background:radial-gradient(820px 560px at 64% 44%,rgba(148,188,227,.11),transparent 72%),var(--bg)}
+#grade{position:absolute;inset:0;pointer-events:none;
+  background-image:linear-gradient(rgba(232,234,236,.04) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(232,234,236,.04) 1px,transparent 1px);
+  background-size:56px 56px}
+
+#topo{position:absolute;top:0;left:0;right:0;height:34px;z-index:14;
+  border-bottom:1px solid rgba(232,234,236,.09);display:flex;align-items:center;
+  justify-content:space-between;padding:0 14px;-webkit-app-region:drag}
+#topo .quad{width:9px;height:9px;border:1px solid rgba(232,234,236,.32)}
+.rotulo{font:500 10px/1 var(--cond);letter-spacing:.26em;text-transform:uppercase;color:rgba(232,234,236,.4)}
+
+#veu{position:absolute;inset:34px 0 0 0;background:rgba(10,12,14,.62);z-index:18;
+  transition:opacity .3s ease;opacity:0;pointer-events:none}
+#gaveta{position:absolute;top:34px;bottom:0;left:0;width:312px;z-index:20;background:var(--panel);
+  border-right:1px solid var(--linha);display:flex;flex-direction:column;
+  transition:transform .34s cubic-bezier(.22,.9,.24,1);transform:translateX(-100%)}
+#gaveta.aberta{transform:translateX(0)}
+.nav-item{display:flex;align-items:center;gap:12px;padding:12px 20px;
+  border-left:2px solid transparent;border-bottom:1px solid rgba(232,234,236,.06);transition:background .16s}
+.nav-item:hover{background:rgba(148,188,227,.09);border-left-color:var(--accent)}
+.nav-item .ponto{width:6px;height:6px;background:rgba(148,188,227,.75);flex:none}
+
+#coluna{position:absolute;top:58px;bottom:20px;left:24px;width:296px;z-index:12;
+  display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto}
+.cartao{padding:15px;display:flex;flex-direction:column;gap:12px}
+.titulo{font:600 10px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--fraco)}
+.numero{font:400 26px/1 var(--cond)}
+.legenda{font:400 10.5px/1.2 var(--corpo);color:var(--fraco)}
+.barra{height:3px;background:rgba(232,234,236,.1);position:relative}
+.barra>span{position:absolute;left:0;top:0;bottom:0;background:var(--accent);transition:width .6s ease}
+
+#palco{position:absolute;top:34px;left:320px;right:0;bottom:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:30px;padding:20px 40px;min-height:0;overflow-y:auto}
+#orbe{position:relative;width:330px;height:330px;display:grid;place-items:center;flex:none;cursor:pointer}
+#orbe .anel{position:absolute;border:1px solid rgba(148,188,227,.3);border-radius:50%}
+#ondas{position:relative;display:flex;align-items:center;gap:3px;height:94px;transition:opacity .5s ease}
+#ondas div{width:3px;height:100%;background:var(--accent);transform-origin:center;
+  animation:jv-wave .9s ease-in-out infinite}
+
+#entrada{display:flex;align-items:center;gap:10px;width:100%;max-width:620px}
+#texto{flex:1;background:transparent;border:1px solid rgba(232,234,236,.18);color:var(--text);
+  padding:12px 15px;font:400 14px/1 var(--corpo);outline:none}
+#texto:focus{border-color:var(--accent)}
+#texto::placeholder{color:rgba(232,234,236,.38)}
+.botao{padding:12px 20px;border:1px solid rgba(232,234,236,.2);background:transparent;color:var(--text);
+  font:600 12px/1 var(--cond);letter-spacing:.16em;text-transform:uppercase;cursor:pointer;transition:.16s}
+.botao:hover{border-color:var(--accent);color:var(--accent)}
+
+/* Abaixo de 1000px a coluna sai da frente e o orbe fica sozinho — o HUD abre
+   no celular pelo IP da rede, e ali nao cabem as duas coisas. */
+@media (max-width:1000px){
+  #coluna{position:static;width:auto;margin:44px 16px 0;max-height:38vh}
+  #palco{position:static;padding:16px;gap:18px;min-height:52vh}
+  #orbe{width:220px;height:220px}
+}
+</style>
+</head>
+<body>
+<div id="fundo"><div id="grade"></div></div>
+
+<div id="topo">
+  <div style="display:flex;gap:7px">
+    <span class="quad"></span><span class="quad"></span><span class="quad"></span>
+  </div>
+  <span class="rotulo">jarvis.exe — núcleo local</span>
+  <span class="rotulo" id="relogio" style="letter-spacing:.16em;text-transform:none">--:--</span>
+</div>
+
+<div id="veu"></div>
+
+<aside id="gaveta">
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid rgba(232,234,236,.1)">
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 11px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase;color:rgba(232,234,236,.42)">Painel lateral</span>
+      <span style="font:400 22px/1 var(--cond)">Meu espaço</span>
+    </div>
+    <div id="fechar" style="width:26px;height:26px;display:grid;place-items:center;border:1px solid rgba(232,234,236,.18);color:rgba(232,234,236,.6);font:400 15px/1 var(--corpo);cursor:pointer">×</div>
+  </div>
+  <div style="flex:1;min-height:0;overflow-y:auto">
+    <div id="nav"></div>
+    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:9px">
+      <span style="font:600 9.5px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--fraco)">Última resposta</span>
+      <div class="bp" style="padding:12px 14px">
+        <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+        <span id="ultima-resposta" style="font:400 13px/1.4 var(--corpo);color:rgba(232,234,236,.85)">—</span>
+      </div>
+    </div>
+  </div>
+  <div style="padding:16px 20px;border-top:1px solid rgba(232,234,236,.1);display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;font:400 12px/1 var(--corpo)">
+      <span style="color:var(--fraco)">Palavra de ativação</span><span id="wake" style="color:var(--accent)">—</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font:400 12px/1 var(--corpo)">
+      <span style="color:var(--fraco)">Transcrição</span><span id="stt">—</span>
+    </div>
+  </div>
+</aside>
+
+<div id="coluna">
+  <div style="display:flex;align-items:center;gap:13px">
+    <div id="abrir" class="bp" style="width:42px;height:42px;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:0 11px;cursor:pointer">
+      <span style="height:1.5px;background:var(--text)"></span>
+      <span style="height:1.5px;background:var(--text)"></span>
+      <span style="height:1.5px;background:var(--text)"></span>
+      <i class="tl"></i><i class="br"></i>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:3px">
+      <span style="font:600 15px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase">Jarvis</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span id="pisca" style="width:5px;height:5px;background:var(--accent);animation:jv-blink 1.6s ease-in-out infinite"></span>
+        <span id="status-curto" style="font:400 11px/1 var(--corpo);color:rgba(232,234,236,.5)">conectando…</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bp cartao">
+    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+    <span class="titulo">Uso do assistente</span>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px 10px">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span class="numero" id="uso-comandos">0</span><span class="legenda">comandos hoje</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <span class="numero" id="uso-tokens">0</span><span class="legenda">tokens usados</span>
+      </div>
+    </div>
+    <div style="height:1px;background:rgba(232,234,236,.1)"></div>
+    <span class="titulo">Últimos comandos</span>
+    <div id="comandos" style="display:flex;flex-direction:column;gap:7px"></div>
+  </div>
+
+  <div class="bp cartao">
+    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+    <div style="display:flex;align-items:baseline;justify-content:space-between">
+      <span class="titulo">Máquina</span>
+      <span id="maquina" style="font:400 10.5px/1 var(--corpo);color:rgba(232,234,236,.35)">—</span>
+    </div>
+    <div id="metricas" style="display:flex;flex-direction:column;gap:10px"></div>
+  </div>
+
+  <div class="bp cartao" id="cartao-timers" style="display:none">
+    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
+    <span class="titulo">Em contagem</span>
+    <div id="timers" style="display:flex;flex-direction:column;gap:8px"></div>
+  </div>
+</div>
+
+<div id="palco">
+  <div id="orbe">
+    <div class="anel" style="width:292px;height:292px;animation:jv-spin 30s linear infinite"></div>
+    <div class="anel" style="width:292px;height:116px;animation:jv-spin-r 18s linear infinite;border-color:rgba(148,188,227,.28)"></div>
+    <div class="anel" style="width:116px;height:292px;animation:jv-spin 22s linear infinite;border-color:rgba(148,188,227,.28)"></div>
+    <div style="position:absolute;width:214px;height:214px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(148,188,227,.24),transparent 70%);animation:jv-breathe 3s ease-in-out infinite"></div>
+    <div style="position:absolute;width:194px;height:194px;border-radius:50%;border:1px solid rgba(148,188,227,.45);animation:jv-pulse 3s ease-out infinite"></div>
+    <div id="ondas"></div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;align-items:center;gap:11px;max-width:560px">
+    <span id="status" style="font:600 10.5px/1 var(--cond);letter-spacing:.3em;text-transform:uppercase;color:var(--accent)">conectando…</span>
+    <span id="transcricao" style="font:400 19px/1.5 var(--corpo);color:rgba(232,234,236,.88);text-align:center;text-wrap:pretty">—</span>
+  </div>
+
+  <form id="entrada">
+    <input id="texto" placeholder='Digite um comando ou diga "jarvis"…' autocomplete="off">
+    <button class="botao" type="submit" id="enviar">Enviar</button>
+  </form>
+</div>
+
+<script>
+// ── Desenho das 15 barras da onda ────────────────────────────────────────
+const ondas = document.getElementById('ondas');
+for (let i = 0; i < 15; i++) {
+  const b = document.createElement('div');
+  b.style.animationDelay = ((i % 6) * 0.11).toFixed(2) + 's';
+  ondas.appendChild(b);
+}
+
+// Cada estado do daemon tem uma frase e uma intensidade de onda. Sem isso o
+// HUD ficaria bonito e mudo sobre o que a maquina esta fazendo.
+const ESTADOS = {
+  offline:   { texto: 'Offline · daemon parado',        curto: 'daemon parado',  onda: .10 },
+  idle:      { texto: 'Ocioso · microfone em espera',   curto: 'em espera',      onda: .22 },
+  listening: { texto: 'Ouvindo · aguardando comando',   curto: 'ouvindo',        onda: .60 },
+  thinking:  { texto: 'Processando · roteando',         curto: 'processando',    onda: .45 },
+  speaking:  { texto: 'Falando · resposta em curso',    curto: 'falando',        onda: 1   },
+};
+
+const $ = (id) => document.getElementById(id);
+const num = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n));
+const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+function barra(label, valor, pct) {
+  return `<div style="display:flex;flex-direction:column;gap:4px">
+    <div style="display:flex;justify-content:space-between;font:400 11.5px/1 var(--corpo)">
+      <span style="color:rgba(232,234,236,.7)">${label}</span><span>${valor}</span></div>
+    <div class="barra"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div>
+  </div>`;
+}
+
+function duracao(ms) {
+  const s = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(s / 60);
+  return m > 0 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
+}
+
+function desenhar(e) {
+  const estado = ESTADOS[e.voice?.state] || ESTADOS.offline;
+  $('status').textContent = estado.texto;
+  $('status-curto').textContent = estado.curto;
+  ondas.style.opacity = estado.onda;
+  $('pisca').style.animationDuration = e.voice?.state === 'listening' ? '.7s' : '1.6s';
+
+  // A fala do JARVIS tem precedencia sobre o que voce disse: e a informacao
+  // mais nova, e e ela que voce esta ouvindo enquanto olha pra tela.
+  $('transcricao').textContent =
+    e.voice?.lastReply || e.voice?.lastTranscript || 'Diga "jarvis" ou digite um comando.';
+  $('ultima-resposta').textContent = e.voice?.lastReply || '—';
+  $('wake').textContent = '"' + (e.voice?.wakeWord || 'jarvis') + '"';
+  $('stt').textContent = e.voice?.sttEngine || '—';
+
+  $('relogio').textContent = hora(e.system?.clock || Date.now());
+  const up = e.system?.uptimeMs || 0;
+  const dias = Math.floor(up / 864e5);
+  const horas = Math.floor((up % 864e5) / 36e5);
+  $('maquina').textContent = `${e.system?.hostname || '—'} · ${dias}d ${String(horas).padStart(2, '0')}h`;
+
+  $('uso-comandos').textContent = e.uso?.comandos ?? 0;
+  $('uso-tokens').textContent = num((e.uso?.entrada || 0) + (e.uso?.saida || 0));
+
+  $('comandos').innerHTML = (e.commands || []).length
+    ? e.commands.map((c) => `<div style="display:flex;align-items:baseline;gap:9px">
+        <span style="font:500 10px/1.4 var(--cond);letter-spacing:.06em;color:var(--accent);width:34px;flex:none">${hora(c.at)}</span>
+        <span style="font:400 12px/1.35 var(--corpo);color:rgba(232,234,236,.8);flex:1">${c.text}</span></div>`).join('')
+    : '<span class="legenda">nenhum comando ainda hoje</span>';
+
+  // Metricas: memoria vem do snapshot (barata, 1s); o resto vem dos vitais,
+  // que rodam a cada 5s. Cada uma so aparece quando ha numero de verdade.
+  const v = e.vitais || {};
+  const linhas = [];
+  if (v.cpu?.uso != null) linhas.push(barra('CPU', v.cpu.uso + '%', v.cpu.uso));
+  if (e.system?.memory)
+    linhas.push(barra('RAM', `${e.system.memory.usedGb} / ${e.system.memory.totalGb} GB`, e.system.memory.percent));
+  if (v.gpu?.util != null) linhas.push(barra('GPU', v.gpu.util + '%', v.gpu.util));
+  if (v.gpu?.temp != null) linhas.push(barra('Temperatura', v.gpu.temp + ' °C', v.gpu.temp));
+  if (v.disco)
+    linhas.push(barra('Disco', `${Math.round(v.disco.usadoGb)} / ${Math.round(v.disco.totalGb)} GB`,
+      (v.disco.usadoGb / v.disco.totalGb) * 100));
+  $('metricas').innerHTML = linhas.join('') || '<span class="legenda">lendo vitais…</span>';
+
+  const timers = e.timers || [];
+  $('cartao-timers').style.display = timers.length ? 'flex' : 'none';
+  $('timers').innerHTML = timers.map((t) => {
+    const restante = new Date(t.endsAt).getTime() - Date.now();
+    const total = t.durationMs || 1;
+    return `<div style="display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;justify-content:space-between;font:400 11.5px/1 var(--corpo)">
+        <span style="color:rgba(232,234,236,.7)">${t.label || 'timer'}</span>
+        <span>${duracao(restante)}</span></div>
+      <div class="barra"><span style="width:${100 - (restante / total) * 100}%"></span></div>
+    </div>`;
+  }).join('');
+
+  const menu = [
+    ['Comandos de hoje', e.uso?.comandos ?? 0],
+    ['Tarefas abertas', e.tasks?.total ?? 0],
+    ['Timers rodando', timers.length],
+    ['Lembretes', (e.reminders || []).length],
+    ['Notas no vault', (e.vault || []).length],
+    ['Tools executadas', (e.activity || []).length],
+  ];
+  $('nav').innerHTML = menu.map(([label, meta]) =>
+    `<div class="nav-item"><span class="ponto"></span>
+     <span style="font:400 14px/1 var(--corpo);flex:1;color:rgba(232,234,236,.9)">${label}</span>
+     <span style="font:500 11px/1 var(--cond);letter-spacing:.1em;color:var(--fraco)">${meta}</span></div>`).join('');
+}
+
+// ── Fluxo de estado ──────────────────────────────────────────────────────
+// O EventSource reconecta sozinho quando o daemon cai e volta; so avisamos
+// na tela pra diferenca nao passar por "tudo parado".
+let fonte;
+function conectar() {
+  fonte = new EventSource('/estado');
+  fonte.onmessage = (ev) => desenhar(JSON.parse(ev.data));
+  fonte.onerror = () => { $('status').textContent = 'Sem conexão com o núcleo'; ondas.style.opacity = .06; };
+}
+conectar();
+
+// ── Gaveta ───────────────────────────────────────────────────────────────
+const gaveta = $('gaveta'), veu = $('veu');
+const abrir = (sim) => {
+  gaveta.classList.toggle('aberta', sim);
+  veu.style.opacity = sim ? 1 : 0;
+  veu.style.pointerEvents = sim ? 'auto' : 'none';
+};
+$('abrir').onclick = () => abrir(true);
+$('fechar').onclick = () => abrir(false);
+veu.onclick = () => abrir(false);
+document.addEventListener('keydown', (e) => e.key === 'Escape' && abrir(false));
+
+// ── Caixa de comando ─────────────────────────────────────────────────────
+$('entrada').onsubmit = async (ev) => {
+  ev.preventDefault();
+  const campo = $('texto');
+  const texto = campo.value.trim();
+  if (!texto) return;
+
+  campo.value = '';
+  campo.disabled = true;
+  $('enviar').textContent = '···';
+  $('transcricao').textContent = texto;
+  try {
+    const r = await fetch('/comando', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ texto }),
+    }).then((x) => x.json());
+    if (!r.ok) $('transcricao').textContent = r.erro;
+  } catch (err) {
+    $('transcricao').textContent = 'Falhou: ' + err.message;
+  } finally {
+    campo.disabled = false;
+    $('enviar').textContent = 'Enviar';
+    campo.focus();
+  }
+};
+$('texto').focus();
+</script>
+</body>
+</html>
