@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import pc from 'picocolors';
 import { config } from '../src/core/config.js';
-import { loadSkills, buildToolIndex } from '../src/core/registry.js';
+import { loadSkills, buildToolIndex, skillsDeOutraPlataforma } from '../src/core/registry.js';
 import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt } from '../src/voice/stt.js';
 import { resolverSom } from '../src/skills/timer.js';
 import { run } from '../src/platform/win32.js';
@@ -54,6 +54,15 @@ async function main() {
     const skills = await loadSkills();
     const index = buildToolIndex(skills);
     ok(`${skills.length} skills carregadas, ${index.size} tools disponiveis`);
+
+    // Fora do Windows a contagem cai de 17 pra 6, e sem explicar isso parece
+    // que as skills sumiram. Elas existem — e a maquina que nao serve pra elas.
+    const doWindows = await skillsDeOutraPlataforma('win32');
+    if (doWindows.length && process.platform !== 'win32') {
+      const nTools = doWindows.reduce((n, s) => n + s.tools.length, 0);
+      warn(`+${doWindows.length} skills (${nTools} tools) so rodam no Windows: ${doWindows.map((s) => s.name).join(', ')}`);
+      console.log(pc.dim('       Elas controlam a maquina local. Na nuvem, quem as roda e o agente do PC.'));
+    }
     for (const skill of skills) {
       console.log(pc.dim(`       ${skill.name.padEnd(14)} ${skill.tools.length} tools`));
     }

@@ -25,6 +25,9 @@ let recorder = null;
 
 export default {
   name: 'capture',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Tirar screenshots, gravar a tela e fazer clips.',
   tools: [
     {

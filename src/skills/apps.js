@@ -207,6 +207,9 @@ function sugestoes(name, quantas = 4) {
 
 export default {
   name: 'apps',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Abrir e fechar aplicativos do Windows.',
   tools: [
     {

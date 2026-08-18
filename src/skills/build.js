@@ -51,6 +51,9 @@ async function githubApi(endpoint, options = {}) {
 
 export default {
   name: 'build',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Compilar projetos, rodar testes, git e GitHub Actions.',
   tools: [
     {

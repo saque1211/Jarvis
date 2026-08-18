@@ -291,6 +291,9 @@ export async function checkDueTimers() {
 
 export default {
   name: 'timer',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Timers de contagem regressiva, cronometros e pomodoro.',
   tools: [
     {

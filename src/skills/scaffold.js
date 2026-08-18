@@ -75,6 +75,9 @@ export function ${hookName}() {
 
 export default {
   name: 'scaffold',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Gerar projetos, componentes React e boilerplate de codigo.',
   tools: [
     {

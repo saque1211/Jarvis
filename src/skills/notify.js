@@ -97,6 +97,9 @@ export async function checkDueReminders() {
 
 export default {
   name: 'notify',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Lembretes, alarmes, deadlines e notificacoes do Windows.',
   tools: [
     {

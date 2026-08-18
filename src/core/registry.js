@@ -9,8 +9,17 @@ const SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  * Uma skill e um modulo que exporta { name, description, tools: [...] }.
  * Cada tool tem { name, description, input_schema, handler }.
  * O handler recebe (input, ctx) e devolve string ou objeto serializavel.
+ *
+ * Uma skill pode declarar `platform: 'win32'`. Sem isso, o JARVIS rodando num
+ * servidor Linux ofereceria ao modelo tools que so funcionam no Windows — e
+ * ele as escolheria, porque a descricao promete o que ele precisa. Errar assim
+ * gasta uma ida ao modelo e devolve erro no lugar de resposta.
+ *
+ * `platform` do parametro permite montar o conjunto de OUTRA maquina: o
+ * servidor precisa saber quais tools o agente do PC oferece pra rotear pra la.
+ * `'*'` carrega tudo, ignorando a marcacao.
  */
-export async function loadSkills() {
+export async function loadSkills({ platform = process.platform } = {}) {
   const skills = [];
   const files = fs
     .readdirSync(SKILLS_DIR)
@@ -23,10 +32,17 @@ export async function loadSkills() {
     if (!skill?.name || !Array.isArray(skill.tools)) {
       throw new Error(`Skill invalida em ${file}: precisa exportar default { name, tools[] }`);
     }
+    if (platform !== '*' && skill.platform && skill.platform !== platform) continue;
     skills.push(skill);
   }
 
   return skills;
+}
+
+/** As skills que esta maquina NAO consegue rodar — o servidor delega ao agente. */
+export async function skillsDeOutraPlataforma(platform) {
+  const todas = await loadSkills({ platform: '*' });
+  return todas.filter((s) => s.platform === platform && s.platform !== process.platform);
 }
 
 /** Achata as skills num mapa nome-da-tool -> { handler, skill }. */

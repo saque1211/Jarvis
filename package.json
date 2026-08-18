@@ -11,6 +11,7 @@
     "jarvis": "node src/index.js",
     "listen": "node src/voice/daemon.js",
     "hud": "node scripts/hud.js",
+    "cloud": "node scripts/cloud.js",
     "doctor": "node scripts/doctor.js",
     "llm:test": "node scripts/llm-test.js",
     "test:voice": "node scripts/test-voice.js",

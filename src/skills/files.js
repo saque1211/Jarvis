@@ -69,6 +69,9 @@ function human(bytes) {
 
 export default {
   name: 'files',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Criar, mover, copiar, listar e organizar arquivos e pastas.',
   tools: [
     {

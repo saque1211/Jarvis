@@ -58,6 +58,9 @@ function readBookmarks(browser) {
 
 export default {
   name: 'browser',
+  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
+  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
+  platform: 'win32',
   description: 'Abrir links, conjuntos de abas e consultar bookmarks.',
   tools: [
     {
