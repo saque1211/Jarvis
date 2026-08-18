@@ -83,7 +83,7 @@ export async function checkDueReminders() {
     // Marca como disparado ANTES de notificar: se o toast falhar e a excecao
     // subir, o lembrete venceria de novo no proximo tick, pra sempre.
     try {
-      await toast('JARVIS', reminder.message);
+      await toast(config.nome, reminder.message);
     } catch {
       // O daemon ainda fala a mensagem mesmo sem o toast visual.
     }

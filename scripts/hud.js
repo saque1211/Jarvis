@@ -40,7 +40,7 @@ async function main() {
   const hud = startHud({ port: PORTA });
   const url = `http://127.0.0.1:${PORTA}`;
 
-  console.log(pc.bold(pc.cyan('\n  JARVIS — HUD\n')));
+  console.log(pc.bold(pc.cyan('\n  VEXIS — HUD\n')));
   console.log(`  ${pc.green('no ar')}  ${url}`);
   const ip = ipDaRede();
   if (ip) console.log(pc.dim(`  celular: http://${ip}:${PORTA}`));
@@ -54,7 +54,7 @@ async function main() {
       startBackground(navegador, [
         `--app=${url}`,
         '--window-size=1280,800',
-        `--user-data-dir=${os.tmpdir()}/jarvis-hud`,
+        `--user-data-dir=${os.tmpdir()}/vexis-hud`,
       ]);
       console.log(pc.dim(`  janela: ${navegador.split('/').pop()}`));
     } else {

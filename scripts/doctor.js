@@ -34,7 +34,7 @@ async function hasBinary(name) {
 }
 
 async function main() {
-  console.log(pc.bold(pc.cyan('\n  JARVIS — diagnostico\n')));
+  console.log(pc.bold(pc.cyan('\n  VEXIS — diagnostico\n')));
 
   console.log(pc.bold('  Plataforma'));
   if (process.platform === 'win32') ok('Windows detectado');

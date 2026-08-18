@@ -274,7 +274,7 @@ export async function checkDueTimers() {
     // se ela falhar e a gente propagar, o timer vence de novo no proximo tick
     // e fica repetindo pra sempre.
     try {
-      await toast('JARVIS', message);
+      await toast(config.nome, message);
       if (timer.alarm) await tocarAlarme();
     } catch {
       // Segue em frente — quem chamou ainda recebe o anuncio pra falar.

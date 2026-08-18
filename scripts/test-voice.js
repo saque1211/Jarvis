@@ -23,7 +23,7 @@ const ok = (msg) => console.log(`  ${pc.green('OK')}   ${msg}`);
 const fail = (msg) => console.log(`  ${pc.red('X')}    ${msg}`);
 
 async function main() {
-  console.log(pc.bold(pc.cyan('\n  JARVIS — teste de voz\n')));
+  console.log(pc.bold(pc.cyan('\n  VEXIS — teste de voz\n')));
 
   // 1. Gravador
   let PvRecorder;

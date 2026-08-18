@@ -76,7 +76,7 @@ const dolar = (v) => (v < 0.01 ? `$${v.toFixed(5)}` : `$${v.toFixed(4)}`);
 async function main() {
   const comando = process.argv.slice(2).join(' ').trim() || 'que horas sao';
 
-  console.log(pc.bold(pc.cyan('\n  JARVIS — teste do cerebro\n')));
+  console.log(pc.bold(pc.cyan('\n  VEXIS — teste do cerebro\n')));
 
   const { provider, keyName, apiKey, model, fastModel, toolBudget } = config.llm;
 

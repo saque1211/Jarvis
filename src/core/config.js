@@ -86,6 +86,11 @@ const PROVIDER = pickProvider();
 export const config = {
   root: ROOT,
 
+  // Como ele se chama: aparece no system prompt, no HUD, nas notificacoes e
+  // nos banners. As variaveis de ambiente continuam com prefixo JARVIS_ de
+  // proposito — renomea-las quebraria todo .env ja escrito, em silencio.
+  nome: process.env.JARVIS_NOME || 'VEXIS',
+
   llm: {
     provider: PROVIDER,
     apiKey: KEY_OF[PROVIDER],

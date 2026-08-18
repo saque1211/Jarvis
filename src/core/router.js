@@ -6,7 +6,7 @@ import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
 import { recordActivity, recordCommand, writeRuntime } from './state.js';
 
-const SYSTEM = `Voce e o JARVIS, assistente pessoal do usuario, rodando na maquina dele (Windows 11).
+const SYSTEM = `Voce e o ${config.nome}, assistente pessoal do usuario, rodando na maquina dele (Windows 11).
 
 Mentalidade: SPEAK. ROUTE. REMEMBER. REPEAT.
 
@@ -49,7 +49,7 @@ async function getRuntime() {
 export async function route(userInput, options = {}) {
   if (!config.llm.apiKey) {
     throw new Error(
-      `Falta ${config.llm.keyName} no .env — o JARVIS nao tem cerebro sem isso.`
+      `Falta ${config.llm.keyName} no .env — o ${config.nome} nao tem cerebro sem isso.`
     );
   }
 
@@ -112,7 +112,7 @@ export async function route(userInput, options = {}) {
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
       recordCommand(userInput, reply, usage);
-      appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
+      appendDaily('Comando', `**Voce:** ${userInput}\n\n**${config.nome}:** ${reply}`);
       return { reply, steps, timings, usage };
     }
 
@@ -189,7 +189,7 @@ export async function route(userInput, options = {}) {
         setLastReply(reply);
         writeRuntime({ lastTranscript: userInput, lastReply: reply });
         recordCommand(userInput, reply, usage);
-        appendDaily('Comando', `**Voce:** ${userInput}\n\n**JARVIS:** ${reply}`);
+        appendDaily('Comando', `**Voce:** ${userInput}\n\n**${config.nome}:** ${reply}`);
         return { reply, steps, timings, usage };
       }
     }

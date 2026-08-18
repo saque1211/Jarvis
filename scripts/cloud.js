@@ -16,7 +16,7 @@ import { config } from '../src/core/config.js';
 const PORTA = Number(process.env.PORT || process.env.JARVIS_CLOUD_PORT || 8080);
 
 async function main() {
-  console.log(pc.bold(pc.cyan('\n  JARVIS — nuvem\n')));
+  console.log(pc.bold(pc.cyan('\n  VEXIS — nuvem\n')));
 
   const problemas = [];
   if (!process.env.JARVIS_CLOUD_TOKEN) {

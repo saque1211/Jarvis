@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>JARVIS</title>
+<title>VEXIS</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 /* Paleta e tipografia vem do mockup. Fonte da Google com queda pra system-ui:
@@ -102,7 +102,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   <div style="display:flex;gap:7px">
     <span class="quad"></span><span class="quad"></span><span class="quad"></span>
   </div>
-  <span class="rotulo">jarvis.exe — núcleo local</span>
+  <span class="rotulo">vexis.exe — núcleo local</span>
   <span class="rotulo" id="relogio" style="letter-spacing:.16em;text-transform:none">--:--</span>
 </div>
 
@@ -145,7 +145,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
       <i class="tl"></i><i class="br"></i>
     </div>
     <div style="display:flex;flex-direction:column;gap:3px">
-      <span style="font:600 15px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase">Jarvis</span>
+      <span style="font:600 15px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase">Vexis</span>
       <div style="display:flex;align-items:center;gap:6px">
         <span id="pisca" style="width:5px;height:5px;background:var(--accent);animation:jv-blink 1.6s ease-in-out infinite"></span>
         <span id="status-curto" style="font:400 11px/1 var(--corpo);color:rgba(232,234,236,.5)">conectando…</span>
@@ -201,7 +201,7 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
   </div>
 
   <form id="entrada">
-    <input id="texto" placeholder='Digite um comando ou diga "jarvis"…' autocomplete="off">
+    <input id="texto" placeholder='Digite um comando…' autocomplete="off">
     <button class="botao" type="submit" id="enviar">Enviar</button>
   </form>
 </div>
@@ -253,7 +253,7 @@ function desenhar(e) {
   // A fala do JARVIS tem precedencia sobre o que voce disse: e a informacao
   // mais nova, e e ela que voce esta ouvindo enquanto olha pra tela.
   $('transcricao').textContent =
-    e.voice?.lastReply || e.voice?.lastTranscript || 'Diga "jarvis" ou digite um comando.';
+    e.voice?.lastReply || e.voice?.lastTranscript || 'Diga a palavra de ativação ou digite um comando.';
   $('ultima-resposta').textContent = e.voice?.lastReply || '—';
   $('wake').textContent = '"' + (e.voice?.wakeWord || 'jarvis') + '"';
   $('stt').textContent = e.voice?.sttEngine || '—';
