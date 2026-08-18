@@ -3,7 +3,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import pc from 'picocolors';
 import { startCloud } from '../src/cloud/server.js';
-import { ttsConfigurado } from '../src/cloud/tts.js';
+import { motorDeVoz } from '../src/cloud/tts.js';
 import { loadSkills, toolSpecs } from '../src/core/registry.js';
 import { config } from '../src/core/config.js';
 
@@ -49,9 +49,8 @@ async function main() {
 
   console.log(`  provedor   ${config.llm.provider} · ${config.llm.model}`);
   console.log(`  transcricao Groq Whisper (nuvem)`);
-  console.log(
-    `  fala       ${ttsConfigurado() ? 'Piper' : pc.yellow('sem Piper — responde so por texto')}`
-  );
+  const motor = motorDeVoz();
+  console.log(`  fala       ${motor || pc.yellow('nenhuma voz configurada — responde so por texto')}`);
   console.log(`  skills     ${skills.length} (${tools.length} tools) — ${skills.map((s) => s.name).join(', ')}`);
   console.log(
     pc.dim(`\n  As tools de Windows nao entram aqui: elas controlam uma maquina`)

@@ -221,6 +221,24 @@ export const config = {
     rate: process.env.EDGE_TTS_RATE || '+0%',
     volume: process.env.EDGE_TTS_VOLUME || '+0%',
   },
+  elevenLabs: {
+    apiKey: process.env.ELEVENLABS_API_KEY,
+    // ID da voz, nao o nome: nomes se repetem entre contas. Veja os seus com
+    // `npm run voices:eleven`.
+    voiceId: process.env.ELEVENLABS_VOICE_ID,
+    // flash_v2_5 e o de menor latencia deles e fala portugues. Pra assistente
+    // de voz, esperar meio segundo a mais incomoda mais do que a diferenca de
+    // qualidade pro multilingual_v2 — que fica disponivel trocando aqui.
+    modelo: process.env.ELEVENLABS_MODEL || 'eleven_flash_v2_5',
+    // MP3 e o unico formato disponivel em TODOS os planos; PCM e so nos caros.
+    formato: process.env.ELEVENLABS_FORMAT || 'mp3_44100_128',
+    // 0 = expressiva e imprevisivel, 1 = monotona e constante. Assistente
+    // quer previsibilidade: a mesma frase deve soar igual toda vez.
+    estabilidade: Number(process.env.ELEVENLABS_STABILITY ?? 0.5),
+    similaridade: Number(process.env.ELEVENLABS_SIMILARITY ?? 0.75),
+    estilo: Number(process.env.ELEVENLABS_STYLE ?? 0),
+  },
+
   fishAudio: {
     apiKey: process.env.FISH_AUDIO_API_KEY,
     // O reference_id da voz, o que aparece na pagina dela.

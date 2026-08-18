@@ -65,6 +65,7 @@ npm run hud                # HUD como app (janela sem barra de endereço)
 npm run doctor             # diagnóstico de setup
 npm run test:voice         # mic + STT + TTS isolados do resto
 npm run voices             # lista e fala com cada voz do Windows
+npm run voices:eleven      # vozes do ElevenLabs (add "-- --ouvir" pra escutar)
 npm run whisper:server     # whisper.cpp com o modelo carregado, pra latência
 npm run whisper:model      # baixa o modelo do whisper que cabe na RAM
 npm run llm:test           # uma chamada real: tools, tempo, tokens e custo

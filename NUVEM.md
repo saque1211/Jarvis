@@ -42,7 +42,16 @@ git clone <seu-repo> /opt/jarvis && cd /opt/jarvis
 npm install --omit=dev
 ```
 
-Voz do servidor (opcional, mas sem ela o Pi fica mudo):
+Voz do servidor. Duas opções — o ElevenLabs é pago e melhor, o Piper é grátis
+e local. Configurando os dois, o Piper vira a rede de segurança pra quando a
+cota do mês acabar:
+
+```
+ELEVENLABS_API_KEY=sua-chave
+ELEVENLABS_VOICE_ID=id-da-voz     # npm run voices:eleven
+```
+
+E/ou o Piper (grátis, roda no próprio VPS):
 
 ```bash
 sudo mkdir -p /opt/piper && cd /opt/piper
@@ -146,7 +155,8 @@ sozinho com a TV ligada. Wake word é fácil de acrescentar depois.
 | sintoma | causa |
 |---|---|
 | `401` em tudo | token diferente entre `/etc/jarvis.env` e o `.env` do servidor |
-| responde texto, não sai som | Piper não achado no servidor — confira `PIPER_VOICE` |
+| responde texto, não sai som | nenhuma voz configurada — confira `ELEVENLABS_*` ou `PIPER_VOICE` |
+| som só no Pi não sai, mas o servidor diz que falou | falta `mpg123` no Pi (o ElevenLabs manda MP3): `sudo apt install mpg123` |
 | `nao captei fala` sempre | microfone errado; veja com `arecord -l` e ajuste o `default` no `.asoundrc` |
 | corta no meio da frase | aumente `SILENCIO_MS` no `jarvis-pi.py` |
 | demora muito | veja se o VPS está longe de você; a viagem do áudio domina a latência |

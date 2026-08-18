@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import { sintetizarBytes, isConfigured as elevenConfigured } from '../integrations/elevenlabs.js';
 
 /**
  * Fala na nuvem, com Piper.
@@ -18,7 +19,14 @@ const BINARIO = process.env.PIPER_BIN || 'piper';
 const VOZ = process.env.PIPER_VOICE || '/opt/piper/pt_BR-faber-medium.onnx';
 
 export function ttsConfigurado() {
-  return fs.existsSync(VOZ);
+  return elevenConfigured() || fs.existsSync(VOZ);
+}
+
+/** Qual voz o servidor vai usar, pro banner nao mentir. */
+export function motorDeVoz() {
+  if (elevenConfigured()) return 'ElevenLabs';
+  if (fs.existsSync(VOZ)) return 'Piper';
+  return null;
 }
 
 /**
@@ -29,9 +37,20 @@ export function ttsConfigurado() {
  */
 export async function sintetizar(texto) {
   if (!texto?.trim()) return null;
-  if (!ttsConfigurado()) return null;
 
-  const saida = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
+  // ElevenLabs primeiro. Falhando — cota do mes, rede, chave — o Piper assume:
+  // o Pi ficar mudo e pior que ele falar com voz pior.
+  if (elevenConfigured()) {
+    try {
+      return await sintetizarBytes(texto);
+    } catch (err) {
+      console.error(`[tts] ElevenLabs falhou, caindo pro Piper: ${err.message}`);
+    }
+  }
+
+  if (!fs.existsSync(VOZ)) return null;
+
+  const saida = path.join(os.tmpdir(), `vexis-${Date.now()}.wav`);
 
   try {
     await new Promise((resolve, reject) => {

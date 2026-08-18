@@ -8,7 +8,7 @@ RAM nao carregam o modelo do whisper (488 MB so pra abrir), e sintetizar voz
 nele leva segundos. O servidor faz as duas coisas em milissegundos.
 
 Depende so de coisas que ja vem no Raspberry Pi OS mais:
-    sudo apt install python3-pyaudio alsa-utils
+    sudo apt install python3-pyaudio alsa-utils mpg123
     pip install requests
 
 Configuracao em /etc/jarvis.env ou variaveis de ambiente:
@@ -158,12 +158,27 @@ def perguntar(wav):
 
 
 def falar(dados):
-    """Toca o WAV que voltou. aplay vem no Raspberry Pi OS, sem instalar nada."""
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+    """
+    Toca o audio que voltou, escolhendo o player pelo formato REAL do arquivo.
+
+    O servidor manda WAV quando usa Piper e MP3 quando usa ElevenLabs, e o
+    aplay nao toca MP3 — confiar na extensao daria silencio sem erro. Os
+    primeiros bytes dizem a verdade: "RIFF" e WAV; "ID3" ou 0xFF 0xFB e MP3.
+    """
+    e_mp3 = dados[:3] == b"ID3" or dados[:2] == b"\xff\xfb"
+    sufixo = ".mp3" if e_mp3 else ".wav"
+    # mpg123 vem no Raspberry Pi OS; se faltar, o apt resolve numa linha.
+    player = ["mpg123", "-q"] if e_mp3 else ["aplay", "-q"]
+
+    with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as f:
         f.write(dados)
         caminho = f.name
     try:
-        subprocess.run(["aplay", "-q", caminho], check=False)
+        r = subprocess.run(player + [caminho], capture_output=True)
+        if r.returncode != 0:
+            log("erro", f"{player[0]} falhou: {r.stderr.decode()[:120]}")
+            if e_mp3:
+                log("dica", "instale com: sudo apt install mpg123")
     finally:
         os.unlink(caminho)
 

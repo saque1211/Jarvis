@@ -5,6 +5,7 @@ import { config } from '../src/core/config.js';
 import { loadSkills, buildToolIndex, skillsDeOutraPlataforma } from '../src/core/registry.js';
 import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt } from '../src/voice/stt.js';
 import { resolverSom } from '../src/skills/timer.js';
+import { isConfigured as elevenPronto, cota as elevenCota } from '../src/integrations/elevenlabs.js';
 import { run } from '../src/platform/win32.js';
 import { isConfigured as spotifyReady } from '../src/integrations/spotify.js';
 
@@ -216,6 +217,24 @@ async function main() {
     console.log(pc.dim('       cai no TTS local se a API falhar'));
   } else if (config.fishAudio.apiKey || config.fishAudio.voiceId) {
     fail('Fish Audio pela metade — precisa de FISH_AUDIO_API_KEY e FISH_AUDIO_VOICE_ID');
+  }
+
+  // A voz paga entra ANTES do comando local na cadeia real — o diagnostico
+  // precisa refletir a ordem de verdade, senao diz que fala com Piper quando
+  // quem fala e o ElevenLabs.
+  if (elevenPronto()) {
+    ok(`TTS: ElevenLabs (voz ${config.elevenLabs.voiceId.slice(0, 8)}…, ${config.elevenLabs.modelo})`);
+    const c = await elevenCota();
+    if (c) {
+      const restante = c.limite - c.usados;
+      const linha = `  cota: ${c.usados.toLocaleString('pt-BR')} de ${c.limite.toLocaleString('pt-BR')} caracteres (plano ${c.plano})`;
+      // Cota acabando e o unico jeito da voz boa sumir sem nada quebrar: a
+      // cadeia cai pro proximo provedor em silencio, e a pessoa so estranha
+      // que a voz mudou.
+      if (restante < c.limite * 0.1) {
+        warn(`${linha} — quase no fim, a voz vai cair pro provedor seguinte`);
+      } else ok(linha);
+    } else warn('  nao consegui ler a cota (chave invalida ou sem rede)');
   }
 
   if (config.voice.ttsCommand) {

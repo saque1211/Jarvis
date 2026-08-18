@@ -4,6 +4,7 @@ import os from 'node:os';
 import { run, ps, psQuote } from '../platform/win32.js';
 import { config } from '../core/config.js';
 import { pushAudio } from './speaker.js';
+import { synthesize as elevenSynthesize, isConfigured as elevenConfigured } from '../integrations/elevenlabs.js';
 import { synthesize as fishSynthesize, isConfigured as fishConfigured } from '../integrations/fish-audio.js';
 import { synthesize as edgeSynthesize, isConfigured as edgeConfigured } from '../integrations/edge-tts.js';
 
@@ -126,6 +127,9 @@ export async function speak(text) {
     // sair do mesmo jeito — mudo por causa de API fora do ar seria pior que
     // uma voz feia.
     for (const [nome, configurado, sintetizar] of [
+      // Ordem = preferencia. O ElevenLabs vem primeiro por ser o melhor; se a
+      // cota do mes acabar, os de baixo assumem sem ninguem perceber.
+      ['ElevenLabs', elevenConfigured, elevenSynthesize],
       ['Fish Audio', fishConfigured, fishSynthesize],
       ['Edge', edgeConfigured, edgeSynthesize],
     ]) {
@@ -163,7 +167,11 @@ export async function speak(text) {
  * SoundPlayer so entende WAV. Como TTS externo costuma cuspir MP3, o formato e
  * detectado pelo conteudo — extensao mente, os primeiros bytes nao.
  */
-async function playWav(file) {
+/**
+ * Toca um arquivo de audio. Exportado porque os scripts de audicao de voz
+ * precisam tocar sem passar pela cadeia inteira do `speak`.
+ */
+export async function playWav(file) {
   try {
     const cabecalho = Buffer.alloc(4);
     const fd = fs.openSync(file, 'r');

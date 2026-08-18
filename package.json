@@ -20,6 +20,7 @@
     "apps:find": "node scripts/find-apps.js",
     "sons": "node scripts/sons.js",
     "voices": "node scripts/voices.js",
+    "voices:eleven": "node scripts/voices-eleven.js",
     "voices:edge": "node scripts/voices-edge.js",
     "voice:piper": "node scripts/setup-piper.js",
     "hud:state": "node scripts/hud-state.js",
