@@ -321,7 +321,15 @@ let fonte;
 function conectar() {
   fonte = new EventSource('/estado');
   fonte.onmessage = (ev) => desenhar(JSON.parse(ev.data));
-  fonte.onerror = () => { $('status').textContent = 'Sem conexão com o núcleo'; ondas.style.opacity = .06; };
+  // O EventSource reconecta sozinho, entao "sem conexao" quase sempre quer
+  // dizer que o processo do servidor caiu ou foi fechado — nao que a rede
+  // piscou. Dizer o que fazer poupa a caçada.
+  fonte.onerror = () => {
+    $('status').textContent = 'Sem conexão com o núcleo';
+    $('transcricao').textContent =
+      'O servidor não está respondendo. Ele ainda está rodando? Suba de novo com: npm run hud';
+    ondas.style.opacity = .06;
+  };
 }
 conectar();
 

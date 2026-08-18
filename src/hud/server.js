@@ -29,6 +29,22 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   let vitais = null;
 
   const servidor = http.createServer(async (req, res) => {
+    try {
+      await atender(req, res);
+    } catch (err) {
+      // Qualquer rota que estoure devolve erro legivel em vez de deixar a
+      // requisicao pendurada. Navegador esperando pra sempre nao mostra nada.
+      console.error(`[hud] ${req.method} ${req.url}: ${err.message}`);
+      if (!res.headersSent) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ erro: err.message }));
+      } else {
+        res.end();
+      }
+    }
+  });
+
+  async function atender(req, res) {
     const url = new URL(req.url, 'http://x');
 
     if (url.pathname === '/') {
@@ -41,13 +57,25 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
     // Fluxo de estado. Sem cache e sem buffer de proxy: um HUD que mostra
     // estado de 30s atras e pior que um HUD que nao abre.
     if (url.pathname === '/estado') {
+      // Monta o primeiro estado ANTES de escrever o cabecalho: falhando depois
+      // do 200, a resposta fica pendurada e o navegador espera pra sempre — sem
+      // erro, sem tela, sem pista.
+      let primeiro;
+      try {
+        primeiro = JSON.stringify({ ...snapshot(), vitais });
+      } catch (err) {
+        res.writeHead(500, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ erro: `nao consegui ler o estado: ${err.message}` }));
+        return;
+      }
+
       res.writeHead(200, {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
         connection: 'keep-alive',
         'x-accel-buffering': 'no',
       });
-      res.write(`data: ${JSON.stringify({ ...snapshot(), vitais })}\n\n`);
+      res.write(`data: ${primeiro}\n\n`);
       clientes.add(res);
       req.on('close', () => clientes.delete(res));
       return;
@@ -73,11 +101,24 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
 
     res.writeHead(404);
     res.end();
-  });
+  }
 
+  // Uma falha ao montar o snapshot NAO pode derrubar o HUD. Ele roda dentro de
+  // um setInterval, e excecao em callback de timer nao tem quem pegue: sobe
+  // como uncaught e mata o processo. Do lado de fora isso aparece como "sem
+  // conexao com o nucleo" numa janela que continua aberta — o sintoma nao diz
+  // que o servidor morreu, e o terminal ja foi fechado.
   const emitir = () => {
     if (!clientes.size) return;
-    const linha = `data: ${JSON.stringify({ ...snapshot(), vitais })}\n\n`;
+
+    let linha;
+    try {
+      linha = `data: ${JSON.stringify({ ...snapshot(), vitais })}\n\n`;
+    } catch (err) {
+      console.error(`[hud] falhei ao montar o estado: ${err.message}`);
+      return;
+    }
+
     for (const c of clientes) {
       try {
         c.write(linha);
@@ -100,6 +141,13 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       // Fora do Windows, ou sem nvidia-smi: segue com o que tem.
     }
   }, CADENCIA_VITAIS);
+
+  // Rede e disco falham de formas que nao da pra prever uma a uma. O HUD e um
+  // painel: ficar de pe mostrando dado velho e melhor que sumir.
+  servidor.on('error', (err) => console.error(`[hud] erro no servidor: ${err.message}`));
+  process.on('unhandledRejection', (err) =>
+    console.error(`[hud] promessa rejeitada sem tratamento: ${err?.message || err}`)
+  );
 
   servidor.listen(port, host);
 
