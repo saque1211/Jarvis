@@ -102,8 +102,8 @@ export async function sintetizarBytes(texto) {
     if (res.status === 401) {
       throw new Error(
         `ELEVENLABS_API_KEY invalida ou revogada (a do .env tem ${formatoDaChave()}). ` +
-          'As chaves atuais comecam com "sk_" e tem 51 caracteres. Gere outra em ' +
-          'elevenlabs.io, Profile, API Keys.'
+          'Os dois formatos deles valem: 32 caracteres hexadecimais (antigo) ou ' +
+          '"sk_" com 51 (atual). Gere outra em elevenlabs.io/app/settings/api-keys.'
       );
     }
     if (res.status === 404) {
@@ -148,7 +148,7 @@ export async function listarVozes() {
     if (res.status === 401) {
       throw new Error(
         `ELEVENLABS_API_KEY invalida ou revogada (a do .env tem ${formatoDaChave()}). ` +
-          'As chaves atuais comecam com "sk_" e tem 51 caracteres.'
+          'Valem os dois formatos: 32 hexadecimais (antigo) ou "sk_" com 51 (atual).'
       );
     }
     throw new Error(`ElevenLabs respondeu ${res.status}`);

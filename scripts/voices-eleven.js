@@ -37,8 +37,9 @@ async function main() {
   // comum, porque os dois codigos vem do mesmo site.
   if (parecerIdDeVoz(config.elevenLabs.apiKey)) {
     console.log(`  ${pc.red('X')}  O valor em ELEVENLABS_API_KEY parece um ID de VOZ, nao uma chave.\n`);
-    console.log(pc.dim('     ID de voz  = 20 caracteres, vem da pagina da voz'));
-    console.log(pc.dim('     Chave      = 51 caracteres, comeca com "sk_", vem de Profile > API Keys\n'));
+    console.log(pc.dim('     ID de voz  = exatamente 20 caracteres, vem da pagina da voz'));
+    console.log(pc.dim('     Chave      = 32 hexadecimais (formato antigo) ou "sk_" com 51'));
+    console.log(pc.dim('                  caracteres (atual) — os dois valem\n'));
     console.log('     Conserto:');
     console.log(pc.cyan(`       Add-Content .env 'ELEVENLABS_VOICE_ID=${config.elevenLabs.apiKey}'`));
     console.log(pc.cyan("       Add-Content .env 'ELEVENLABS_API_KEY=sk_a-chave-de-verdade'\n"));
