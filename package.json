@@ -13,6 +13,7 @@
     "hud": "node scripts/hud.js",
     "cloud": "node scripts/cloud.js",
     "doctor": "node scripts/doctor.js",
+    "env:check": "node scripts/env-check.js",
     "llm:test": "node scripts/llm-test.js",
     "test:voice": "node scripts/test-voice.js",
     "whisper:server": "node scripts/whisper-server.js",

@@ -63,6 +63,7 @@ npm run jarvis             # modo conversa
 npm run listen             # daemon de voz (wake word)
 npm run hud                # HUD como app (janela sem barra de endereço)
 npm run doctor             # diagnóstico de setup
+npm run env:check          # acha linha colada/repetida no .env (add "-- --corrigir")
 npm run test:voice         # mic + STT + TTS isolados do resto
 npm run voices             # lista e fala com cada voz do Windows
 npm run voices:eleven      # vozes do ElevenLabs (add "-- --ouvir" pra escutar)
@@ -104,3 +105,8 @@ que custam um PowerShell cada) a cada 5s.
   caos, você abre a janela certa de uma vez.
 - **GPU** depende de `nvidia-smi`. Em AMD/Intel a tool reporta indisponível em
   vez de inventar número.
+- **`Add-Content` no PowerShell cola** o texto novo no fim da última linha
+  quando o arquivo não termina com quebra de linha. Já corrompeu o `.env` três
+  vezes aqui (STT_PROMPT, JARVIS_SPEAKER_PORT, ELEVENLABS_API_KEY), sempre com
+  o mesmo sintoma: a variável de cima fica com lixo e a de baixo some. É o que
+  o `npm run env:check` procura.
