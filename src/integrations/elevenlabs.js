@@ -19,6 +19,28 @@ export function isConfigured() {
 }
 
 /**
+ * Descreve a chave sem revelar: tamanho e prefixo bastam pra reconhecer os
+ * erros de colagem, que sao a causa mais comum de "invalida". Imprimir a chave
+ * inteira num diagnostico e como pedir pra ela vazar num print.
+ */
+export function formatoDaChave() {
+  const k = config.elevenLabs.apiKey;
+  if (!k) return 'ausente';
+
+  const pistas = [`${k.length} caracteres`];
+  if (k.startsWith('sk_')) pistas.push('prefixo sk_ (formato atual)');
+  else if (/^[0-9a-f]{32}$/i.test(k)) pistas.push('formato antigo, 32 hex');
+  else pistas.push(`comeca com "${k.slice(0, 3)}"`);
+
+  // Erros de colagem que passam despercebidos porque a chave "parece" certa.
+  if (/\s/.test(k)) pistas.push('CONTEM ESPACO — colagem quebrada');
+  if (/^["']|["']$/.test(k)) pistas.push('CONTEM ASPAS — tire do .env');
+  if (k.length < 20) pistas.push('CURTA DEMAIS — parece cortada');
+
+  return pistas.join(', ');
+}
+
+/**
  * Sintetiza e devolve os BYTES. O formato vem do provedor: MP3 por padrao,
  * porque e o unico disponivel em todos os planos deles — PCM e reservado aos
  * pagos mais caros, e escolher PCM por padrao quebraria pra quem assina o
@@ -64,7 +86,13 @@ export async function sintetizarBytes(texto) {
 
   if (!res.ok) {
     const corpo = await res.text();
-    if (res.status === 401) throw new Error('ELEVENLABS_API_KEY invalida ou revogada.');
+    if (res.status === 401) {
+      throw new Error(
+        `ELEVENLABS_API_KEY invalida ou revogada (a do .env tem ${formatoDaChave()}). ` +
+          'As chaves atuais comecam com "sk_" e tem 51 caracteres. Gere outra em ' +
+          'elevenlabs.io, Profile, API Keys.'
+      );
+    }
     if (res.status === 404) {
       throw new Error(
         `Voz "${voiceId}" nao existe nessa conta. Veja as suas com: npm run voices:eleven`
@@ -104,7 +132,12 @@ export async function listarVozes() {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
-    if (res.status === 401) throw new Error('ELEVENLABS_API_KEY invalida ou revogada.');
+    if (res.status === 401) {
+      throw new Error(
+        `ELEVENLABS_API_KEY invalida ou revogada (a do .env tem ${formatoDaChave()}). ` +
+          'As chaves atuais comecam com "sk_" e tem 51 caracteres.'
+      );
+    }
     throw new Error(`ElevenLabs respondeu ${res.status}`);
   }
 
