@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import pc from 'picocolors';
-import { listarVozes, cota, sintetizarBytes } from '../src/integrations/elevenlabs.js';
+import { listarVozes, cota, sintetizarBytes, parecerIdDeVoz } from '../src/integrations/elevenlabs.js';
 import { config } from '../src/core/config.js';
 import { playWav } from '../src/voice/tts.js';
 
@@ -30,6 +30,18 @@ async function main() {
     console.log(`  ${pc.red('X')}  Falta ELEVENLABS_API_KEY no .env.\n`);
     console.log(pc.dim('     Crie a chave em elevenlabs.io → Profile → API Keys'));
     console.log(pc.dim('     Depois: Add-Content .env \'ELEVENLABS_API_KEY=sua-chave\'\n'));
+    process.exit(1);
+  }
+
+  // Pega o erro antes da rede: ID de voz no lugar da chave e o engano mais
+  // comum, porque os dois codigos vem do mesmo site.
+  if (parecerIdDeVoz(config.elevenLabs.apiKey)) {
+    console.log(`  ${pc.red('X')}  O valor em ELEVENLABS_API_KEY parece um ID de VOZ, nao uma chave.\n`);
+    console.log(pc.dim('     ID de voz  = 20 caracteres, vem da pagina da voz'));
+    console.log(pc.dim('     Chave      = 51 caracteres, comeca com "sk_", vem de Profile > API Keys\n'));
+    console.log('     Conserto:');
+    console.log(pc.cyan(`       Add-Content .env 'ELEVENLABS_VOICE_ID=${config.elevenLabs.apiKey}'`));
+    console.log(pc.cyan("       Add-Content .env 'ELEVENLABS_API_KEY=sk_a-chave-de-verdade'\n"));
     process.exit(1);
   }
 

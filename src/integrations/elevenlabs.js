@@ -37,7 +37,20 @@ export function formatoDaChave() {
   if (/^["']|["']$/.test(k)) pistas.push('CONTEM ASPAS — tire do .env');
   if (k.length < 20) pistas.push('CURTA DEMAIS — parece cortada');
 
+  // ID de voz tem exatamente 20 alfanumericos. Trocar um pelo outro e facil:
+  // as duas coisas sao "aquele codigo do ElevenLabs" e ficam em paginas
+  // diferentes do site. Sem apontar isso, a pessoa procura problema na chave
+  // certa e nunca acha.
+  if (parecerIdDeVoz(k)) {
+    pistas.push('ISTO PARECE UM ID DE VOZ, nao uma chave — vai em ELEVENLABS_VOICE_ID');
+  }
+
   return pistas.join(', ');
+}
+
+/** ID de voz: 20 alfanumericos, sem prefixo. Chave tem 51 e comeca com sk_. */
+export function parecerIdDeVoz(valor) {
+  return /^[A-Za-z0-9]{20}$/.test(String(valor || ''));
 }
 
 /**
