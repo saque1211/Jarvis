@@ -71,6 +71,21 @@ function acharColagem(linha, nomes) {
   };
 }
 
+/**
+ * Descreve uma linha solta sem vazar segredo. Texto comum aparece; o que tem
+ * cara de credencial vira so a forma, que ja basta pra pessoa reconhecer.
+ */
+function descrever(texto) {
+  const pareceSegredo =
+    /^(sk[-_]|xi-|gsk_|ghp_|Bearer )/i.test(texto) || /^[A-Za-z0-9_\-]{28,}$/.test(texto);
+
+  if (pareceSegredo) {
+    const prefixo = texto.slice(0, 3);
+    return `<parece uma CHAVE: ${texto.length} caracteres, comeca com "${prefixo}">`;
+  }
+  return `"${texto.length > 34 ? `${texto.slice(0, 34)}…` : texto}"`;
+}
+
 function analisar(linhas) {
   const problemas = [];
   const vistos = new Map();
@@ -82,7 +97,16 @@ function analisar(linhas) {
     if (!limpa || limpa.startsWith('#')) return;
 
     if (!limpa.includes('=')) {
-      problemas.push({ n, tipo: 'sem-igual', linha, msg: 'linha sem "=" — o dotenv ignora' });
+      // Linha sem "=" quase sempre e texto colado por engano — instrucao,
+      // mensagem, ou a propria chave sem o nome da variavel na frente. Ver o
+      // inicio distingue os casos, mas imprimir uma credencial num diagnostico
+      // que vira print seria trocar um problema por outro pior.
+      problemas.push({
+        n,
+        tipo: 'sem-igual',
+        linha,
+        msg: `linha sem "=" — o dotenv ignora: ${descrever(limpa)}`,
+      });
       return;
     }
 
@@ -177,13 +201,27 @@ function main() {
 
   const saida = [];
   linhas.forEach((linha, i) => {
-    const p = problemas.find((x) => x.n === i + 1 && x.conserto);
-    if (p) saida.push(...p.conserto);
-    else saida.push(linha);
+    const p = problemas.find((x) => x.n === i + 1);
+    if (p?.conserto) {
+      saida.push(...p.conserto);
+      return;
+    }
+    // Linha sem "=" nao faz nada no .env a nao ser confundir a proxima leitura.
+    // Sai comentada em vez de apagada: se era um valor colado errado, a pessoa
+    // ainda consegue recuperar do arquivo.
+    if (p?.tipo === 'sem-igual') {
+      saida.push(`# [env:check] linha ignorada pelo dotenv: ${linha.trim()}`);
+      return;
+    }
+    saida.push(linha);
   });
 
   fs.writeFileSync(ARQUIVO, `${saida.join('\n').replace(/\n+$/, '')}\n`, 'utf8');
-  console.log(`\n  ${pc.green('OK')}  ${separaveis.length} linha(s) separada(s), quebra final garantida`);
+  const comentadas = problemas.filter((p) => p.tipo === 'sem-igual').length;
+  console.log(
+    `\n  ${pc.green('OK')}  ${separaveis.length} linha(s) separada(s), ` +
+      `${comentadas} sem "=" comentada(s), quebra final garantida`
+  );
   console.log(pc.dim(`      copia do original em ${path.basename(backup)}\n`));
 }
 
