@@ -64,7 +64,24 @@ async function main() {
   try {
     vozes = await listarVozes();
   } catch (err) {
-    console.log(`  ${pc.red('X')}  ${err.message}\n`);
+    console.log(`  ${pc.yellow('--')}  ${err.message}\n`);
+
+    // Nao condena a chave sem testar o que realmente importa. Listar vozes e
+    // conveniencia; falar e a funcao. Uma chave restrita a text-to-speech
+    // falha na primeira e funciona na segunda.
+    if (err.talvezRestrita) {
+      console.log(pc.dim('     Testando se ela pelo menos FALA...'));
+      try {
+        const bytes = await sintetizarBytes('Teste.');
+        console.log(`  ${pc.green('OK')}  a chave sintetiza (${bytes.length} bytes) — ela serve pro VEXIS.\n`);
+        console.log('     A voz atual continua valendo. Pra trocar de voz, pegue o ID');
+        console.log('     na pagina da voz em elevenlabs.io e ponha em ELEVENLABS_VOICE_ID,');
+        console.log('     ou crie uma chave com permissao de leitura pra listar por aqui.\n');
+        return;
+      } catch (e2) {
+        console.log(`  ${pc.red('X')}  e nao sintetiza tambem: ${e2.message}\n`);
+      }
+    }
     process.exit(1);
   }
 

@@ -145,11 +145,17 @@ export async function listarVozes() {
     signal: AbortSignal.timeout(15000),
   });
   if (!res.ok) {
-    if (res.status === 401) {
-      throw new Error(
-        `ELEVENLABS_API_KEY invalida ou revogada (a do .env tem ${formatoDaChave()}). ` +
-          'Valem os dois formatos: 32 hexadecimais (antigo) ou "sk_" com 51 (atual).'
+    if (res.status === 401 || res.status === 403) {
+      // 401 aqui nao prova chave morta: o ElevenLabs deixa criar chave com
+      // permissao restrita, e uma que so tem text-to-speech recusa /voices
+      // mas FALA normalmente. Quem chama testa a sintese antes de condenar.
+      const err = new Error(
+        `Sem permissao pra listar vozes (a chave do .env tem ${formatoDaChave()}). ` +
+          'Ou ela esta revogada, ou foi criada com acesso restrito — nesse caso ' +
+          'ela ainda fala, so nao lista.'
       );
+      err.talvezRestrita = true;
+      throw err;
     }
     throw new Error(`ElevenLabs respondeu ${res.status}`);
   }
