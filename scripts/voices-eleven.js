@@ -79,7 +79,19 @@ async function main() {
         console.log('     ou crie uma chave com permissao de leitura pra listar por aqui.\n');
         return;
       } catch (e2) {
-        console.log(`  ${pc.red('X')}  e nao sintetiza tambem: ${e2.message}\n`);
+        // Cota estourada prova que a chave AUTENTICOU: o erro veio depois do
+        // portao. Dizer "e nao sintetiza tambem" logo abaixo de "pode estar
+        // revogada" faz as duas linhas somarem "sua chave e ruim", que e o
+        // oposto do que os dois erros juntos significam.
+        const semCota = /[Cc]ota/.test(e2.message);
+        if (semCota) {
+          console.log(`  ${pc.green('OK')}  a chave e VALIDA — ela passou pela autenticacao.`);
+          console.log(`  ${pc.yellow('--')}  ${e2.message}`);
+          console.log(pc.dim('\n     Assine em elevenlabs.io/app/subscription. Ate la o VEXIS'));
+          console.log(pc.dim('     continua falando: a voz cai pro provedor seguinte sozinha.\n'));
+        } else {
+          console.log(`  ${pc.red('X')}  e nao sintetiza tambem: ${e2.message}\n`);
+        }
       }
     }
     process.exit(1);
