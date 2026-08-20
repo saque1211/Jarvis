@@ -196,11 +196,6 @@ async function handleUtterance() {
     }
 
     const s = (ms) => `${(ms / 1000).toFixed(1)}s`;
-    log(
-      'tempo',
-      `${s(sttMs)} transcricao · ${s(timings.total)} resposta ` +
-        pc.dim(`(${heard.toFixed(1)}s de fala, ${s(config.voice.silenceMs)} de silencio esperado)`)
-    );
 
     // Pico contra chiado: quando essa distancia e curta, nenhum modelo salva a
     // transcricao — o problema esta no microfone, nao no whisper.
@@ -213,7 +208,43 @@ async function handleUtterance() {
     }
 
     writeRuntime({ voiceState: 'speaking', speakerListeners: listenerCount() });
-    await speak(reply);
+
+    // A sintese so entra na conta se for medida DEPOIS dela. Com voz de nuvem
+    // ela e outra ida a rede, e o log antigo — impresso antes do speak — dizia
+    // um total que nao existia. Quem espera na frente do computador espera
+    // ate o fim do audio, nao ate a resposta em texto.
+    const t1 = Date.now();
+    const fala = await speak(reply);
+    const falaMs = Date.now() - t1;
+
+    // Quebra por etapa: sem isso "esta demorando" nao tem onde ser atacado.
+    const partes = [`${s(sttMs)} transcricao`];
+    if (timings.preselect) partes.push(`${s(timings.preselect)} escolha`);
+    partes.push(`${s(timings.llm)} modelo`);
+    if (timings.tools) partes.push(`${s(timings.tools)} tools`);
+
+    // Voz de nuvem sao duas esperas seguidas — a rede sintetizando e o Windows
+    // tocando — e a segunda custa mais do que parece: cada MP3 sobe um
+    // PowerShell novo so pra dar play. Somadas num numero so, viram "demorou"
+    // sem dizer onde, e as duas se resolvem de jeitos opostos.
+    if (fala?.playerMs) {
+      const quem = fala.provedor ? ` (${fala.provedor})` : '';
+      partes.push(`${s(fala.sinteseMs)} voz${quem}`);
+      partes.push(`${s(fala.playerMs)} player`);
+    } else {
+      partes.push(`${s(falaMs)} fala`);
+    }
+
+    const totalMs = sttMs + timings.total + falaMs;
+    log(
+      'tempo',
+      `${pc.bold(s(totalMs))} do fim da sua frase ate o fim do audio  ` +
+        pc.dim(`(${partes.join(' · ')})`)
+    );
+    log(
+      'audio-in',
+      pc.dim(`${heard.toFixed(1)}s de fala + ${s(config.voice.silenceMs)} de silencio esperado`)
+    );
   } catch (err) {
     log('erro', pc.red(err.message), pc.red);
     await speak('Deu erro aqui. Confira o terminal.');

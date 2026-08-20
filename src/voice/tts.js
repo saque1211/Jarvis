@@ -99,10 +99,17 @@ async function speakCommand(text) {
 
 /**
  * Fala um texto. Serializa as chamadas: duas falas ao mesmo tempo viram ruido.
+ *
+ * Devolve quanto cada etapa custou. Quem chama pode ignorar; o daemon usa pra
+ * separar "a nuvem demorou pra sintetizar" de "o Windows demorou pra tocar".
+ * Sao dois problemas com solucoes opostas — e os dois somam no mesmo silencio,
+ * entao medir a fala inteira num numero so nao aponta nada.
  */
 export async function speak(text) {
-  if (!text || !config.voice.speakReplies) return;
-  if (speaking) return;
+  const medida = { provedor: null, sinteseMs: 0, playerMs: 0 };
+
+  if (!text || !config.voice.speakReplies) return medida;
+  if (speaking) return medida;
 
   // Markdown e emoji viram lixo sonoro na sintese.
   const clean = String(text)
@@ -119,7 +126,7 @@ export async function speak(text) {
     .trim()
     .slice(0, 800);
 
-  if (!clean) return;
+  if (!clean) return medida;
 
   speaking = true;
   try {
@@ -135,12 +142,23 @@ export async function speak(text) {
     ]) {
       if (!configurado()) continue;
       try {
+        const t = Date.now();
         const wav = await sintetizar(clean);
-        if (config.voice.speakerMode === 'phone' && pushAudio(wav, clean)) return;
+        medida.provedor = nome;
+        medida.sinteseMs = Date.now() - t;
+
+        if (config.voice.speakerMode === 'phone' && pushAudio(wav, clean)) return medida;
+
+        const tp = Date.now();
         await playWav(wav);
-        return;
+        medida.playerMs = Date.now() - tp;
+        return medida;
       } catch (err) {
         console.error(`[tts] ${nome} falhou, tentando a proxima voz: ${err.message}`);
+        // Zera: o tempo de um provedor que falhou nao pode aparecer como se
+        // fosse o custo do que acabou falando.
+        medida.provedor = null;
+        medida.sinteseMs = 0;
       }
     }
 
@@ -148,17 +166,24 @@ export async function speak(text) {
     // assim fechar a aba nao deixa o JARVIS mudo sem avisar.
     if (config.voice.speakerMode === 'phone') {
       const wav = await synthesizeLocal(clean);
-      if (pushAudio(wav, clean)) return;
+      if (pushAudio(wav, clean)) return medida;
       fs.rmSync(wav, { force: true });
     }
 
+    // Nos locais a sintese e a reproducao sao a mesma chamada: nao da pra
+    // separar, entao entra tudo como sintese em vez de inventar uma divisao.
+    const t = Date.now();
+    medida.provedor = config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI';
     if (config.voice.ttsCommand) await speakCommand(clean);
     else await speakSapi(clean);
+    medida.sinteseMs = Date.now() - t;
   } catch (err) {
     console.error(`[tts] ${err.message}`);
   } finally {
     speaking = false;
   }
+
+  return medida;
 }
 
 /**
@@ -181,16 +206,25 @@ export async function playWav(file) {
     const script =
       cabecalho.toString('ascii') === 'RIFF'
         ? `(New-Object System.Media.SoundPlayer ${psQuote(file)}).PlaySync()`
-        : // MediaPlayer toca MP3, mas abre de forma assincrona: sem esperar a
-          // duracao aparecer, o Play() sai antes do audio comecar.
+        : // MediaPlayer toca MP3, mas abre de forma assincrona: o Play() volta
+          // antes do audio acabar, entao o script precisa segurar o processo
+          // pela duracao da midia.
+          //
+          // Play() vem ANTES de saber a duracao: a versao anterior esperava o
+          // Open() terminar pra so entao comecar o audio, e esse tempo de
+          // abertura virava silencio na frente da fala. Depois desconta o que
+          // ja passou, senao ele entra duas vezes na conta.
           `Add-Type -AssemblyName PresentationCore
 $p = New-Object System.Windows.Media.MediaPlayer
 $p.Open([System.Uri]::new(${psQuote(file)}))
-$limite = (Get-Date).AddSeconds(10)
-while (-not $p.NaturalDuration.HasTimeSpan -and (Get-Date) -lt $limite) { Start-Sleep -Milliseconds 50 }
 $p.Play()
+$t0 = Get-Date
+$limite = $t0.AddSeconds(10)
+while (-not $p.NaturalDuration.HasTimeSpan -and (Get-Date) -lt $limite) { Start-Sleep -Milliseconds 20 }
 if ($p.NaturalDuration.HasTimeSpan) {
-  Start-Sleep -Milliseconds ($p.NaturalDuration.TimeSpan.TotalMilliseconds + 300)
+  $decorrido = ((Get-Date) - $t0).TotalMilliseconds
+  $resta = $p.NaturalDuration.TimeSpan.TotalMilliseconds - $decorrido + 150
+  if ($resta -gt 0) { Start-Sleep -Milliseconds ([int]$resta) }
 }
 $p.Close()`;
 
