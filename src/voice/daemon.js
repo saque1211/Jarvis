@@ -84,13 +84,21 @@ async function captureCommand(onParcial) {
   const minFrames = Math.ceil(config.voice.minCommandMs / frameMs);
 
   // Quantos frames de silencio bastam pra arriscar o palpite. Fica sempre
-  // ANTES do fim confirmado: e a diferenca entre os dois que vira tempo
-  // ganho. Perto demais de zero e ele dispara em pausa entre palavras e
-  // desperdica uma transcricao inteira.
-  const especularEm =
-    onParcial && config.voice.sttSpeculateMs > 0
-      ? Math.max(1, silenceFramesNeeded - Math.ceil(config.voice.sttSpeculateMs / frameMs))
-      : Infinity;
+  // ANTES do fim confirmado: e a diferenca entre os dois que vira tempo ganho.
+  //
+  // Dois travas. O piso de 250ms existe porque abaixo disso o "silencio" ainda
+  // e o intervalo entre duas palavras, e o palpite dispararia em toda
+  // respirada. E se as contas derem um ponto que nao esta antes do fim, o
+  // palpite e desligado: disparar no mesmo frame do break so gastaria uma
+  // transcricao inteira pra ganhar zero.
+  let especularEm = Infinity;
+  if (onParcial && config.voice.sttSpeculateMs > 0) {
+    const candidato = Math.max(
+      Math.ceil(250 / frameMs),
+      silenceFramesNeeded - Math.ceil(config.voice.sttSpeculateMs / frameMs)
+    );
+    if (candidato < silenceFramesNeeded) especularEm = candidato;
+  }
 
   let especulou = false;
   let parcialValida = false;
@@ -176,10 +184,11 @@ async function handleUtterance() {
 
   // Transcricao especulativa. O whisper nao transcreve em streaming: ele
   // processa a frase inteira de uma vez, e cortar o audio em pedacinhos so
-  // multiplicaria o custo. O que da pra economizar e a ESPERA — o daemon fica
-  // ~1s parado depois que voce cala a boca, so pra ter certeza de que acabou.
-  // Entao mandamos o audio pro whisper antes dessa certeza: se voce nao voltar
-  // a falar, a transcricao ja esta pronta quando a captura termina.
+  // multiplicaria o custo. O que da pra economizar e a ESPERA — o daemon passa
+  // o JARVIS_SILENCE_MS inteiro parado depois que voce cala a boca, so pra ter
+  // certeza de que acabou. Entao mandamos o audio pro whisper antes dessa
+  // certeza: se voce nao voltar a falar, a transcricao ja esta pronta quando a
+  // captura termina.
   //
   // So com servidor. Com whisper-cli cada palpite recarregaria o modelo do
   // disco, e o remedio custaria mais que a doenca.

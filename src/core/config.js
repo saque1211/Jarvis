@@ -83,6 +83,12 @@ function pickModel(provider) {
 
 const PROVIDER = pickProvider();
 
+// Fica fora do objeto porque o palpite do STT e uma FRACAO dele: literal de
+// objeto nao enxerga o proprio irmao, e deixar os dois soltos ja rendeu a
+// combinacao errada uma vez (silencio curto + palpite longo = palpite
+// disparando em pausa entre palavras).
+const SILENCE_MS = Number(process.env.JARVIS_SILENCE_MS || 600);
+
 export const config = {
   root: ROOT,
 
@@ -142,9 +148,11 @@ export const config = {
     wakeWordPath: process.env.JARVIS_WAKE_WORD_PATH || null,
     sensitivity: Number(process.env.JARVIS_WAKE_SENSITIVITY || 0.6),
     // Silencio (ms) que encerra a captura depois que voce para de falar. E
-    // tempo morto puro: abaixo de ~700ms ele comeca a cortar no meio da frase
-    // de quem fala pausado.
-    silenceMs: Number(process.env.JARVIS_SILENCE_MS || 1000),
+    // tempo morto puro — voce ja acabou e o daemon ainda esta esperando pra ter
+    // certeza —, entao vale apertar. O preco de apertar demais e cortar quem
+    // fala pausado no meio da frase; o `minCommandMs` abaixo protege so a
+    // primeira pausa, nao as do meio.
+    silenceMs: SILENCE_MS,
     // Piso de gravacao. Antes disso o silencio nao encerra nada — protege a
     // pausa que todo mundo faz depois das duas primeiras palavras.
     minCommandMs: Number(process.env.JARVIS_MIN_COMMAND_MS || 1500),
@@ -164,13 +172,16 @@ export const config = {
     // legivel que o daemon parado sem explicacao.
     sttTimeoutMs: Number(process.env.STT_TIMEOUT_MS || 60000),
     // Quanto do silencio final e transcrito por antecipacao. O whisper nao
-    // trabalha em streaming — ele processa a frase inteira de uma vez — mas
-    // nao ha motivo pra esperar a confirmacao do fim parado: com 500 aqui, a
-    // transcricao comeca meio segundo antes e o silencio deixa de ser tempo
-    // morto. Alto demais e ele adivinha o fim antes da hora e transcreve a
-    // frase pela metade; 0 desliga. So vale com STT_SERVER_URL: sem servidor,
-    // cada palpite recarregaria o modelo do disco.
-    sttSpeculateMs: Number(process.env.STT_SPECULATE_MS || 500),
+    // trabalha em streaming — ele processa a frase inteira de uma vez —, mas
+    // nao ha motivo pra esperar a confirmacao do fim parado: a transcricao
+    // comeca antes dela e quase sempre ja acabou quando a captura termina.
+    //
+    // O padrao e METADE do silencio, nao um numero fixo: quem aperta o
+    // JARVIS_SILENCE_MS encurta a janela inteira, e um valor fixo passaria a
+    // disparar em pausa entre palavras sem ninguem pedir. 0 desliga. So vale
+    // com STT_SERVER_URL — sem servidor, cada palpite recarregaria o modelo
+    // do disco e o remedio custaria mais que a doenca.
+    sttSpeculateMs: Number(process.env.STT_SPECULATE_MS ?? Math.round(SILENCE_MS * 0.5)),
     ttsCommand: process.env.TTS_COMMAND || null,
     // Pedaco do nome da voz SAPI, tipo "maria" ou "daniel". Veja as instaladas
     // com `npm run voices`. Vazio = primeira pt-BR do sistema.
