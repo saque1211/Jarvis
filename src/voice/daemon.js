@@ -65,9 +65,16 @@ async function loadRecorder() {
 
 /**
  * Grava depois do gatilho ate detectar silencio sustentado ou estourar o
- * tempo maximo. Devolve os frames concatenados.
+ * tempo maximo.
+ *
+ * `onParcial` recebe o audio gravado ate aqui quando o silencio ja dura o
+ * bastante pra provavelmente ser fim de frase — antes da confirmacao. Serve
+ * pra transcricao especulativa: o whisper trabalha durante a espera em vez de
+ * depois dela. Se a pessoa voltar a falar, o palpite e marcado como invalido.
+ *
+ * Devolve `{ audio, parcialValida }`, ou null se ninguem falou.
  */
-async function captureCommand() {
+async function captureCommand(onParcial) {
   const frames = [];
   const frameMs = (trigger.frameLength / SAMPLE_RATE) * 1000;
   const silenceFramesNeeded = Math.ceil(config.voice.silenceMs / frameMs);
@@ -75,6 +82,18 @@ async function captureCommand() {
   // Piso: antes disso nenhum silencio encerra. A pausa que todo mundo faz
   // depois das duas primeiras palavras nao pode ser lida como fim de frase.
   const minFrames = Math.ceil(config.voice.minCommandMs / frameMs);
+
+  // Quantos frames de silencio bastam pra arriscar o palpite. Fica sempre
+  // ANTES do fim confirmado: e a diferenca entre os dois que vira tempo
+  // ganho. Perto demais de zero e ele dispara em pausa entre palavras e
+  // desperdica uma transcricao inteira.
+  const especularEm =
+    onParcial && config.voice.sttSpeculateMs > 0
+      ? Math.max(1, silenceFramesNeeded - Math.ceil(config.voice.sttSpeculateMs / frameMs))
+      : Infinity;
+
+  let especulou = false;
+  let parcialValida = false;
 
   let silentRun = 0;
   let spoke = false;
@@ -115,11 +134,25 @@ async function captureCommand() {
 
     if (energy > threshold) {
       spoke = true;
+      // Voltou a falar: o que ja foi mandado pro whisper e meia frase. O
+      // palpite morre aqui, e nao se tenta outro — o primeiro ainda esta
+      // ocupando o transcritor, e dois palpites disputando a mesma vez
+      // custariam mais tempo do que a espera que eles vieram economizar.
+      parcialValida = false;
       silentRun = 0;
     } else if (spoke) {
       // So conta silencio depois que a pessoa comecou a falar; senao a gente
       // corta antes de ela abrir a boca.
       silentRun++;
+
+      if (!especulou && silentRun >= especularEm && i >= minFrames) {
+        especulou = true;
+        parcialValida = true;
+        // Sem o silencio final — que nao muda transcricao nenhuma. O que
+        // vai aqui e a mesma fala que iria depois.
+        onParcial(Int16Array.from(frames));
+      }
+
       if (silentRun >= silenceFramesNeeded && i >= minFrames) break;
     } else if (i > silenceFramesNeeded * 3) {
       // Gatilho disparou mas ninguem falou nada: aborta.
@@ -134,45 +167,98 @@ async function captureCommand() {
   if (!spoke) return null;
 
   lastLevels = { peak, floor: floor === Infinity ? 0 : floor };
-  return Int16Array.from(frames);
+  return { audio: Int16Array.from(frames), parcialValida };
 }
 
 async function handleUtterance() {
   log('escuta', pc.cyan('pode falar'), pc.cyan);
   writeRuntime({ voiceState: 'listening' });
 
-  const audio = await captureCommand();
-  if (!audio) {
+  // Transcricao especulativa. O whisper nao transcreve em streaming: ele
+  // processa a frase inteira de uma vez, e cortar o audio em pedacinhos so
+  // multiplicaria o custo. O que da pra economizar e a ESPERA — o daemon fica
+  // ~1s parado depois que voce cala a boca, so pra ter certeza de que acabou.
+  // Entao mandamos o audio pro whisper antes dessa certeza: se voce nao voltar
+  // a falar, a transcricao ja esta pronta quando a captura termina.
+  //
+  // So com servidor. Com whisper-cli cada palpite recarregaria o modelo do
+  // disco, e o remedio custaria mais que a doenca.
+  let parcial = null;
+  const podeEspecular = Boolean(config.voice.sttServerUrl);
+
+  const capturado = await captureCommand(
+    podeEspecular
+      ? (frames) => {
+          // Isto roda DENTRO do laco de gravacao. Uma excecao aqui abortaria a
+          // captura no meio da sua frase — e o palpite e opcional por
+          // definicao. Falhou, segue gravando como se ele nao existisse.
+          try {
+            const wav = path.join(os.tmpdir(), `jarvis-parcial-${Date.now()}.wav`);
+            writeWav(wav, frames, SAMPLE_RATE);
+            parcial = {
+              wav,
+              promessa: transcribe(wav).catch((err) => {
+                console.error(`[stt] palpite falhou, transcrevendo normal: ${err.message}`);
+                return null;
+              }),
+            };
+          } catch (err) {
+            console.error(`[stt] nao deu pra adiantar a transcricao: ${err.message}`);
+            parcial = null;
+          }
+        }
+      : null
+  );
+
+  if (!capturado) {
     log('escuta', 'nao ouvi nada, voltando a dormir');
     writeRuntime({ voiceState: 'idle' });
     return;
   }
 
+  const { audio, parcialValida } = capturado;
+
   writeRuntime({ voiceState: 'thinking' });
 
   // Da pra sentir lentidao em quatro lugares diferentes aqui, e so medindo pra
-  // saber qual. O silencio de fim de fala e tempo morto puro: ja acabou de
-  // falar, e o daemon ainda esta esperando pra ter certeza.
+  // saber qual. O relogio comeca aqui de proposito: e daqui que voce espera.
   const heard = audio.length / SAMPLE_RATE;
   const t0 = Date.now();
 
-  const wavPath = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
-  writeWav(wavPath, audio, SAMPLE_RATE);
+  let text = null;
+  let adiantada = false;
 
-  // Sinal de vida: a transcricao e a etapa mais demorada, e sem isso o daemon
-  // parece travado justamente quando esta trabalhando.
-  log('stt', pc.dim(`transcrevendo ${heard.toFixed(1)}s...`));
+  if (parcial) {
+    // Espera mesmo quando o palpite foi invalidado: ele ainda esta ocupando o
+    // whisper, e mandar a transcricao de verdade por cima so faria as duas
+    // brigarem pela mesma vez.
+    const palpite = await parcial.promessa;
+    fs.rmSync(parcial.wav, { force: true });
 
-  let text;
-  try {
-    text = await transcribe(wavPath);
-  } catch (err) {
-    log('stt', pc.red(err.message), pc.red);
-    writeRuntime({ voiceState: 'idle' });
-    await speak('Nao consegui transcrever. Confira a configuracao do STT.');
-    return;
-  } finally {
-    fs.rmSync(wavPath, { force: true });
+    if (parcialValida && palpite && palpite.trim().length >= 2) {
+      text = palpite.trim();
+      adiantada = true;
+    }
+  }
+
+  if (!text) {
+    const wavPath = path.join(os.tmpdir(), `jarvis-${Date.now()}.wav`);
+    writeWav(wavPath, audio, SAMPLE_RATE);
+
+    // Sinal de vida: a transcricao e a etapa mais demorada, e sem isso o daemon
+    // parece travado justamente quando esta trabalhando.
+    log('stt', pc.dim(`transcrevendo ${heard.toFixed(1)}s...`));
+
+    try {
+      text = await transcribe(wavPath);
+    } catch (err) {
+      log('stt', pc.red(err.message), pc.red);
+      writeRuntime({ voiceState: 'idle' });
+      await speak('Nao consegui transcrever. Confira a configuracao do STT.');
+      return;
+    } finally {
+      fs.rmSync(wavPath, { force: true });
+    }
   }
 
   if (!text || text.length < 2) {
@@ -218,7 +304,10 @@ async function handleUtterance() {
     const falaMs = Date.now() - t1;
 
     // Quebra por etapa: sem isso "esta demorando" nao tem onde ser atacado.
-    const partes = [`${s(sttMs)} transcricao`];
+    // "adiantada" = o palpite pegou, e esse numero e so o que sobrou pra
+    // esperar. Se ele quase nunca aparecer, STT_SPECULATE_MS esta alto demais
+    // e disparando no meio da frase.
+    const partes = [`${s(sttMs)} transcricao${adiantada ? pc.green(' (adiantada)') : ''}`];
     if (timings.preselect) partes.push(`${s(timings.preselect)} escolha`);
     partes.push(`${s(timings.llm)} modelo`);
     if (timings.tools) partes.push(`${s(timings.tools)} tools`);

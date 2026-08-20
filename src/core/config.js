@@ -163,6 +163,14 @@ export const config = {
     // Teto pra transcricao. Passou disso, e porque travou — melhor um erro
     // legivel que o daemon parado sem explicacao.
     sttTimeoutMs: Number(process.env.STT_TIMEOUT_MS || 60000),
+    // Quanto do silencio final e transcrito por antecipacao. O whisper nao
+    // trabalha em streaming — ele processa a frase inteira de uma vez — mas
+    // nao ha motivo pra esperar a confirmacao do fim parado: com 500 aqui, a
+    // transcricao comeca meio segundo antes e o silencio deixa de ser tempo
+    // morto. Alto demais e ele adivinha o fim antes da hora e transcreve a
+    // frase pela metade; 0 desliga. So vale com STT_SERVER_URL: sem servidor,
+    // cada palpite recarregaria o modelo do disco.
+    sttSpeculateMs: Number(process.env.STT_SPECULATE_MS || 500),
     ttsCommand: process.env.TTS_COMMAND || null,
     // Pedaco do nome da voz SAPI, tipo "maria" ou "daniel". Veja as instaladas
     // com `npm run voices`. Vazio = primeira pt-BR do sistema.
