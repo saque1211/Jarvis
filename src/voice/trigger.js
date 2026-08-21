@@ -5,7 +5,7 @@ import readline from 'node:readline';
 import pc from 'picocolors';
 import { config } from '../core/config.js';
 import { psLines } from '../platform/win32.js';
-import { transcribe } from './stt.js';
+import { transcribe, ehArtefato } from './stt.js';
 import { writeWav, frameEnergy } from './wav.js';
 import { casaWake } from './wake.js';
 
@@ -277,7 +277,10 @@ async function escutaTrigger() {
         }
         ouvindoAgora = false;
 
-        if (!texto) continue;
+        // Alucinacao de audio mudo nunca pode acordar: "[MÚSICA]" e "Obrigado."
+        // aparecem o tempo todo em comodo com barulho, e cada um custa uma
+        // varredura de tolerancia que pode dar positivo por acaso.
+        if (!texto || ehArtefato(texto)) continue;
 
         const r = casaWake(texto);
         if (config.voice.vadDebug) {

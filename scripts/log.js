@@ -2,7 +2,7 @@
 import pc from 'picocolors';
 import { config } from '../src/core/config.js';
 import { readRuntime } from '../src/core/state.js';
-import { sttEngineName, promptDeVocabulario } from '../src/voice/stt.js';
+import { sttEngineName, promptDeVocabulario, conflitoDeNomeNoPrompt } from '../src/voice/stt.js';
 import { loadSkills, toolSpecs } from '../src/core/registry.js';
 import { estimateTokens } from '../src/core/preselect.js';
 
@@ -56,6 +56,14 @@ if (preselectLigado) {
 const prompt = promptDeVocabulario();
 console.log(`\n  vocabulario que vai pro whisper (${prompt.length} chars):`);
 console.log(pc.dim(`    "${prompt.slice(0, 150)}${prompt.length > 150 ? '...' : ''}"`));
+
+// Prompt que nomeia outro assistente ensina o whisper a escrever o nome
+// errado — justamente a palavra que decide se ele acorda.
+const outroNome = conflitoDeNomeNoPrompt();
+if (outroNome) {
+  console.log(pc.yellow(`\n  aviso: seu STT_PROMPT fala em "${outroNome}", mas a palavra de ativacao e "${config.voice.wakeWord}".`));
+  console.log(pc.yellow(`         isso ensina o whisper a escrever o nome errado. Troque no .env.`));
+}
 
 // ── as conversas ─────────────────────────────────────────────────────────────
 const comandos = (runtime.commands || []).slice(-quantas).reverse();

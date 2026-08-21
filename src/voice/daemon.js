@@ -5,7 +5,7 @@ import os from 'node:os';
 import pc from 'picocolors';
 import { config, ensureDirs } from '../core/config.js';
 import { route } from '../core/router.js';
-import { transcribe, sttEngineName } from './stt.js';
+import { transcribe, sttEngineName, ehArtefato } from './stt.js';
 import { speak } from './tts.js';
 import { createTrigger } from './trigger.js';
 import { startSpeaker, stopSpeaker, lanAddress, listenerCount } from './speaker.js';
@@ -298,8 +298,11 @@ async function handleUtterance(comandoPronto = null) {
     }
   }
 
-  if (!text || text.length < 2) {
-    log('stt', 'transcricao vazia');
+  if (!text || ehArtefato(text)) {
+    // Nao e so "vazio": audio quase mudo faz o whisper devolver anotacao de
+    // legenda ("[MÚSICA DE FUNDO]", "Obrigado por assistir"). Deixar isso
+    // seguir e o que fez ele abrir YouTube sozinho no meio da sala.
+    log('stt', pc.dim(text ? `descartei "${text}" — nao e fala` : 'transcricao vazia'));
     writeRuntime({ voiceState: 'idle' });
     return;
   }

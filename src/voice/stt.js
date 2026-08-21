@@ -21,6 +21,34 @@ import { config } from '../core/config.js';
  * O ganho grande vem dos nomes que SO existem nesta maquina — os apps que voce
  * cadastrou. Um vocabulario generico ajuda pouco; o seu ajuda muito.
  */
+function nomeBonito() {
+  const nome = String(config.voice.wakeWord || '').trim();
+  return nome ? nome.charAt(0).toUpperCase() + nome.slice(1) : '';
+}
+
+/** O texto ja menciona a palavra de ativacao? */
+function citaONome(texto) {
+  const nome = String(config.voice.wakeWord || '').trim();
+  if (!nome) return true;
+  const escapado = nome.replace(/[.*+?^${}()|[\]\\]/g, (m) => '\\' + m);
+  return new RegExp('\\b' + escapado + '\\b', 'i').test(String(texto || ''));
+}
+
+/**
+ * O STT_PROMPT do usuario nomeia OUTRO assistente?
+ *
+ * Vale um aviso alto: um prompt que diz "Jarvis" enquanto a palavra de
+ * ativacao e "vexis" ensina o whisper a escrever o nome errado justamente na
+ * palavra que decide se ele acorda. Sobra de quando o assistente tinha outro
+ * nome, e nada no comportamento aponta pra la.
+ */
+export function conflitoDeNomeNoPrompt() {
+  const doUsuario = config.voice.sttPrompt ? String(config.voice.sttPrompt) : '';
+  if (!doUsuario || citaONome(doUsuario)) return null;
+  const outro = /\b(jarvis|alexa|siri|google|cortana|assistente\s+\w+)\b/i.exec(doUsuario);
+  return outro ? outro[1] : null;
+}
+
 /**
  * A frase de abertura do prompt inicial, com o nome do assistente dentro.
  *
@@ -128,13 +156,23 @@ const RESERVA_COMANDOS = 380;
 
 export function promptDeVocabulario() {
   const partes = [];
-  // Primeiro de todos: o teto corta o FIM do prompt, e o nome do assistente
-  // e a unica palavra cuja transcricao decide se ele acorda ou nao.
-  const abertura = aberturaDoPrompt();
-  if (abertura) partes.push(abertura);
-
   const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
-  if (doUsuario) partes.push(doUsuario);
+
+  if (doUsuario) {
+    // O STT_PROMPT do usuario JA e o enquadramento. Empilhar o meu em cima
+    // produzia isto, visto no uso real:
+    //
+    //   "Comandos para o assistente Vexis. Comandos para o assistente Jarvis: ..."
+    //
+    // Duas aberturas seguidas — o padrao repetitivo que degrada o whisper — e
+    // ainda por cima nomeando dois assistentes diferentes. Quando o prompt dele
+    // ja cita o nome, o meu nao entra; quando nao cita, entra so o NOME, uma
+    // palavra, sem uma segunda frase de enquadramento.
+    if (!citaONome(doUsuario)) partes.push(`${nomeBonito()}.`);
+    partes.push(doUsuario);
+  } else {
+    partes.push(aberturaDoPrompt());
+  }
 
   // Nomes curtos primeiro: sao os mais provaveis de serem falados, e cabem
   // mais deles no espaco que sobrar.
@@ -278,6 +316,53 @@ async function resolveEngine() {
 
   resolved = false;
   return resolved;
+}
+
+/**
+ * O whisper ALUCINA em audio quase mudo.
+ *
+ * Ele foi treinado em legendas de video, e quando recebe silencio ou barulho
+ * sem fala ele devolve o que aquele corpus tem de mais comum: anotacoes entre
+ * colchetes, agradecimento de fim de video, credito de legendagem. Nao e erro
+ * de configuracao, e como o modelo se comporta — e por isso precisa ser barrado
+ * aqui, e nao ajustado la.
+ *
+ * O caso que motivou isto veio do log de uso: uma musica tocando no comodo
+ * virou "[MÚSICA DE FUNDO]", o roteador tratou como pedido e abriu YouTube.
+ * Alucinacao virando acao e o pior desfecho possivel — o assistente parece
+ * possuido, e nada no log explica por que.
+ */
+const ARTEFATOS = [
+  // Anotacao de nao-fala: colchete ou parentese ocupando a frase inteira.
+  /^[\[(][^\])]*[\])][.!?\s]*$/,
+  /^[♪♫~\-.\s]*$/,
+  // Creditos de legenda que aparecem sozinhos no fim dos videos do corpus.
+  /legendas?\s+(pela|por)\s+/i,
+  /amara\.?org/i,
+  /subtitles?\s+by/i,
+  // Fim de video. Como frase INTEIRA — "obrigado" no meio de um pedido e
+  // legitimo, e so sozinho que denuncia alucinacao.
+  /^(muito\s+)?obrigad[oa]([.!\s]*(por\s+assistir|pessoal|gente))?[.!\s]*$/i,
+  /^(tchau|ate\s+a\s+proxima|ate\s+mais)[.!\s]*$/i,
+  /^inscreva-?se[^.]*$/i,
+  /^(bom\s+dia|boa\s+noite|boa\s+tarde)[.!\s]*$/i,
+];
+
+/**
+ * Isto e fala de verdade, ou lixo que o whisper inventou?
+ *
+ * Fica separado do `transcribe` porque a escuta e o comando usam a mesma regra
+ * e nenhum dos dois pode agir em cima de alucinacao.
+ */
+export function ehArtefato(texto) {
+  const limpo = String(texto || '').trim();
+  if (!limpo) return true;
+
+  // Frase de uma letra ou duas nao e comando; e ruido que virou silaba.
+  const semPontuacao = limpo.replace(/[^\p{L}\p{N}]/gu, '');
+  if (semPontuacao.length < 3) return true;
+
+  return ARTEFATOS.some((re) => re.test(limpo));
 }
 
 /**

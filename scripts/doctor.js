@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import pc from 'picocolors';
 import { config } from '../src/core/config.js';
 import { loadSkills, buildToolIndex, skillsDeOutraPlataforma } from '../src/core/registry.js';
-import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt } from '../src/voice/stt.js';
+import { sttEngineName, promptDeVocabulario, nomesDeApps, limparPrompt, conflitoDeNomeNoPrompt } from '../src/voice/stt.js';
 import { resolverSom } from '../src/skills/timer.js';
 import { isConfigured as elevenPronto, cota as elevenCota } from '../src/integrations/elevenlabs.js';
 import { run } from '../src/platform/win32.js';
