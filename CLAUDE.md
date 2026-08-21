@@ -63,6 +63,7 @@ npm run jarvis             # modo conversa
 npm run listen             # daemon de voz (wake word)
 npm run hud                # HUD como app (janela sem barra de endereço)
 npm run doctor             # diagnóstico de setup
+npm run log                # últimas conversas: o que ouviu e o que respondeu
 npm run env:check          # acha linha colada/repetida no .env (add "-- --corrigir")
 npm run test:voice         # mic + STT + TTS isolados do resto
 npm run wake              # calibra a palavra de ativacao (ao vivo ou com frases)
