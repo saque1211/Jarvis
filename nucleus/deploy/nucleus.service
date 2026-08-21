@@ -1,0 +1,22 @@
+[Unit]
+Description=JARVIS Nucleus — contas e pareamento de dispositivo
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/jarvis/nucleus
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+
+# Reforço de segurança: o processo não precisa de mais nada além da própria
+# pasta. Se um dia for comprometido, isto limita o estrago.
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=false
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
