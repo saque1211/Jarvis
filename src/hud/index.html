@@ -660,6 +660,9 @@ $('cortina').onclick = fecharCentral;
 function fecharCentral() {
   aberto = false; deslocamento = 0; subtela = 'principal';
   aplicarPainel(0, true);
+  // Voltou da central no meio da configuracao inicial: mostra o passo de novo,
+  // agora sabendo se a rede entrou.
+  if (bootPasso === 'wifi') escanearParaBoot();
 }
 
 function abrirCentral() {
@@ -740,8 +743,13 @@ function telaWifi() {
   let corpo;
   if (!wifiLigado) {
     corpo = '<div class="vazio">Wi-Fi desativado</div>';
-  } else if (!redes.length) {
+  } else if (!redes.length && !jaVarreu) {
     corpo = '<div class="vazio">Procurando redes…</div>';
+  } else if (!redes.length) {
+    // Ja varreu e nao achou. O motivo importa: "nenhuma rede por perto" e
+    // "o Windows nao deixou eu perguntar" pedem coisas diferentes de voce.
+    corpo = '<div class="vazio">' + esc(erroDeRede || 'Nenhuma rede encontrada.') + '</div>' +
+      '<div style="text-align:center"><button class="botao fantasma" id="revarrer">Procurar de novo</button></div>';
   } else {
     corpo = '<div id="lista-redes">' + redes.map((r, i) =>
       '<div class="rede" data-i="' + i + '">' +
@@ -762,6 +770,8 @@ function telaWifi() {
 
 function ligarWifi() {
   $('voltar').onclick = () => { subtela = 'principal'; renderCentral(); };
+  const rev = $('revarrer');
+  if (rev) rev.onclick = () => { jaVarreu = false; renderCentral(); carregarRedes(); };
   $('chave-wifi').onclick = () => { wifiLigado = !wifiLigado; renderCentral(); if (wifiLigado) carregarRedes(); };
   document.querySelectorAll('.rede').forEach((el) => {
     el.onclick = () => pedirSenha(redes[+el.dataset.i]);
@@ -792,13 +802,41 @@ async function conectar_(ssid, senha) {
   if (r.ok) { subtela = 'wifi'; await carregarRedes(); }
 }
 
+/**
+ * Varre as redes UMA vez por chamada, e nunca duas ao mesmo tempo.
+ *
+ * A trava importa porque do outro lado cada chamada sobe um `netsh` (Windows)
+ * ou um `nmcli --rescan` (Pi) — processos de segundos. Sem ela, tocar duas
+ * vezes na chave do Wi-Fi ja empilha varredura em cima de varredura.
+ */
+let escaneando = false;
+// Sem estes dois, uma varredura que FALHOU fica indistinguivel de uma que
+// ainda nao terminou — e a tela mente "Procurando redes..." pra sempre.
+let jaVarreu = false;
+let erroDeRede = null;
+
 async function carregarRedes() {
+  if (escaneando) return;
+  escaneando = true;
   try {
     const r = await fetch('/wifi').then((x) => x.json());
     redes = r.redes || [];
+    erroDeRede = r.erro || null;
     if (r.erro && subtela === 'wifi') torrada(r.erro);
-  } catch { redes = []; }
+  } catch (err) {
+    redes = [];
+    erroDeRede = 'O núcleo não respondeu.';
+  } finally {
+    escaneando = false;
+    jaVarreu = true;
+  }
   if (aberto) renderCentral();
+}
+
+/** Varre e redesenha o passo de boot UMA vez — sem chamar a si mesmo. */
+async function escanearParaBoot() {
+  await carregarRedes();
+  if (bootPasso === 'wifi') renderBoot();
 }
 
 function telaAjustes() {
@@ -863,6 +901,11 @@ function verificarBoot() {
   if (bootPasso) return;
   bootPasso = 'wifi';
   renderBoot();
+  // A varredura fica AQUI, na entrada do passo, e nao dentro do desenho.
+  // Junto com o desenho ela virava recursao: desenhar pedia a lista, a lista
+  // pronta mandava desenhar de novo, e o botao "Escolher rede" era destruido
+  // embaixo do dedo de quem tentava clicar nele.
+  escanearParaBoot();
 }
 
 function renderBoot() {
@@ -888,7 +931,6 @@ function renderBoot() {
       const el = $(id);
       if (el) el.onclick = () => { b.classList.remove('ativo'); aberto = true; aplicarPainel(ALTURA_PAINEL, true); subtela = 'wifi'; renderCentral(); };
     }
-    carregarRedes().then(() => { if (bootPasso === 'wifi') renderBoot(); });
     return;
   }
 
