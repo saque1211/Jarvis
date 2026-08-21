@@ -11,6 +11,9 @@ on:
       - '.github/workflows/apk.yml'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   montar:
     runs-on: ubuntu-latest
@@ -41,3 +44,28 @@ jobs:
           name: vexis-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      # O artefato acima exige login no GitHub e vem dentro de um .zip — dois
+      # passos ruins de fazer num celular. Um release da link DIRETO pro .apk,
+      # e num repositorio publico ele abre sem login: da pra tocar no link e
+      # instalar. A tag e fixa ("apk") de proposito: o endereco nunca muda,
+      # entao o atalho que voce salvar continua valendo depois do proximo build.
+      - name: Publicar pra baixar no celular
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          APK=android/app/build/outputs/apk/debug/app-debug.apk
+          NOTAS="APK de debug, montado a partir de ${GITHUB_SHA:0:7}.
+          Instala de lado (o Android vai pedir pra permitir fonte desconhecida).
+          Na primeira abertura ele pergunta o endereco do painel — o que o
+          \`npm run hud\` mostra no terminal do PC."
+
+          gh release view apk >/dev/null 2>&1 \
+            || gh release create apk --title "VEXIS — app do celular" --notes "$NOTAS" --target "$GITHUB_SHA"
+          gh release edit apk --notes "$NOTAS" --target "$GITHUB_SHA"
+          gh release upload apk "$APK" --clobber
+
+          echo "### APK pronto" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/apk/app-debug.apk" >> "$GITHUB_STEP_SUMMARY"
