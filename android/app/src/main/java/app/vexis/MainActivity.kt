@@ -218,7 +218,34 @@ class MainActivity : Activity() {
                 // So o carregamento da PAGINA importa. Um icone que falhou nao
                 // pode jogar a pessoa de volta pra tela de configuracao.
                 if (pedido?.isForMainFrame != true) return
-                telaDeErro(url)
+                telaDeErro(url, erro?.description?.toString() ?: "sem resposta")
+            }
+
+            /**
+             * Erro de HTTP e outro callback, e sem ele o app fica PRETO.
+             *
+             * `onReceivedError` so cobre falha de rede — cabo solto, host que
+             * nao existe. Um 404 chega aqui, e se ninguem trata, o WebView
+             * simplesmente desenha o corpo da resposta: como o 404 vem vazio, o
+             * resultado e uma tela preta sem uma palavra explicando.
+             *
+             * O caso real: o PC rodando uma versao antiga do painel, que ainda
+             * nao conhece a rota /app.
+             */
+            override fun onReceivedHttpError(
+                view: WebView?,
+                pedido: WebResourceRequest?,
+                resposta: android.webkit.WebResourceResponse?
+            ) {
+                if (pedido?.isForMainFrame != true) return
+                val codigo = resposta?.statusCode ?: 0
+                telaDeErro(
+                    url,
+                    if (codigo == 404)
+                        "O painel respondeu 404 — ele está rodando uma versão antiga, sem o app. Rode \"git pull\" no PC."
+                    else
+                        "O painel respondeu HTTP $codigo."
+                )
             }
         }
 
@@ -252,7 +279,7 @@ class MainActivity : Activity() {
         web.loadUrl(url)
     }
 
-    private fun telaDeErro(url: String) {
+    private fun telaDeErro(url: String, motivo: String) {
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(FUNDO)
@@ -268,8 +295,10 @@ class MainActivity : Activity() {
         })
 
         raiz.addView(TextView(this).apply {
-            text = "Em ${curto(url)}.\n\nO PC está ligado com \"npm run hud\"? " +
-                "E o celular está no mesmo Wi-Fi?"
+            // O motivo primeiro, em vez de um palpite generico: "respondeu 404"
+            // e "sem resposta" mandam a pessoa pra lados opostos.
+            text = "$motivo\n\nEm ${curto(url)}.\n\n" +
+                "O PC está ligado com \"npm run hud\"? E o celular está no mesmo Wi-Fi?"
             setTextColor(FRACO)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             gravity = Gravity.CENTER

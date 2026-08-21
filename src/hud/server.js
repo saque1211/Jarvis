@@ -141,8 +141,17 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
     // Fotos e central de controle. Devolve true quando atendeu.
     if (await atenderControle(req, res, url)) return;
 
-    res.writeHead(404);
-    res.end();
+    // 404 com CORPO. Um 404 vazio vira tela preta silenciosa dentro de um
+    // WebView, e foi exatamente assim que o app do celular pareceu travado
+    // quando o PC ainda rodava uma versao sem a rota /app.
+    res.writeHead(404, { 'content-type': 'text/html; charset=utf-8' });
+    res.end(
+      `<meta charset="utf-8"><body style="background:#06090c;color:#eef2f4;` +
+        `font:16px/1.6 system-ui,sans-serif;padding:32px">` +
+        `<h1 style="font-size:22px">404 — ${url.pathname}</h1>` +
+        `<p style="color:#8c9498">Este painel não conhece esse endereço. ` +
+        `Se você esperava o app do celular, rode <b>git pull</b> no PC e reinicie o <b>npm run hud</b>.</p>`
+    );
   }
 
   // Uma falha ao montar o snapshot NAO pode derrubar o HUD. Ele roda dentro de
