@@ -110,6 +110,34 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       return;
     }
 
+    // App do celular. Uma pagina, um manifest, um service worker e dois
+    // icones — servidos do mesmo processo pra nao existir um segundo servidor
+    // pra manter vivo.
+    if (url.pathname === '/app' || url.pathname === '/app/') {
+      const html = fs.readFileSync(path.join(AQUI, '..', 'app', 'index.html'), 'utf8');
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      res.end(html);
+      return;
+    }
+
+    const doApp = /^\/app\/(manifest\.json|sw\.js|icone(?:-mascara)?\.png)$/.exec(url.pathname);
+    if (doApp) {
+      const arquivo = path.join(AQUI, '..', 'app', doApp[1]);
+      const tipo = doApp[1].endsWith('.json')
+        ? 'application/manifest+json'
+        : doApp[1].endsWith('.js')
+          ? 'text/javascript'
+          : 'image/png';
+      // O service worker NAO pode ser guardado em cache: um sw velho fica
+      // servindo casca velha pra sempre, e nao ha como consertar de fora.
+      res.writeHead(200, {
+        'content-type': `${tipo}; charset=utf-8`,
+        'cache-control': doApp[1] === 'sw.js' ? 'no-cache' : 'public, max-age=86400',
+      });
+      res.end(fs.readFileSync(arquivo));
+      return;
+    }
+
     // Fotos e central de controle. Devolve true quando atendeu.
     if (await atenderControle(req, res, url)) return;
 

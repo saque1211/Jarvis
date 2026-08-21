@@ -3,7 +3,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { config, ensureDirs } from '../core/config.js';
 import { lerSettings, gravarSettings } from '../core/settings.js';
-import { concluir } from '../core/avisos.js';
+import {
+  concluir,
+  listar as listarAvisos,
+  criar as criarAviso,
+  remover as removerAviso,
+  pendentes as pendentesDeAviso,
+} from '../core/avisos.js';
 import { listarCompras, adicionar, marcar, remover as removerCompra } from '../skills/compras.js';
 import * as plataforma from '../platform/index.js';
 
@@ -122,7 +128,7 @@ export async function atenderControle(req, res, url) {
   const rota = url.pathname;
   const mudaAlgo = req.method !== 'GET';
 
-  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso/') || rota.startsWith('/compras')) {
+  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras')) {
     if (mudaAlgo && !autorizado(req)) {
       responder(res, 401, { erro: 'Token invalido ou ausente (cabecalho x-vexis-token).' });
       return true;
@@ -292,6 +298,30 @@ export async function atenderControle(req, res, url) {
   }
 
   // ---- AVISOS E COMPRAS ----------------------------------------------------
+
+  if (rota === '/avisos' && req.method === 'GET') {
+    // Todos, nao so os pendentes: a tela do celular edita a REGRA ("toda
+    // quinta, das 8 as 21"), e o HUD e que mostra o que esta pendente agora.
+    responder(res, 200, { avisos: listarAvisos(), pendentes: pendentesDeAviso() });
+    return true;
+  }
+
+  if (rota === '/avisos' && req.method === 'POST') {
+    const { texto, dias, de, ate } = await lerJson(req);
+    try {
+      responder(res, 200, { ok: true, aviso: criarAviso({ texto, dias, de, ate }) });
+    } catch (err) {
+      responder(res, 400, { ok: false, erro: err.message });
+    }
+    return true;
+  }
+
+  const avisoId = /^\/avisos\/(\d+)$/.exec(rota);
+  if (avisoId && req.method === 'DELETE') {
+    const r = removerAviso(Number(avisoId[1]));
+    responder(res, r ? 200 : 404, r ? { ok: true } : { erro: 'Aviso nao encontrado.' });
+    return true;
+  }
 
   const avisoFeito = /^\/aviso\/(\d+)\/feito$/.exec(rota);
   if (avisoFeito && req.method === 'POST') {

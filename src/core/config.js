@@ -177,7 +177,7 @@ export const config = {
     // confundir com o silenceMs acima: aquele encerra a frase depois que voce
     // ja falou; este e o prazo pra voce comecar. Entre chamar e falar existe
     // pensar, e 3s e o tempo de pensar de quem foi ate a cozinha.
-    esperaMs: Number(process.env.JARVIS_ESPERA_MS || 3000),
+    esperaMs: Number(process.env.JARVIS_ESPERA_MS || 5000),
 
     // Piso de gravacao. Antes disso o silencio nao encerra nada — protege a
     // pausa que todo mundo faz depois das duas primeiras palavras.

@@ -1,0 +1,15 @@
+{
+  "name": "VEXIS",
+  "short_name": "VEXIS",
+  "description": "Controle do painel: fotos, lista de compras, avisos e ajustes.",
+  "start_url": "/app",
+  "scope": "/app",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#06090c",
+  "theme_color": "#06090c",
+  "icons": [
+    { "src": "/app/icone.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/app/icone-mascara.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

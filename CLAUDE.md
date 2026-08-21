@@ -131,8 +131,19 @@ ou pro `linux.js`. O HUD nunca sabe em qual dos dois está. `capacidades()`
 diz o que a máquina realmente faz, e **controle que não mexe em nada some da
 tela** em vez de existir enganando.
 
-**Falta:** contas e pareamento na nuvem, app do celular (PWA), casa
-inteligente, calendário e e-mail.
+**App do celular** (`src/app/`): PWA servida pelo mesmo processo do HUD, em
+`/app`. Cinco abas — Casa, Fotos, Lista, Avisos, Ajustes — editando o mesmo
+`settings.json` que o painel obedece, pelas mesmas rotas HTTP. Instala na tela
+inicial (manifest + service worker) e não precisa de loja.
+
+Não usa o palco escalado do HUD de propósito: lá o alvo é uma tela fixa vista
+de longe; aqui é um polegar, e o que importa é alvo grande e texto que reflui.
+
+O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
+servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
+lista velha você acredita.
+
+**Falta:** contas e pareamento na nuvem, casa inteligente, calendário e e-mail.
 
 ## Limites conhecidos, documentados de propósito
 

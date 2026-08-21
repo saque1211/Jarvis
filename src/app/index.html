@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VEXIS">
+<link rel="manifest" href="/app/manifest.json">
+<link rel="icon" href="data:,">
+<title>VEXIS</title>
+<style>
+/*
+ * App do celular.
+ *
+ * Nao usa o palco escalado do HUD de proposito: la o alvo e uma tela fixa
+ * vista de longe, e escalar mantem o desenho identico; aqui o alvo e um
+ * polegar, e o que importa e alvo grande e texto que reflui. Sao dois
+ * problemas diferentes e a mesma folha de estilo serviria mal aos dois.
+ */
+:root {
+  --acento: #19c0dd;
+  --acento-forte: #0088b0;
+  --acento-claro: #4fd6ee;
+  --perigo: #d6006c;
+  --fundo: #06090c;
+  --carta: rgba(255,255,255,.055);
+  --borda: rgba(255,255,255,.11);
+  --texto: #eef2f4;
+  --fraco: rgba(238,242,244,.55);
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Barra de gestos do iPhone e barra de status: sem isto o ultimo item da
+     lista fica embaixo do polegar do sistema e nao da pra tocar nele. */
+  --seguro-topo: env(safe-area-inset-top, 0px);
+  --seguro-base: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  background: var(--fundo); color: var(--texto);
+  font-family: var(--sans); font-size: 16px;
+  overscroll-behavior-y: contain;
+}
+body { padding-bottom: calc(76px + var(--seguro-base)); }
+
+/* ---- cabeçalho ---- */
+header {
+  position: sticky; top: 0; z-index: 20;
+  padding: calc(14px + var(--seguro-topo)) 20px 14px;
+  background: rgba(6,9,12,.86);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--borda);
+  display: flex; align-items: baseline; gap: 12px;
+}
+header h1 { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display: flex; align-items: center; gap: 7px; }
+.bolinha { width: 8px; height: 8px; border-radius: 50%; background: var(--fraco); flex: none; }
+.bolinha.viva { background: var(--acento); box-shadow: 0 0 10px var(--acento); }
+
+/* ---- páginas ---- */
+main { padding: 18px 16px 24px; }
+.pagina { display: none; }
+.pagina.ativa { display: block; }
+h2 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 26px 0 12px; }
+h2:first-child { margin-top: 4px; }
+.ajuda { font-size: 13px; color: var(--fraco); margin: -6px 0 12px; line-height: 1.5; }
+
+.carta { background: var(--carta); border: 1px solid var(--borda); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+.linha { display: flex; align-items: center; gap: 14px; min-height: 46px; }
+.linha + .linha { border-top: 1px solid var(--borda); margin-top: 4px; padding-top: 10px; }
+.cresce { flex: 1; min-width: 0; }
+.rotulo { font-size: 16px; }
+.sub { font-size: 13px; color: var(--fraco); margin-top: 2px; }
+
+/* ---- controles ---- */
+button, input, select { font-family: inherit; font-size: 16px; color: inherit; }
+.botao {
+  background: var(--acento-forte); border: none; border-radius: 12px; color: #fff;
+  padding: 13px 20px; font-weight: 600; cursor: pointer; min-height: 46px;
+}
+.botao:active { transform: scale(.98); }
+.botao.fantasma { background: transparent; border: 1px solid var(--borda); }
+.botao.perigo { background: transparent; border: 1px solid rgba(214,0,108,.45); color: var(--perigo); }
+.botao.largo { width: 100%; }
+input[type=text], input[type=time], input[type=number] {
+  background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 13px 14px; width: 100%; min-height: 46px;
+}
+input:focus { outline: none; border-color: var(--acento); }
+input[type=range] { width: 100%; accent-color: var(--acento); height: 30px; }
+select {
+  background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 13px 14px; min-height: 46px;
+}
+.duplo { display: flex; gap: 10px; }
+.duplo > * { flex: 1; min-width: 0; }
+.faixa { padding: 12px 0; }
+.faixa + .faixa { border-top: 1px solid var(--borda); }
+
+/* ---- chips de dia ---- */
+.dias { display: flex; gap: 7px; }
+.dia {
+  flex: 1; aspect-ratio: 1; border-radius: 12px;
+  border: 1px solid var(--borda); background: transparent; color: var(--fraco);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  display: grid; place-items: center;
+}
+.dia.on { background: var(--acento-forte); border-color: var(--acento-forte); color: #fff; }
+
+/* ---- fotos ---- */
+.grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.foto { position: relative; aspect-ratio: 16/10; border-radius: 14px; overflow: hidden; border: 1px solid var(--borda); }
+.foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.foto .x {
+  position: absolute; top: 7px; right: 7px; width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(0,0,0,.62); border: none; color: #fff; font-size: 17px; line-height: 1; cursor: pointer;
+  display: grid; place-items: center;
+}
+.vazio { text-align: center; padding: 34px 16px; color: var(--fraco); font-style: italic; font-size: 15px; }
+
+/* ---- lista de compras ---- */
+.item { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--borda); }
+.item:last-child { border-bottom: none; }
+.marca { width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--borda); flex: none; display: grid; place-items: center; cursor: pointer; }
+.item.feito .marca { background: var(--acento-forte); border-color: var(--acento-forte); }
+.item.feito .nome { text-decoration: line-through; color: var(--fraco); }
+.nome { flex: 1; font-size: 16px; }
+.tirar { background: none; border: none; color: var(--fraco); font-size: 20px; cursor: pointer; padding: 4px 8px; }
+
+/* ---- barra de abas ---- */
+nav {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+  display: flex; padding-bottom: var(--seguro-base);
+  background: rgba(10,14,18,.94);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--borda);
+}
+nav button {
+  flex: 1; background: none; border: none; cursor: pointer;
+  padding: 10px 2px 12px; color: var(--fraco);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  font-size: 10.5px; letter-spacing: .02em;
+}
+nav button.on { color: var(--acento-claro); }
+nav svg { width: 23px; height: 23px; }
+
+/* ---- torrada ---- */
+#torrada {
+  position: fixed; left: 16px; right: 16px; bottom: calc(88px + var(--seguro-base)); z-index: 40;
+  background: rgba(12,17,20,.96); border: 1px solid rgba(79,214,238,.38);
+  border-radius: 13px; padding: 14px 16px; font-size: 14.5px; text-align: center;
+  opacity: 0; transform: translateY(12px); transition: opacity .22s, transform .22s;
+  pointer-events: none;
+}
+#torrada.on { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VEXIS</h1>
+  <span class="onde"><span class="bolinha" id="pulso"></span><span id="dispositivo">—</span></span>
+</header>
+
+<main>
+  <!-- ═══ CASA ═══ -->
+  <section class="pagina ativa" id="p-casa">
+    <div class="carta" id="cartao-voz">
+      <div class="linha">
+        <div class="cresce">
+          <div class="rotulo" id="voz-estado">—</div>
+          <div class="sub" id="voz-ultima">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="cartao-tempo"></div>
+    <h2>Pendente agora</h2>
+    <div id="pendentes"></div>
+  </section>
+
+  <!-- ═══ FOTOS ═══ -->
+  <section class="pagina" id="p-fotos">
+    <h2>Fundo de tela</h2>
+    <p class="ajuda">As fotos que aparecem no painel. Toque no + para enviar do celular.</p>
+    <div class="grade" id="grade-fotos"></div>
+    <input type="file" id="arquivo" accept="image/jpeg,image/png,image/webp" hidden>
+    <button class="botao largo" id="enviar-foto" style="margin-top:12px">+ Enviar foto</button>
+
+    <h2>Aparência</h2>
+    <div class="carta">
+      <div class="linha">
+        <div class="cresce"><div class="rotulo">Estilo</div></div>
+        <select id="variante">
+          <option>Minimal</option><option>Editorial</option><option>Vidro</option>
+        </select>
+      </div>
+      <div class="linha">
+        <div class="cresce">
+          <div class="rotulo">Trocar de foto</div>
+          <div class="sub" id="rot-txt">—</div>
+        </div>
+      </div>
+      <input type="range" id="rotacao" min="0" max="120" step="5">
+      <div class="linha">
+        <div class="cresce">
+          <div class="rotulo">Escurecer a foto</div>
+          <div class="sub" id="scrim-txt">—</div>
+        </div>
+      </div>
+      <input type="range" id="scrim" min="0" max="90" step="5">
+    </div>
+  </section>
+
+  <!-- ═══ LISTA ═══ -->
+  <section class="pagina" id="p-lista">
+    <h2>Lista de compras</h2>
+    <p class="ajuda">A mesma lista que você dita em casa. "Vexis, põe leite na lista."</p>
+    <div class="duplo" style="margin-bottom:14px">
+      <input type="text" id="novo-item" placeholder="leite, pão…" autocomplete="off" enterkeyhint="done">
+      <button class="botao" id="add-item" style="flex:0 0 auto">Pôr</button>
+    </div>
+    <div class="carta" id="lista-compras"></div>
+  </section>
+
+  <!-- ═══ AVISOS ═══ -->
+  <section class="pagina" id="p-avisos">
+    <h2>Avisos da semana</h2>
+    <p class="ajuda">Ficam na tela do painel dentro da faixa de horário, até você dizer que fez.</p>
+    <div id="lista-avisos"></div>
+
+    <h2>Novo aviso</h2>
+    <div class="carta">
+      <input type="text" id="aviso-texto" placeholder="tirar o lixo" autocomplete="off">
+      <div style="margin:14px 0 6px" class="sub">Em quais dias</div>
+      <div class="dias" id="aviso-dias"></div>
+      <div style="margin:16px 0 6px" class="sub">Aparece das … até …</div>
+      <div class="duplo">
+        <input type="time" id="aviso-de" value="08:00">
+        <input type="time" id="aviso-ate" value="21:00">
+      </div>
+      <button class="botao largo" id="criar-aviso" style="margin-top:14px">Criar aviso</button>
+    </div>
+  </section>
+
+  <!-- ═══ AJUSTES ═══ -->
+  <section class="pagina" id="p-ajustes">
+    <h2>Previsão do tempo</h2>
+    <div class="carta">
+      <div class="linha">
+        <div class="cresce">
+          <div class="rotulo">Mostrar no painel</div>
+          <div class="sub" id="tempo-local">—</div>
+        </div>
+      </div>
+      <div class="duplo">
+        <input type="time" id="tempo-de"><input type="time" id="tempo-ate">
+      </div>
+      <div class="linha" style="margin-top:6px">
+        <div class="cresce">
+          <div class="rotulo">Aparecer fora de hora se for chover</div>
+          <div class="sub" id="chuva-txt">—</div>
+        </div>
+      </div>
+      <input type="range" id="chuva" min="10" max="90" step="10">
+    </div>
+
+    <h2>Brilho e volume</h2>
+    <div class="carta">
+      <div class="linha">
+        <div class="cresce"><div class="rotulo">Volume</div><div class="sub" id="vol-txt">—</div></div>
+      </div>
+      <input type="range" id="volume" min="0" max="100">
+      <div class="linha" style="margin-top:6px">
+        <div class="cresce">
+          <div class="rotulo">Brilho por horário</div>
+          <div class="sub">O painel escurece sozinho à noite.</div>
+        </div>
+      </div>
+      <div id="agenda-brilho"></div>
+    </div>
+
+    <h2>Casa inteligente</h2>
+    <div class="carta" id="cartao-casa"></div>
+
+    <h2>Dispositivo</h2>
+    <div class="carta">
+      <div class="linha">
+        <div class="cresce"><div class="rotulo">Nome</div></div>
+        <input type="text" id="nome-disp" style="width:auto;flex:0 1 55%" placeholder="Sala">
+      </div>
+      <button class="botao fantasma largo" id="reiniciar" style="margin-top:12px">Reiniciar o painel</button>
+      <button class="botao perigo largo" id="resetar" style="margin-top:10px">Apagar tudo e recomeçar</button>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" data-p="casa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>Casa</button>
+  <button data-p="fotos">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="M21 16l-5-5-9 8"/></svg>Fotos</button>
+  <button data-p="lista">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6l1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2"/></svg>Lista</button>
+  <button data-p="avisos">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 8h18s-3-1-3-8"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>Avisos</button>
+  <button data-p="ajustes">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.5 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.5-2.4a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5z"/></svg>Ajustes</button>
+</nav>
+
+<div id="torrada"></div>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+let ESTADO = {};
+let CONFIG = null;
+
+/* ── conversa com o núcleo ─────────────────────────────────────────────── */
+async function api(rota, metodo = 'GET', corpo) {
+  const r = await fetch(rota, {
+    method: metodo,
+    headers: corpo ? { 'content-type': 'application/json' } : undefined,
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+  if (!r.ok && r.status !== 400) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+let tTorrada = null;
+function torrada(txt) {
+  const el = $('torrada');
+  el.textContent = txt;
+  el.classList.add('on');
+  clearTimeout(tTorrada);
+  tTorrada = setTimeout(() => el.classList.remove('on'), 2600);
+}
+
+/**
+ * Grava uma preferência.
+ *
+ * Sempre um patch pequeno, nunca o objeto inteiro: duas telas abertas ao mesmo
+ * tempo mandando tudo fariam a última sobrescrever o que a outra mudou.
+ */
+let tGravar = null;
+function gravar(patch, aviso) {
+  clearTimeout(tGravar);
+  // Junta rajadas de controle deslizante numa gravação só — arrastar manda
+  // um evento por pixel, e cada um é uma escrita em disco no Raspberry.
+  tGravar = setTimeout(async () => {
+    try {
+      const r = await api('/config', 'POST', patch);
+      CONFIG = r.config;
+      if (aviso) torrada(aviso);
+    } catch {
+      torrada('Não consegui salvar — o painel está ligado?');
+    }
+  }, 350);
+}
+
+/* ── estado ao vivo ────────────────────────────────────────────────────── */
+let fonte = null, tentativas = 0;
+function conectar() {
+  fonte = new EventSource('/estado');
+  fonte.onopen = () => { tentativas = 0; $('pulso').classList.add('viva'); };
+  fonte.onmessage = (ev) => {
+    try { ESTADO = JSON.parse(ev.data); pintarAoVivo(); } catch {}
+  };
+  fonte.onerror = () => {
+    fonte.close();
+    $('pulso').classList.remove('viva');
+    setTimeout(conectar, Math.min(20000, 1000 * Math.pow(2, tentativas++)));
+  };
+}
+
+const ROTULOS = { idle: 'Em espera', listening: 'Ouvindo você', thinking: 'Pensando', speaking: 'Falando', offline: 'Painel desligado' };
+
+function pintarAoVivo() {
+  const p = ESTADO.preferencias;
+  $('dispositivo').textContent = p?.dispositivo || 'sem nome';
+  $('voz-estado').textContent = ROTULOS[ESTADO.voice?.state] || '—';
+  $('voz-ultima').textContent = ESTADO.voice?.lastTranscript
+    ? '“' + ESTADO.voice.lastTranscript + '”'
+    : 'nada dito ainda';
+
+  // Tempo
+  const t = ESTADO.tempo;
+  $('cartao-tempo').innerHTML = t
+    ? `<div class="carta"><div class="linha">
+         <div class="cresce">
+           <div class="rotulo">${t.temperatura}° · ${esc(t.condicao)}</div>
+           <div class="sub">${esc(t.local || '')}${t.chuva?.vaiChover ? ' · ' + t.chuva.chance + '% de chuva' : ''}</div>
+         </div></div></div>`
+    : '';
+
+  // Pendentes — tocar marca como feito, igual ao card do painel.
+  const pend = ESTADO.avisos || [];
+  $('pendentes').innerHTML = pend.length
+    ? pend.map((a) => `<div class="carta" style="cursor:pointer" data-feito="${a.id}">
+        <div class="linha"><div class="cresce">
+          <div class="rotulo">${esc(a.texto)}</div>
+          <div class="sub">até ${esc(a.ate)}${a.minutosRestantes <= 60 ? ' · faltam ' + a.minutosRestantes + ' min' : ''}</div>
+        </div><span style="color:var(--acento-claro)">✓</span></div></div>`).join('')
+    : '<div class="vazio">Nada pendente agora.</div>';
+
+  for (const el of document.querySelectorAll('[data-feito]')) {
+    el.onclick = async () => {
+      await api('/aviso/' + el.dataset.feito + '/feito', 'POST');
+      torrada('Marcado como feito.');
+    };
+  }
+}
+
+/* ── fotos ─────────────────────────────────────────────────────────────── */
+async function carregarFotos() {
+  const { fotos } = await api('/fotos');
+  $('grade-fotos').innerHTML = fotos.length
+    ? fotos.map((f) => `<div class="foto"><img src="/fotos/${encodeURIComponent(f)}" alt="">
+        <button class="x" data-apagar="${esc(f)}">×</button></div>`).join('')
+    : '<div class="vazio" style="grid-column:1/-1">Nenhuma foto ainda.</div>';
+
+  for (const b of document.querySelectorAll('[data-apagar]')) {
+    b.onclick = async () => {
+      await api('/fotos/' + encodeURIComponent(b.dataset.apagar), 'DELETE');
+      torrada('Foto removida.');
+      carregarFotos();
+    };
+  }
+}
+
+$('enviar-foto').onclick = () => $('arquivo').click();
+$('arquivo').onchange = async (e) => {
+  const arq = e.target.files[0];
+  if (!arq) return;
+  torrada('Enviando…');
+  try {
+    const r = await fetch('/fotos', { method: 'POST', headers: { 'content-type': arq.type }, body: arq });
+    const j = await r.json();
+    torrada(j.ok ? 'Foto no painel.' : (j.erro || 'Não deu.'));
+    carregarFotos();
+  } catch {
+    torrada('Falhou o envio.');
+  }
+  e.target.value = '';
+};
+
+/* ── lista de compras ──────────────────────────────────────────────────── */
+async function carregarCompras() {
+  const { itens } = await api('/compras');
+  $('lista-compras').innerHTML = itens.length
+    ? itens.map((i) => `<div class="item ${i.feito ? 'feito' : ''}">
+        <div class="marca" data-marcar="${esc(i.nome)}">${i.feito ? '✓' : ''}</div>
+        <div class="nome">${esc(i.nome)}</div>
+        <button class="tirar" data-tirar="${esc(i.nome)}">×</button></div>`).join('')
+    : '<div class="vazio">Lista vazia.</div>';
+
+  for (const el of document.querySelectorAll('[data-marcar]')) {
+    el.onclick = async () => {
+      const item = el.dataset.marcar;
+      const feito = !el.parentElement.classList.contains('feito');
+      await api('/compras', 'PATCH', { item, feito });
+      carregarCompras();
+    };
+  }
+  for (const el of document.querySelectorAll('[data-tirar]')) {
+    el.onclick = async () => {
+      await api('/compras', 'DELETE', { item: el.dataset.tirar });
+      carregarCompras();
+    };
+  }
+}
+
+async function porItem() {
+  const campo = $('novo-item');
+  const nome = campo.value.trim();
+  if (!nome) return;
+  campo.value = '';
+  // Aceita "leite, pão, café" numa digitada só.
+  await api('/compras', 'POST', { itens: nome.split(',').map((s) => s.trim()).filter(Boolean) });
+  carregarCompras();
+}
+$('add-item').onclick = porItem;
+$('novo-item').onkeydown = (e) => { if (e.key === 'Enter') porItem(); };
+
+/* ── avisos ────────────────────────────────────────────────────────────── */
+const DIAS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+const DIAS_LONGO = ['domingo', 'segunda', 'terça', 'quarta', 'quinta', 'sexta', 'sábado'];
+let diasEscolhidos = new Set();
+
+$('aviso-dias').innerHTML = DIAS.map((d, i) =>
+  `<button class="dia" data-dia="${i}">${d}</button>`).join('');
+for (const b of document.querySelectorAll('[data-dia]')) {
+  b.onclick = () => {
+    const i = Number(b.dataset.dia);
+    if (diasEscolhidos.has(i)) diasEscolhidos.delete(i); else diasEscolhidos.add(i);
+    b.classList.toggle('on');
+  };
+}
+
+async function carregarAvisos() {
+  const { avisos } = await api('/avisos');
+  $('lista-avisos').innerHTML = avisos.length
+    ? avisos.map((a) => `<div class="carta"><div class="linha">
+        <div class="cresce">
+          <div class="rotulo">${esc(a.texto)}</div>
+          <div class="sub">${a.dias.map((d) => DIAS_LONGO[d]).join(', ')} · ${esc(a.de)}–${esc(a.ate)}</div>
+        </div>
+        <button class="tirar" data-apagar-aviso="${a.id}">×</button></div></div>`).join('')
+    : '<div class="vazio">Nenhum aviso ainda.</div>';
+
+  for (const b of document.querySelectorAll('[data-apagar-aviso]')) {
+    b.onclick = async () => {
+      await api('/avisos/' + b.dataset.apagarAviso, 'DELETE');
+      torrada('Aviso apagado.');
+      carregarAvisos();
+    };
+  }
+}
+
+$('criar-aviso').onclick = async () => {
+  const texto = $('aviso-texto').value.trim();
+  if (!texto) return torrada('Falta escrever o que é.');
+  if (!diasEscolhidos.size) return torrada('Escolha pelo menos um dia.');
+
+  const r = await api('/avisos', 'POST', {
+    texto,
+    dias: [...diasEscolhidos],
+    de: $('aviso-de').value,
+    ate: $('aviso-ate').value,
+  });
+  if (!r.ok) return torrada(r.erro || 'Não deu.');
+
+  $('aviso-texto').value = '';
+  diasEscolhidos.clear();
+  for (const b of document.querySelectorAll('[data-dia]')) b.classList.remove('on');
+  torrada('Aviso criado.');
+  carregarAvisos();
+};
+
+/* ── ajustes ───────────────────────────────────────────────────────────── */
+async function carregarConfig() {
+  CONFIG = await api('/config');
+  const c = CONFIG;
+
+  $('variante').value = c.aparencia.variante;
+  $('rotacao').value = c.aparencia.rotacaoMin;
+  $('scrim').value = c.aparencia.scrim;
+  textoRotacao(); textoScrim();
+
+  $('tempo-de').value = c.tempo.mostrarDe;
+  $('tempo-ate').value = c.tempo.mostrarAte;
+  $('chuva').value = c.tempo.chuvaMinima;
+  $('tempo-local').textContent = c.tempo.local.nome || 'cidade não definida — diga "Vexis, eu moro em …"';
+  textoChuva();
+
+  $('volume').value = c.volume.nivel;
+  textoVolume();
+  $('nome-disp').value = c.dispositivo.nome || '';
+
+  // O nivel vai ACIMA do controle, e nao ao lado dos horarios: em 390px de
+  // largura, dois campos de hora mais um numero nao cabem, e o "100%" saia
+  // pela borda direita da tela.
+  $('agenda-brilho').innerHTML = c.brilho.agenda.map((f, i) => `
+    <div class="faixa">
+      <div class="sub" style="margin-bottom:7px">das ${esc(f.de)} às ${esc(f.ate)} · <b style="color:var(--texto)">${f.nivel}%</b></div>
+      <div class="duplo">
+        <input type="time" value="${esc(f.de)}" data-brilho="${i}" data-campo="de">
+        <input type="time" value="${esc(f.ate)}" data-brilho="${i}" data-campo="ate">
+      </div>
+      <input type="range" min="5" max="100" step="5" value="${f.nivel}" data-brilho="${i}" data-campo="nivel">
+    </div>`).join('');
+
+  for (const el of document.querySelectorAll('[data-brilho]')) {
+    el.onchange = () => {
+      const agenda = CONFIG.brilho.agenda.map((f) => ({ ...f }));
+      agenda[Number(el.dataset.brilho)][el.dataset.campo] =
+        el.dataset.campo === 'nivel' ? Number(el.value) : el.value;
+      CONFIG.brilho.agenda = agenda;
+      gravar({ brilho: { agenda, auto: true } }, 'Brilho por horário salvo.');
+      carregarConfig();
+    };
+  }
+
+  $('cartao-casa').innerHTML = c.casa.baseUrl
+    ? `<div class="linha"><div class="cresce">
+         <div class="rotulo">Home Assistant</div>
+         <div class="sub">${esc(c.casa.baseUrl)} · ${c.casa.token ? 'com token' : 'sem token'}</div>
+       </div></div>`
+    : `<div class="sub" style="line-height:1.6">
+         Xiaomi Home não tem API pública, e nem Tuya. O caminho que funciona é o
+         Home Assistant no meio: ele fala com todos e tem uma API de verdade.
+         <br><br>Ainda não configurado — é o próximo pedaço.
+       </div>`;
+}
+
+const textoRotacao = () => {
+  const v = Number($('rotacao').value);
+  $('rot-txt').textContent = v === 0 ? 'nunca — fica sempre na primeira' : `a cada ${v} min`;
+};
+const textoScrim = () => { $('scrim-txt').textContent = $('scrim').value + '% — mais escuro deixa a letra legível'; };
+const textoChuva = () => { $('chuva-txt').textContent = `a partir de ${$('chuva').value}% de chance`; };
+const textoVolume = () => { $('vol-txt').textContent = $('volume').value + '%'; };
+
+$('variante').onchange = () => gravar({ aparencia: { variante: $('variante').value } }, 'Estilo trocado.');
+$('rotacao').oninput = textoRotacao;
+$('rotacao').onchange = () => gravar({ aparencia: { rotacaoMin: Number($('rotacao').value) } }, 'Salvo.');
+$('scrim').oninput = textoScrim;
+$('scrim').onchange = () => gravar({ aparencia: { scrim: Number($('scrim').value) } }, 'Salvo.');
+$('tempo-de').onchange = $('tempo-ate').onchange = () =>
+  gravar({ tempo: { mostrarDe: $('tempo-de').value, mostrarAte: $('tempo-ate').value } }, 'Janela do tempo salva.');
+$('chuva').oninput = textoChuva;
+$('chuva').onchange = () => gravar({ tempo: { chuvaMinima: Number($('chuva').value) } }, 'Salvo.');
+$('volume').oninput = textoVolume;
+$('volume').onchange = async () => {
+  const r = await api('/volume', 'POST', { nivel: Number($('volume').value) });
+  if (!r.ok) torrada(r.erro || 'Não consegui mudar o volume.');
+};
+$('nome-disp').onchange = () => gravar({ dispositivo: { nome: $('nome-disp').value.trim() } }, 'Nome salvo.');
+
+$('reiniciar').onclick = async () => {
+  if (!confirm('Reiniciar o painel agora?')) return;
+  const r = await api('/sistema/reiniciar', 'POST');
+  torrada(r.ok ? 'Reiniciando…' : (r.erro || 'Não consegui.'));
+};
+
+// Duas etapas, e a segunda digitada. Um toque errado aqui apaga fotos, avisos
+// e lista de compras — e no celular o toque errado é fácil.
+$('resetar').onclick = async () => {
+  const previa = await api('/sistema/resetar', 'POST', {});
+  if (!previa.confirmar) return;
+  if (prompt(previa.confirmar + '\n\nEscreva APAGAR para confirmar.') !== 'APAGAR') return;
+  const r = await api('/sistema/resetar', 'POST', { confirmado: true });
+  torrada(r.ok ? 'Tudo apagado.' : (r.erro || 'Falhou.'));
+  if (r.ok) { carregarFotos(); carregarConfig(); carregarAvisos(); carregarCompras(); }
+};
+
+/* ── abas ──────────────────────────────────────────────────────────────── */
+const CARREGA = { fotos: carregarFotos, lista: carregarCompras, avisos: carregarAvisos, ajustes: carregarConfig };
+for (const b of document.querySelectorAll('nav button')) {
+  b.onclick = () => {
+    for (const o of document.querySelectorAll('nav button')) o.classList.toggle('on', o === b);
+    for (const s of document.querySelectorAll('.pagina')) s.classList.toggle('ativa', s.id === 'p-' + b.dataset.p);
+    scrollTo({ top: 0 });
+    // Recarrega ao ENTRAR na aba, e não tudo no boot: no celular pela rede
+    // local, cinco requisições de uma vez atrasam a primeira tela.
+    CARREGA[b.dataset.p]?.();
+  };
+}
+
+conectar();
+carregarConfig();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
+</script>
+</body>
+</html>
