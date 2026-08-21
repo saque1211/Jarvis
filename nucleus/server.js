@@ -1,7 +1,11 @@
 import 'dotenv/config';
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import authRoutes from './routes/auth.js';
 import deviceRoutes from './routes/devices.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +18,10 @@ app.get('/health', (req, res) => {
 
 app.use('/auth', authRoutes);
 app.use('/devices', deviceRoutes);
+
+// Portal da conta — a mesma origem que faz o login tambem serve a pagina de
+// login. E por isso que a pessoa nunca digita o endereco do servidor.
+app.use(express.static(path.join(__dirname, 'public')));
 
 app.use((err, req, res, next) => {
   console.error(err);

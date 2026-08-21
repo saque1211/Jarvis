@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="VEXIS">
+<title>VEXIS</title>
+<style>
+/*
+ * Portal da conta, servido pelo proprio nucleus.
+ *
+ * Servido daqui de proposito: assim o navegador ja sabe o endereco do
+ * servidor (a mesma origem da pagina), e a pessoa nunca digita IP nenhum —
+ * so email e senha. Fosse uma pagina solta, teria que perguntar "qual o
+ * servidor?" toda vez.
+ */
+:root {
+  --acento: #19c0dd;
+  --acento-forte: #0088b0;
+  --acento-claro: #4fd6ee;
+  --perigo: #d6006c;
+  --fundo: #06090c;
+  --carta: rgba(255,255,255,.055);
+  --borda: rgba(255,255,255,.11);
+  --texto: #eef2f4;
+  --fraco: rgba(238,242,244,.55);
+  --serif: 'Source Serif 4', Georgia, serif;
+  --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --seguro-topo: env(safe-area-inset-top, 0px);
+  --seguro-base: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body {
+  background: var(--fundo); color: var(--texto);
+  font-family: var(--sans); font-size: 16px; min-height: 100vh;
+}
+body { padding: calc(20px + var(--seguro-topo)) 18px calc(20px + var(--seguro-base)); }
+
+.centro { min-height: 90vh; display: grid; place-items: center; }
+.cartao {
+  width: 100%; max-width: 380px;
+  background: var(--carta); border: 1px solid var(--borda);
+  border-radius: 18px; padding: 30px 24px;
+}
+h1 { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 6px; }
+.legenda { color: var(--fraco); font-size: 14px; margin-bottom: 24px; line-height: 1.5; }
+
+.abas { display: flex; gap: 8px; margin-bottom: 22px; }
+.abas button {
+  flex: 1; background: transparent; border: 1px solid var(--borda);
+  padding: 11px; border-radius: 11px; color: var(--fraco);
+  font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.abas button.on { background: var(--acento-forte); border-color: var(--acento-forte); color: #fff; }
+
+label { display: block; font-size: 13px; color: var(--fraco); margin: 0 0 6px 2px; }
+input {
+  width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 14px; color: var(--texto);
+  font-size: 16px; font-family: inherit; margin-bottom: 16px;
+}
+input:focus { outline: none; border-color: var(--acento); }
+
+.botao {
+  width: 100%; background: var(--acento-forte); border: none;
+  border-radius: 12px; color: #fff; padding: 15px;
+  font-size: 16px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.botao:active { transform: scale(.99); }
+.botao:disabled { opacity: .55; }
+.botao.fantasma { background: transparent; border: 1px solid var(--borda); }
+.botao.perigo { background: transparent; border: 1px solid rgba(214,0,108,.45); color: var(--perigo); }
+
+.erro { color: var(--perigo); font-size: 14px; margin-top: 14px; text-align: center; min-height: 20px; }
+
+/* ---- painel logado ---- */
+.topo { display: flex; align-items: baseline; gap: 10px; margin-bottom: 24px; }
+.topo h1 { font-size: 26px; margin: 0; }
+.quem { margin-left: auto; font-size: 13px; color: var(--fraco); text-align: right; }
+
+h2 { font-family: var(--serif); font-size: 19px; font-weight: 600; margin: 26px 0 12px; }
+.disp {
+  background: var(--carta); border: 1px solid var(--borda); border-radius: 13px;
+  padding: 14px 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px;
+}
+.disp .icone { font-size: 20px; }
+.disp .cresce { flex: 1; min-width: 0; }
+.disp .nome { font-size: 16px; }
+.disp .tipo { font-size: 13px; color: var(--fraco); margin-top: 2px; }
+.disp .tirar { background: none; border: none; color: var(--fraco); font-size: 22px; cursor: pointer; padding: 4px 8px; }
+.vazio { color: var(--fraco); font-style: italic; font-size: 15px; padding: 8px 2px; }
+
+.ajuda { font-size: 13px; color: var(--fraco); margin: -4px 0 12px; line-height: 1.5; }
+.duplo { display: flex; gap: 10px; margin-bottom: 8px; }
+.duplo input { margin-bottom: 0; }
+.duplo .botao { width: auto; flex: 0 0 auto; padding: 14px 20px; }
+
+#torrada {
+  position: fixed; left: 16px; right: 16px; bottom: calc(20px + var(--seguro-base));
+  max-width: 380px; margin: 0 auto;
+  background: rgba(12,17,20,.97); border: 1px solid rgba(79,214,238,.38);
+  border-radius: 13px; padding: 14px 16px; font-size: 14.5px; text-align: center;
+  opacity: 0; transform: translateY(12px); transition: opacity .22s, transform .22s;
+  pointer-events: none; z-index: 40;
+}
+#torrada.on { opacity: 1; transform: translateY(0); }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+<div id="torrada"></div>
+
+<script>
+'use strict';
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// A origem da propria pagina E o endereco do servidor. Nada de digitar IP.
+const BASE = location.origin;
+let TOKEN = localStorage.getItem('vexis_token');
+
+let tTorrada = null;
+function torrada(txt) {
+  const el = $('#torrada');
+  el.textContent = txt;
+  el.classList.add('on');
+  clearTimeout(tTorrada);
+  tTorrada = setTimeout(() => el.classList.remove('on'), 2800);
+}
+
+async function api(rota, metodo = 'GET', corpo) {
+  const headers = {};
+  if (corpo) headers['content-type'] = 'application/json';
+  if (TOKEN) headers['authorization'] = 'Bearer ' + TOKEN;
+  const r = await fetch(BASE + rota, {
+    method: metodo,
+    headers,
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { // token expirou ou invalido
+    TOKEN = null;
+    localStorage.removeItem('vexis_token');
+    telaLogin();
+    throw new Error('Sessão expirada — entre de novo.');
+  }
+  if (!r.ok && !j.erro) throw new Error('HTTP ' + r.status);
+  return j;
+}
+
+/* ── tela de login / registro ──────────────────────────────────────────── */
+function telaLogin() {
+  $('#app').innerHTML = `
+    <div class="centro">
+      <div class="cartao">
+        <h1>VEXIS</h1>
+        <p class="legenda">Entre com sua conta para ver e parear seus dispositivos.</p>
+        <div class="abas">
+          <button class="on" id="aba-entrar">Entrar</button>
+          <button id="aba-criar">Criar conta</button>
+        </div>
+        <label for="email">Email</label>
+        <input type="email" id="email" placeholder="voce@email.com" autocomplete="username" inputmode="email">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" placeholder="sua senha" autocomplete="current-password">
+        <button class="botao" id="enviar">Entrar</button>
+        <div class="erro" id="erro"></div>
+      </div>
+    </div>`;
+
+  let criando = false;
+  const abaEntrar = $('#aba-entrar'), abaCriar = $('#aba-criar'), enviar = $('#enviar');
+
+  abaEntrar.onclick = () => {
+    criando = false;
+    abaEntrar.classList.add('on'); abaCriar.classList.remove('on');
+    enviar.textContent = 'Entrar';
+    $('#senha').setAttribute('autocomplete', 'current-password');
+    $('#erro').textContent = '';
+  };
+  abaCriar.onclick = () => {
+    criando = true;
+    abaCriar.classList.add('on'); abaEntrar.classList.remove('on');
+    enviar.textContent = 'Criar conta';
+    $('#senha').setAttribute('autocomplete', 'new-password');
+    $('#erro').textContent = '';
+  };
+
+  async function submeter() {
+    const email = $('#email').value.trim();
+    const senha = $('#senha').value;
+    const erro = $('#erro');
+    erro.textContent = '';
+
+    if (!email || !senha) { erro.textContent = 'Preencha email e senha.'; return; }
+    if (criando && senha.length < 8) { erro.textContent = 'A senha precisa de pelo menos 8 caracteres.'; return; }
+
+    enviar.disabled = true;
+    enviar.textContent = 'Aguarde…';
+    try {
+      const j = await api(criando ? '/auth/register' : '/auth/login', 'POST', { email, password: senha });
+      if (!j.token) throw new Error(j.erro || 'Não deu certo.');
+      TOKEN = j.token;
+      localStorage.setItem('vexis_token', TOKEN);
+      telaConta();
+    } catch (err) {
+      erro.textContent = err.message;
+      enviar.disabled = false;
+      enviar.textContent = criando ? 'Criar conta' : 'Entrar';
+    }
+  }
+
+  enviar.onclick = submeter;
+  $('#senha').onkeydown = (e) => { if (e.key === 'Enter') submeter(); };
+}
+
+/* ── tela da conta (logado) ────────────────────────────────────────────── */
+const ICONE = { pi: '🎙️', pc: '💻', phone: '📱' };
+const TIPO = { pi: 'Raspberry Pi', pc: 'Computador', phone: 'Celular' };
+
+async function telaConta() {
+  $('#app').innerHTML = `
+    <div class="topo">
+      <h1>VEXIS</h1>
+      <div class="quem" id="quem">—</div>
+    </div>
+    <h2>Seus dispositivos</h2>
+    <div id="lista-disp"><div class="vazio">Carregando…</div></div>
+
+    <h2>Parear um novo</h2>
+    <p class="ajuda">No dispositivo (Pi, PC), vai aparecer um código de pareamento. Digite ele aqui para liberar o acesso.</p>
+    <div class="duplo">
+      <input type="text" id="codigo" placeholder="código de pareamento" autocomplete="off">
+      <button class="botao" id="parear">Parear</button>
+    </div>
+
+    <div style="margin-top:34px">
+      <button class="botao fantasma" id="sair">Sair da conta</button>
+    </div>`;
+
+  try {
+    const perfil = await api('/auth/profile');
+    $('#quem').textContent = perfil.user?.email || '';
+  } catch {}
+
+  await carregarDispositivos();
+
+  $('#parear').onclick = async () => {
+    const codigo = $('#codigo').value.trim();
+    if (!codigo) return torrada('Digite o código de pareamento.');
+    $('#parear').disabled = true;
+    try {
+      const j = await api('/devices/claim', 'POST', { approvalToken: codigo });
+      if (j.erro) { torrada(j.erro); }
+      else { torrada('Dispositivo pareado!'); $('#codigo').value = ''; await carregarDispositivos(); }
+    } catch (err) {
+      torrada(err.message);
+    } finally {
+      $('#parear').disabled = false;
+    }
+  };
+
+  $('#sair').onclick = () => {
+    TOKEN = null;
+    localStorage.removeItem('vexis_token');
+    telaLogin();
+  };
+}
+
+async function carregarDispositivos() {
+  try {
+    const { devices } = await api('/devices/list');
+    const alvo = $('#lista-disp');
+    if (!alvo) return;
+    alvo.innerHTML = devices && devices.length
+      ? devices.map((d) => `
+        <div class="disp">
+          <span class="icone">${ICONE[d.type] || '🔌'}</span>
+          <div class="cresce">
+            <div class="nome">${esc(d.name)}</div>
+            <div class="tipo">${TIPO[d.type] || d.type}</div>
+          </div>
+          <button class="tirar" data-tirar="${esc(d.id)}" title="Remover">×</button>
+        </div>`).join('')
+      : '<div class="vazio">Nenhum dispositivo ainda. Pareie um abaixo.</div>';
+
+    for (const b of document.querySelectorAll('[data-tirar]')) {
+      b.onclick = async () => {
+        if (!confirm('Remover este dispositivo?')) return;
+        await api('/devices/' + encodeURIComponent(b.dataset.tirar), 'DELETE');
+        torrada('Dispositivo removido.');
+        carregarDispositivos();
+      };
+    }
+  } catch (err) {
+    const alvo = $('#lista-disp');
+    if (alvo) alvo.innerHTML = `<div class="vazio">Não consegui carregar: ${esc(err.message)}</div>`;
+  }
+}
+
+/* ── início ────────────────────────────────────────────────────────────── */
+if (TOKEN) telaConta(); else telaLogin();
+</script>
+</body>
+</html>
