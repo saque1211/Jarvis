@@ -203,6 +203,55 @@ export async function pedacoDeFala(recorder, frameLength, aoSilenciar = null) {
  * O preco e honesto: cada pedaco de fala no comodo custa uma transcricao. Por
  * isso o porteiro de energia vem antes, e o pedaco e curto.
  */
+/**
+ * Continua gravando a MESMA frase, agora com a regra de fim do comando.
+ *
+ * Existe por causa de uma assimetria que passou despercebida: o pedaco da
+ * escuta fecha com ~350ms de silencio, e o comando so termina com 600ms. Essa
+ * diferenca e exatamente o tamanho de uma pausa no meio da frase. Falando
+ * "Vexis, poe um timer de... dois minutos", o pedaco fechava no "de", o
+ * casamento achava o nome, e a METADE virava o pedido.
+ *
+ * Devolve o audio que veio depois e se houve fala nele. Sem fala, o pedaco
+ * original ja era a frase inteira e nada precisa ser refeito.
+ */
+async function continuarFrase(recorder, frameLength) {
+  const frameMs = (frameLength / SAMPLE_RATE_ESCUTA) * 1000;
+  const silencioFinal = Math.ceil(config.voice.silenceMs / frameMs);
+  const teto = Math.ceil(config.voice.maxCommandMs / frameMs);
+
+  const frames = [];
+  let mudo = 0;
+  let houveFala = false;
+  let chiado = Infinity;
+  let pico = 0;
+
+  for (let i = 0; i < teto; i++) {
+    const frame = await recorder.read();
+    frames.push(...frame);
+
+    const energia = frameEnergy(frame);
+    chiado = chiado === Infinity ? energia : energia < chiado ? energia : chiado * 0.999 + energia * 0.001;
+    pico = Math.max(pico, energia);
+
+    // O TETO importa aqui mais do que em qualquer outro lugar: esta funcao
+    // comeca NO MEIO da fala, entao o primeiro frame ja e voz e o "chiado"
+    // nasce valendo o nivel da sua voz. Sem limitar pelo pico, o limiar virava
+    // o dobro da fala e nada mais contava como fala — a continuacao gravava e
+    // jogava fora tudo, e a frase voltava cortada do mesmo jeito.
+    const limiar = Math.max(PISO_ABSOLUTO, Math.min(pico * 0.5, chiado * MARGEM_DE_RUIDO));
+
+    if (energia > limiar) {
+      houveFala = true;
+      mudo = 0;
+    } else if (++mudo >= silencioFinal) {
+      break;
+    }
+  }
+
+  return { audio: Int16Array.from(frames), houveFala };
+}
+
 /** Grava o buffer e manda transcrever, limpando o arquivo depois. */
 async function transcreverBuffer(frames) {
   const arquivo = path.join(os.tmpdir(), `vexis-wake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`);
@@ -288,19 +337,41 @@ async function escutaTrigger() {
         }
         if (!r.casou) continue;
 
-        // Chamou e ja mandou na mesma tirada. Aproveitar isso e o que separa
-        // "Vexis... (bipe) ...toca musica" de "Vexis, toca musica".
-        //
-        // So que o pedaco TRUNCADO nao serve pra isso: ele acabou porque
-        // estourou o teto, nao porque a pessoa parou de falar, e o que sobrou
-        // e a primeira metade do pedido. Mandar "abre o Spotify e toca a" pro
-        // modelo e pior do que nao mandar nada — ele responde com confianca a
-        // uma frase que ninguem disse. Nesse caso acorda e escuta normal.
-        if (r.sobra && pedaco.truncado) {
-          console.log(pc.dim('  [escuta] a frase continuava; vou escutar o pedido inteiro'));
+        // Só o nome, e a pessoa parou: acorda e abre a escuta normal.
+        if (!r.sobra && !pedaco.truncado) return true;
+
+        // Veio mais coisa junto com o nome. NAO da pra confiar no que ja
+        // esta aqui: o pedaco fecha com ~350ms de silencio e o comando so
+        // acaba com 600ms, e essa diferenca e do tamanho de uma pausa no
+        // meio da frase. Continua gravando com a regra do comando.
+        const resto = await continuarFrase(recorder, FRAME_LENGTH);
+
+        if (!resto.houveFala) {
+          // Nao veio mais nada: o pedaco ja era a frase inteira, e a
+          // transcricao que ja temos serve. Sem segunda ida ao whisper.
+          return r.sobra ? { comando: r.sobra } : true;
+        }
+
+        // Veio mais fala. Transcreve a frase INTEIRA de uma vez — juntar duas
+        // transcricoes pelo texto daria emenda torta no meio da palavra.
+        const inteiro = new Int16Array(pedaco.audio.length + resto.audio.length);
+        inteiro.set(pedaco.audio, 0);
+        inteiro.set(resto.audio, pedaco.audio.length);
+
+        let textoTodo;
+        try {
+          textoTodo = await transcreverBuffer(inteiro);
+        } catch {
           return true;
         }
-        return r.sobra ? { comando: r.sobra } : true;
+        if (!textoTodo || ehArtefato(textoTodo)) return true;
+
+        if (config.voice.vadDebug) {
+          console.log(pc.dim(`  [escuta] frase inteira: "${textoTodo}"`));
+        }
+
+        const completo = casaWake(textoTodo);
+        return completo.casou && completo.sobra ? { comando: completo.sobra } : true;
       }
     },
 
