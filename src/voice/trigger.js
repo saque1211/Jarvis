@@ -116,7 +116,7 @@ async function drenarFila(recorder, frameMs) {
  * o Whisper responde — e a espera entre chamar e ser ouvido e o que separa
  * "ele me escuta" de "ele demora".
  */
-export async function pedacoDeFala(recorder, frameLength) {
+export async function pedacoDeFala(recorder, frameLength, aoSilenciar = null) {
   const frameMs = (frameLength / SAMPLE_RATE_ESCUTA) * 1000;
   const preRoll = Math.max(1, Math.ceil(300 / frameMs));
   const maxFrames = Math.ceil(config.voice.wakeMaxMs / frameMs);
@@ -151,21 +151,44 @@ export async function pedacoDeFala(recorder, frameLength) {
   // esta aqui e uma frase inteira. Teto = ela AINDA estava falando, e o que
   // esta aqui e um pedaco cortado no meio.
   let truncado = true;
+
+  // Palpite: comeca a transcrever assim que a fala PARA, sem esperar a
+  // confirmacao de que parou mesmo. Esses 350ms de espera sao a maior parte do
+  // atraso entre voce dizer o nome e ele responder — e sao tempo em que a
+  // maquina esta parada com o audio na mao.
+  //
+  // Espera ~100ms antes de disparar pra nao confundir a pausa que existe DENTRO
+  // de uma palavra ("ve-xis") com o fim dela.
+  const assentar = Math.max(1, Math.ceil(100 / frameMs));
+  let palpitou = false;
+  let palpiteValido = false;
+
   for (let i = 0; i < maxFrames; i++) {
     const frame = await recorder.read();
     frames.push(...frame);
 
     const limiar = Math.max(PISO_ABSOLUTO, chiado * MARGEM_DE_RUIDO);
-    if (frameEnergy(frame) > limiar) mudo = 0;
-    else if (++mudo >= silencioFrames && i >= minFrames) {
-      truncado = false;
-      break;
+    if (frameEnergy(frame) > limiar) {
+      mudo = 0;
+      // Voltou a falar: o que ja foi mandado pro whisper e meia frase.
+      palpiteValido = false;
+    } else {
+      mudo++;
+      if (aoSilenciar && !palpitou && mudo === assentar && i >= minFrames) {
+        palpitou = true;
+        palpiteValido = true;
+        aoSilenciar(Int16Array.from(frames));
+      }
+      if (mudo >= silencioFrames && i >= minFrames) {
+        truncado = false;
+        break;
+      }
     }
   }
 
   // Estalo de porta, tosse, clique de mouse: curto demais pra ser um nome.
   if (frames.length < minFrames * frameLength) return null;
-  return { audio: Int16Array.from(frames), truncado };
+  return { audio: Int16Array.from(frames), truncado, palpiteValido };
 }
 
 /**
@@ -180,6 +203,17 @@ export async function pedacoDeFala(recorder, frameLength) {
  * O preco e honesto: cada pedaco de fala no comodo custa uma transcricao. Por
  * isso o porteiro de energia vem antes, e o pedaco e curto.
  */
+/** Grava o buffer e manda transcrever, limpando o arquivo depois. */
+async function transcreverBuffer(frames) {
+  const arquivo = path.join(os.tmpdir(), `vexis-wake-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`);
+  try {
+    writeWav(arquivo, frames, SAMPLE_RATE_ESCUTA);
+    return await transcribe(arquivo);
+  } finally {
+    fs.rmSync(arquivo, { force: true });
+  }
+}
+
 async function escutaTrigger() {
   if (!config.voice.sttServerUrl) {
     // Sem servidor, cada pedaco recarregaria o modelo do disco: ~2s por
@@ -205,24 +239,41 @@ async function escutaTrigger() {
       await drenarFila(recorder, frameMs);
 
       while (true) {
-        const pedaco = await pedacoDeFala(recorder, FRAME_LENGTH);
+        // Disparado no instante em que a fala para. Roda em paralelo com o
+        // resto da captura: quando o silencio confirma o fim, a transcricao
+        // ja esta pronta ou quase.
+        let palpite = null;
+        const pedaco = await pedacoDeFala(recorder, FRAME_LENGTH, (frames) => {
+          palpite = transcreverBuffer(frames).catch(() => null);
+        });
+
+        let texto = null;
+        let adiantado = false;
+
+        // Espera o palpite mesmo quando ele ja nao vale: ele esta ocupando o
+        // whisper, e mandar outra por cima so faz as duas brigarem pela vez.
+        if (palpite) {
+          const t = await palpite;
+          if (pedaco && pedaco.palpiteValido && t) {
+            texto = t;
+            adiantado = true;
+          }
+        }
+
         if (!pedaco) continue;
 
-        let texto;
-        const arquivo = path.join(os.tmpdir(), `vexis-wake-${Date.now()}.wav`);
-        try {
-          writeWav(arquivo, pedaco.audio, SAMPLE_RATE_ESCUTA);
-          texto = await transcribe(arquivo);
-        } catch (err) {
-          // Servidor caiu no meio da noite: avisa uma vez e continua tentando.
-          // Um gatilho que morre em silencio deixa a casa inteira sem voz.
-          if (!ouvindoAgora) {
-            console.error(pc.yellow(`[escuta] ${err.message}`));
-            ouvindoAgora = true;
+        if (!texto) {
+          try {
+            texto = await transcreverBuffer(pedaco.audio);
+          } catch (err) {
+            // Servidor caiu no meio da noite: avisa uma vez e continua tentando.
+            // Um gatilho que morre em silencio deixa a casa inteira sem voz.
+            if (!ouvindoAgora) {
+              console.error(pc.yellow(`[escuta] ${err.message}`));
+              ouvindoAgora = true;
+            }
+            continue;
           }
-          continue;
-        } finally {
-          fs.rmSync(arquivo, { force: true });
         }
         ouvindoAgora = false;
 
@@ -230,7 +281,7 @@ async function escutaTrigger() {
 
         const r = casaWake(texto);
         if (config.voice.vadDebug) {
-          console.log(pc.dim(`  [escuta] "${texto}" ${r.casou ? `→ acordou (d=${r.distancia})` : '→ nao era'}`));
+          console.log(pc.dim(`  [escuta] "${texto}"${adiantado ? pc.green(' (adiantada)') : ''} ${r.casou ? `→ acordou (d=${r.distancia})` : '→ nao era'}`));
         }
         if (!r.casou) continue;
 

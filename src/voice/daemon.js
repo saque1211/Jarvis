@@ -82,6 +82,8 @@ async function captureCommand(onParcial) {
   // Piso: antes disso nenhum silencio encerra. A pausa que todo mundo faz
   // depois das duas primeiras palavras nao pode ser lida como fim de frase.
   const minFrames = Math.ceil(config.voice.minCommandMs / frameMs);
+  // Quanto ele espera voce COMECAR a falar depois de acordar.
+  const esperaFrames = Math.ceil(config.voice.esperaMs / frameMs);
 
   // Quantos frames de silencio bastam pra arriscar o palpite. Fica sempre
   // ANTES do fim confirmado: e a diferenca entre os dois que vira tempo ganho.
@@ -125,9 +127,19 @@ async function captureCommand(onParcial) {
     // Limiar relativo ao proprio microfone, nao um numero fixo. Com um mic
     // ruidoso, um limiar fixo baixo nunca acusa silencio: o daemon grava os 15
     // segundos inteiros e o whisper recebe a frase afogada em chiado.
-    const threshold = Math.min(
-      peak * SPEECH_CAP,
-      Math.max(SILENCE_FLOOR, floor * NOISE_MARGIN, peak * SPEECH_RATIO)
+    // O SILENCE_FLOOR fica POR FORA do teto, e essa ordem e o conserto de um
+    // bug real: com `Math.min(peak * SPEECH_CAP, ...)` por ultimo, o teto
+    // anulava o piso. Num comodo silencioso o pico e o proprio chiado, entao
+    // o limiar desabava pra metade de quase-zero — e a primeira flutuacao do
+    // silencio contava como fala. O daemon marcava "ela ja falou" antes de
+    // voce abrir a boca e comecava a contar o silencio final na hora.
+    //
+    // Piso por fora, teto por dentro: o teto continua impedindo que o limiar
+    // passe da metade do pico (o caso da gravacao que ja comeca com voz), e o
+    // piso continua impedindo que ele desca abaixo do audivel.
+    const threshold = Math.max(
+      SILENCE_FLOOR,
+      Math.min(peak * SPEECH_CAP, Math.max(floor * NOISE_MARGIN, peak * SPEECH_RATIO))
     );
 
     if (config.voice.vadDebug && i % 8 === 0) {
@@ -162,8 +174,11 @@ async function captureCommand(onParcial) {
       }
 
       if (silentRun >= silenceFramesNeeded && i >= minFrames) break;
-    } else if (i > silenceFramesNeeded * 3) {
-      // Gatilho disparou mas ninguem falou nada: aborta.
+    } else if (i > esperaFrames) {
+      // Chamou e nao falou nada: desiste. Este prazo NAO e o silencio de fim
+      // de frase — sao duas coisas que so pareciam uma. O de fim de frase
+      // precisa ser curto (voce ja falou, e so confirmacao); este precisa ser
+      // longo, porque entre chamar e comecar a falar existe pensar.
       return null;
     }
   }
