@@ -40,8 +40,12 @@ export async function capacidades() {
 
   try {
     const m = await modulo();
-    base.wifi = typeof m.listarRedes === 'function';
     base.reiniciar = typeof m.reiniciarDispositivo === 'function';
+
+    // Perguntar, e nao supor. Existir a funcao `listarRedes` nao quer dizer
+    // que a maquina tenha radio: um desktop no cabo respondia que sim e
+    // deixava na tela um controle que so sabia dar erro.
+    base.wifi = await m.wifiDisponivel().catch(() => false);
 
     // Brilho e volume dependem do hardware, nao so do SO: notebook tem WMI de
     // brilho, monitor de mesa nao; o Pi so tem se a regra de udev existir. A

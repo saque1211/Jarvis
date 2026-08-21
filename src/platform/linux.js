@@ -39,6 +39,18 @@ export function quebrarLinhaNmcli(linha) {
   return campos;
 }
 
+/**
+ * Tem radio Wi-Fi nesta maquina?
+ *
+ * Lista os dispositivos, sem varrer o ar — e uma pergunta ao NetworkManager,
+ * nao ao radio. Serve pro HUD decidir se desenha o controle de Wi-Fi.
+ */
+export async function wifiDisponivel() {
+  const r = await run('nmcli', ['-t', '-f', 'TYPE', 'device'], { timeoutMs: 8000 });
+  if (!r.ok) return false;
+  return r.stdout.split('\n').some((l) => l.trim() === 'wifi');
+}
+
 /** As redes que o radio esta enxergando agora. */
 export async function listarRedes() {
   const r = await run(

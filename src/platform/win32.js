@@ -258,15 +258,64 @@ export function lerRedesDoNetsh(saida) {
   return redes.sort((a, b) => b.sinal - a.sinal);
 }
 
+/**
+ * Tira acento pra comparar.
+ *
+ * O netsh responde no idioma do Windows: "O Servico de Configuracao Automatica
+ * sem Fio (wlansvc) nao esta em execucao." vem com cedilha e til de verdade.
+ * Procurar "Servico" sem cedilha nunca casa — foi assim que essa mensagem
+ * chegou crua na tela em vez de virar uma explicacao util.
+ */
+function semAcento(texto) {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+}
+
+/** O erro do netsh quer dizer "esta maquina nao faz Wi-Fi"? */
+export function wlanIndisponivel(saida) {
+  const s = semAcento(saida);
+  return (
+    // wlansvc parado — o nome do servico nao e traduzido em lugar nenhum.
+    s.includes('wlansvc') ||
+    s.includes('nao esta em execucao') ||
+    s.includes('is not running') ||
+    // Desktop com cabo: existe o servico, nao existe a placa.
+    s.includes('nenhuma interface') ||
+    s.includes('no wireless interface') ||
+    s.includes('there is no wireless interface')
+  );
+}
+
+/**
+ * Tem radio Wi-Fi utilizavel nesta maquina?
+ *
+ * Consulta barata (uma linha de netsh, sem varrer o ar) porque roda no boot do
+ * HUD so pra decidir se o controle de Wi-Fi deve existir na tela. Desktop
+ * ligado no cabo responde "nao" e a linha some — melhor que um controle que
+ * abre uma lista vazia toda vez.
+ */
+export async function wifiDisponivel() {
+  if (!isWindows) return false;
+  const r = await run('netsh', ['wlan', 'show', 'interfaces'], { timeoutMs: 10000 });
+  if (!r.ok) return false;
+  return !wlanIndisponivel(`${r.stdout}${r.stderr}`);
+}
+
 export async function listarRedes() {
   assertWindows('listar redes');
   const r = await run('netsh', ['wlan', 'show', 'networks', 'mode=bssid'], { timeoutMs: 20000 });
   if (!r.ok) {
-    throw new Error(
-      /nao esta em execucao|is not running|Servico/i.test(`${r.stdout}${r.stderr}`)
-        ? 'O servico de WLAN do Windows esta parado, ou a maquina nao tem Wi-Fi.'
-        : `netsh falhou: ${r.stderr || r.stdout}`
-    );
+    const saida = `${r.stdout}${r.stderr}`;
+    if (wlanIndisponivel(saida)) {
+      throw new Error(
+        'Este computador nao tem Wi-Fi ligado. Se ele usa cabo, e normal e nao ha o que fazer. ' +
+          'Se tem Wi-Fi, ligue o servico: abra services.msc como administrador, ache ' +
+          '"Configuracao Automatica de Rede Sem Fio" (WLAN AutoConfig) e ponha em Automatico.'
+      );
+    }
+    throw new Error(`netsh falhou: ${(r.stderr || r.stdout || '').slice(0, 200)}`);
   }
 
   const redes = lerRedesDoNetsh(r.stdout);

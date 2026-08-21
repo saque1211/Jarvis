@@ -899,6 +899,19 @@ function verificarBoot() {
   }
 
   if (bootPasso) return;
+
+  // Espera saber o que a maquina faz antes de escolher o primeiro passo. As
+  // capacidades chegam pelo SSE um instante depois do resto.
+  if (!ESTADO.capacidades) return;
+
+  // Maquina sem radio — desktop no cabo — nao pode receber uma tela pedindo
+  // Wi-Fi. Ela ja esta na rede; o passo simplesmente nao existe pra ela.
+  if (ESTADO.capacidades.wifi === false) {
+    bootPasso = 'conta';
+    renderBoot();
+    return;
+  }
+
   bootPasso = 'wifi';
   renderBoot();
   // A varredura fica AQUI, na entrada do passo, e nao dentro do desenho.
@@ -911,7 +924,11 @@ function verificarBoot() {
 function renderBoot() {
   const b = $('boot');
   b.classList.add('ativo');
+  // Sem Wi-Fi so existe um passo; duas barrinhas com uma sempre apagada
+  // fariam parecer que falta alguma coisa.
+  const temPassoDeRede = ESTADO.capacidades?.wifi !== false;
   $('passo1').classList.toggle('feito', true);
+  $('passo2').style.display = temPassoDeRede ? '' : 'none';
   $('passo2').classList.toggle('feito', bootPasso === 'conta');
 
   if (bootPasso === 'wifi') {
