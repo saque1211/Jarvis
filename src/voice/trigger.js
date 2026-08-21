@@ -147,18 +147,25 @@ export async function pedacoDeFala(recorder, frameLength) {
   for (const f of anel) frames.push(...f);
 
   let mudo = 0;
+  // Quem fechou o pedaco importa muito. Silencio = a pessoa terminou, e o que
+  // esta aqui e uma frase inteira. Teto = ela AINDA estava falando, e o que
+  // esta aqui e um pedaco cortado no meio.
+  let truncado = true;
   for (let i = 0; i < maxFrames; i++) {
     const frame = await recorder.read();
     frames.push(...frame);
 
     const limiar = Math.max(PISO_ABSOLUTO, chiado * MARGEM_DE_RUIDO);
     if (frameEnergy(frame) > limiar) mudo = 0;
-    else if (++mudo >= silencioFrames && i >= minFrames) break;
+    else if (++mudo >= silencioFrames && i >= minFrames) {
+      truncado = false;
+      break;
+    }
   }
 
   // Estalo de porta, tosse, clique de mouse: curto demais pra ser um nome.
   if (frames.length < minFrames * frameLength) return null;
-  return Int16Array.from(frames);
+  return { audio: Int16Array.from(frames), truncado };
 }
 
 /**
@@ -204,7 +211,7 @@ async function escutaTrigger() {
         let texto;
         const arquivo = path.join(os.tmpdir(), `vexis-wake-${Date.now()}.wav`);
         try {
-          writeWav(arquivo, pedaco, SAMPLE_RATE_ESCUTA);
+          writeWav(arquivo, pedaco.audio, SAMPLE_RATE_ESCUTA);
           texto = await transcribe(arquivo);
         } catch (err) {
           // Servidor caiu no meio da noite: avisa uma vez e continua tentando.
@@ -229,6 +236,16 @@ async function escutaTrigger() {
 
         // Chamou e ja mandou na mesma tirada. Aproveitar isso e o que separa
         // "Vexis... (bipe) ...toca musica" de "Vexis, toca musica".
+        //
+        // So que o pedaco TRUNCADO nao serve pra isso: ele acabou porque
+        // estourou o teto, nao porque a pessoa parou de falar, e o que sobrou
+        // e a primeira metade do pedido. Mandar "abre o Spotify e toca a" pro
+        // modelo e pior do que nao mandar nada — ele responde com confianca a
+        // uma frase que ninguem disse. Nesse caso acorda e escuta normal.
+        if (r.sobra && pedaco.truncado) {
+          console.log(pc.dim('  [escuta] a frase continuava; vou escutar o pedido inteiro'));
+          return true;
+        }
         return r.sobra ? { comando: r.sobra } : true;
       }
     },

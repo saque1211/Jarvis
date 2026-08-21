@@ -159,9 +159,11 @@ export const config = {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean),
-    // Teto do pedaco que a escuta manda pro Whisper. A palavra sozinha cabe
-    // de sobra; o resto so faria a deteccao demorar.
-    wakeMaxMs: Number(process.env.VEXIS_WAKE_MAX_MS || 2200),
+    // Teto do pedaco que a escuta manda pro Whisper. So e atingido em fala
+    // CONTINUA: "Vexis" sozinho fecha no silencio muito antes disso. Serve pra
+    // caber "Vexis, abre o Spotify e toca minha playlist" numa tirada so —
+    // com teto curto, o pedido chegava cortado no meio.
+    wakeMaxMs: Number(process.env.VEXIS_WAKE_MAX_MS || 4500),
     // Silencio que fecha o pedaco. Curto: aqui nao e a frase inteira, e so o
     // nome.
     wakeSilencioMs: Number(process.env.VEXIS_WAKE_SILENCIO_MS || 350),

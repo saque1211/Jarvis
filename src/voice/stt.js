@@ -22,19 +22,24 @@ import { config } from '../core/config.js';
  * cadastrou. Um vocabulario generico ajuda pouco; o seu ajuda muito.
  */
 /**
- * O nome do assistente entra no vocabulario, e entra PRIMEIRO.
+ * A frase de abertura do prompt inicial, com o nome do assistente dentro.
  *
- * No modo de escuta continua, quem decide se ele acorda e a transcricao do
- * proprio nome — e "vexis" nao existe em portugues, entao o whisper chuta
- * "vexes", "vex is", "bexis". O casamento por som cobre esses casos, mas
- * cobrir e o segundo melhor: avisar que a palavra existe faz ele escrever
- * certo de primeira, e a deteccao para de depender de tolerancia.
+ * O nome precisa aparecer porque, na escuta continua, e a transcricao dele que
+ * decide se o assistente acorda — e "vexis" nao existe em portugues.
+ *
+ * Mas aparece UMA vez, dentro de uma frase normal. Repetir ("Vexis. Ei Vexis.
+ * Vexis,") foi o que quebrou tudo: o prompt inicial do whisper e contexto
+ * anterior, e contexto repetitivo faz ele repetir e alucinar. O nome ficava
+ * mais provavel e todo o RESTO ficava pior — e o resto e o comando.
+ *
+ * A frase tambem existe pra dizer ao whisper que dominio e este. Sem ela, ele
+ * transcreve como se fosse conversa solta.
  */
-function nomeDoAssistente() {
+function aberturaDoPrompt() {
   const nome = String(config.voice.wakeWord || '').trim();
-  if (!nome) return '';
+  if (!nome) return 'Comandos para o assistente.';
   const bonito = nome.charAt(0).toUpperCase() + nome.slice(1);
-  return `${bonito}. Ei ${bonito}. ${bonito}, `;
+  return `Comandos para o assistente ${bonito}.`;
 }
 
 const VOCAB_BASE =
@@ -125,8 +130,8 @@ export function promptDeVocabulario() {
   const partes = [];
   // Primeiro de todos: o teto corta o FIM do prompt, e o nome do assistente
   // e a unica palavra cuja transcricao decide se ele acorda ou nao.
-  const nome = nomeDoAssistente();
-  if (nome) partes.push(nome);
+  const abertura = aberturaDoPrompt();
+  if (abertura) partes.push(abertura);
 
   const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
   if (doUsuario) partes.push(doUsuario);

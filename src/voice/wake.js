@@ -61,14 +61,24 @@ export function distancia(a, b, teto = Infinity) {
   return anterior[b.length];
 }
 
-function palavrasDe(texto) {
-  return String(texto || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[^a-z0-9\s]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean);
+/**
+ * Parte a frase em palavras GUARDANDO onde cada uma termina no texto original.
+ *
+ * A posicao importa porque o que vem depois do nome e o comando, e ele tem que
+ * chegar ao modelo do jeito que o whisper escreveu — com acento, com maiuscula,
+ * com pontuacao. Remontar a partir das palavras normalizadas transformava
+ * "toca uma música do Djavan" em "toca uma musica do djavan", e comando com
+ * acento arrancado e comando pior.
+ */
+function tokenizar(texto) {
+  const bruto = String(texto || '');
+  const tokens = [];
+  const re = /[\p{L}\p{N}]+/gu;
+  let m;
+  while ((m = re.exec(bruto)) !== null) {
+    tokens.push({ palavra: m[0], inicio: m.index, fim: m.index + m[0].length });
+  }
+  return tokens;
 }
 
 /**
@@ -84,18 +94,18 @@ export function casaWake(texto, opcoes = {}) {
   const extras = (opcoes.extras || config.voice.wakeAliases).map(fonetizar).filter(Boolean);
   const alvos = [alvo, ...extras];
 
-  const palavras = palavrasDe(texto);
-  if (!palavras.length) return { casou: false };
+  const tokens = tokenizar(texto);
+  if (!tokens.length) return { casou: false };
 
   // Candidatos: cada palavra sozinha, e cada par de palavras vizinhas coladas.
   // O par existe porque o Whisper PARTE nomes que nao conhece — "Vex is" sao
   // dois tokens que juntos formam a palavra inteira.
   const candidatos = [];
-  for (let i = 0; i < palavras.length; i++) {
-    candidatos.push({ chave: fonetizar(palavras[i]), inicio: i, fim: i + 1 });
-    if (i + 1 < palavras.length) {
+  for (let i = 0; i < tokens.length; i++) {
+    candidatos.push({ chave: fonetizar(tokens[i].palavra), inicio: i, fim: i + 1 });
+    if (i + 1 < tokens.length) {
       candidatos.push({
-        chave: fonetizar(palavras[i] + palavras[i + 1]),
+        chave: fonetizar(tokens[i].palavra + tokens[i + 1].palavra),
         inicio: i,
         fim: i + 2,
       });
@@ -125,11 +135,18 @@ export function casaWake(texto, opcoes = {}) {
 
   if (!melhor) return { casou: false };
 
-  const sobra = palavras.slice(melhor.fim).join(' ').trim();
+  // Fatia o texto ORIGINAL a partir do fim do nome. E o que preserva acento,
+  // maiuscula e pontuacao do comando.
+  const sobra = texto
+    .slice(tokens[melhor.fim - 1].fim)
+    // Tira so a pontuacao que separava o nome do pedido: "Vexis, toca" → "toca".
+    .replace(/^[\s,.;:!?–—-]+/, '')
+    .trim();
+
   return {
     casou: true,
     distancia: melhor.d,
-    ouviu: palavras.slice(melhor.inicio, melhor.fim).join(' '),
+    ouviu: texto.slice(tokens[melhor.inicio].inicio, tokens[melhor.fim - 1].fim),
     // Sobra de uma ou duas letras e caco da propria palavra mal partida, nao
     // comando. Mandar isso pro modelo gastaria uma ida pra ele perguntar "o
     // que?" — melhor abrir a escuta normalmente.

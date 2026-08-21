@@ -108,7 +108,7 @@ async function modoAoVivo() {
     const arquivo = path.join(os.tmpdir(), `vexis-calibra-${Date.now()}.wav`);
     let texto;
     try {
-      writeWav(arquivo, pedaco, SAMPLE_RATE);
+      writeWav(arquivo, pedaco.audio, SAMPLE_RATE);
       texto = await transcribe(arquivo);
     } catch (err) {
       console.log(pc.red(`  erro: ${err.message}`));
@@ -121,8 +121,9 @@ async function modoAoVivo() {
     total++;
     const r = casaWake(texto);
     if (r.casou) acordou++;
-    const seg = (pedaco.length / SAMPLE_RATE).toFixed(1);
-    console.log(`  ${pc.dim(`${seg}s`)}  ${JSON.stringify(texto).padEnd(34)}${veredito(texto)}`);
+    const seg = (pedaco.audio.length / SAMPLE_RATE).toFixed(1);
+    const corte = pedaco.truncado ? pc.yellow(' [cortado no teto]') : '';
+    console.log(`  ${pc.dim(`${seg}s`)}  ${JSON.stringify(texto).padEnd(34)}${veredito(texto)}${corte}`);
   }
 }
 
