@@ -1,0 +1,20 @@
+{
+  "name": "jarvis-nucleus",
+  "version": "1.0.0",
+  "description": "JARVIS cloud backend — accounts, device pairing, audio routing",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

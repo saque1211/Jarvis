@@ -150,6 +150,52 @@ WantedBy=multi-user.target
 o tempo todo consome CPU numa placa que tem pouca, e um botão nunca dispara
 sozinho com a TV ligada. Wake word é fácil de acrescentar depois.
 
+## 3. Nucleus — contas e pareamento de dispositivos
+
+O Nucleus é um backend Node.js que gerencia:
+- Autenticação de usuários (email/senha)
+- Pareamento de dispositivos (Pi, PC, telefone)
+- Coordenação de sessões entre clientes
+
+```bash
+cd /opt/jarvis/nucleus
+npm install --omit=dev
+```
+
+`.env` do Nucleus em `/opt/jarvis/.env` (já existe junto com o router):
+
+```
+JWT_SECRET=gere-uma-string-aleatoria-e-bem-longa-aqui
+```
+
+O Nucleus escuta na mesma porta que o router (8080) em `/nucleus/` ou pode ter sua própria porta. Veja `nucleus/README.md` para todos os endpoints.
+
+### Fluxo de uso
+
+1. **Usuário registra** na app do celular ou HUD:
+   - Email e senha
+   - `POST /nucleus/auth/register`
+   - Recebe JWT token
+
+2. **Pi se pareia com servidor**:
+   - `POST /nucleus/devices/register` (sem auth)
+   - Recebe `approvalToken`
+   - Exibe na tela ou terminal
+
+3. **Usuário aprova Pi**:
+   - Digita o `approvalToken` na app
+   - `POST /nucleus/devices/claim` com JWT token
+   - Pi recebe `deviceToken` para usar daqui em diante
+
+4. **Pi usa deviceToken** em operações futuras:
+   - Passa `X-Device-Token` em requests
+   - Coordena com servidor e telefone
+
+Próximas fases:
+- Fila de comandos entre clientes
+- Sincronização de estado
+- Integração com Home Assistant
+
 ## Problemas comuns
 
 | sintoma | causa |
