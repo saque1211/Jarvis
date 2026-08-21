@@ -73,8 +73,10 @@ export default {
       name: 'complete_reminder',
       speaks: true,
       description:
-        'Marca um aviso como feito hoje — ele some da tela e volta na proxima semana. ' +
-        'Use pra "ja tirei o lixo", "pode tirar o lixo da tela", "feito", "ja fiz".',
+        'Marca um aviso semanal como feito hoje — ele some da tela e volta na proxima ' +
+        'semana. So use quando a frase citar QUAL aviso: "ja tirei o lixo", "tomei o ' +
+        'remedio", "pode tirar o lixo da tela". Um "feito" ou "ja fiz" solto, sem dizer ' +
+        'o que, NAO e este — pergunte qual antes.',
       input_schema: {
         type: 'object',
         properties: {
