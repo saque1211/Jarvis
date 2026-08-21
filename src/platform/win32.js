@@ -60,6 +60,30 @@ export async function processoVivo(nome) {
   return ok && Number(stdout.trim()) > 0;
 }
 
+/**
+ * Espera o processo APARECER, em vez de olhar uma vez e desistir.
+ *
+ * Uma espera fixa erra dos dois lados: 2,5s e pouco pro Chrome subindo frio
+ * (disco girando, perfil grande, extensao carregando) e e muito pro Bloco de
+ * Notas, que abre em 300ms e mesmo assim fazia o assistente ficar mudo o tempo
+ * todo antes de responder.
+ *
+ * Perguntando de meio em meio segundo, o caso comum fica RAPIDO e o caso lento
+ * fica CERTO — e cada pergunta custa um PowerShell, entao o teto existe.
+ */
+export async function esperarProcesso(nome, tetoMs = 8000) {
+  const passo = 500;
+  const limite = Date.now() + tetoMs;
+  let tentativas = 0;
+
+  while (Date.now() < limite) {
+    tentativas++;
+    if (await processoVivo(nome)) return { vivo: true, esperouMs: tentativas * passo };
+    await new Promise((r) => setTimeout(r, passo));
+  }
+  return { vivo: false, esperouMs: tetoMs };
+}
+
 /** Roda PowerShell e faz parse do stdout como JSON. */
 /**
  * PowerShell de longa duracao, uma linha de stdout por evento. Diferente do

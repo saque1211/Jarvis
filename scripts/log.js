@@ -66,8 +66,21 @@ if (outroNome) {
 }
 
 // ── as conversas ─────────────────────────────────────────────────────────────
-const comandos = (runtime.commands || []).slice(-quantas).reverse();
+const todosComandos = runtime.commands || [];
+const comandos = todosComandos.slice(-quantas).reverse();
 const atividade = runtime.activity || [];
+
+// Cada tool pertence ao ultimo comando que comecou antes dela.
+const dono = new Map();
+for (const a of atividade) {
+  const t = new Date(a.at);
+  let escolhido = null;
+  for (const c of todosComandos) {
+    if (new Date(c.at) <= t) escolhido = c;
+    else break;
+  }
+  if (escolhido) dono.set(a, escolhido);
+}
 
 console.log(pc.bold(`\n  ultimas ${comandos.length} conversas\n`));
 
@@ -78,12 +91,13 @@ if (!comandos.length) {
     const quando = new Date(c.at);
     const hora = quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-    // As tools que rodaram por volta desse comando. Sem elas nao da pra
-    // separar "escolheu a ferramenta errada" de "escolheu a certa e ela falhou".
-    const perto = atividade.filter((a) => {
-      const dt = new Date(a.at) - quando;
-      return dt >= -1000 && dt < 30000;
-    });
+    // As tools desse comando — e SO desse.
+    //
+    // Uma janela fixa de 30s parecia razoavel e mentia: dois comandos a 10s de
+    // distancia trocavam de tools, e o log mostrava "que horas sao" chamando
+    // open_app. Diagnostico que inventa causa e pior que diagnostico nenhum.
+    // Cada tool pertence ao comando mais recente que veio ANTES dela.
+    const perto = atividade.filter((a) => dono.get(a) === c);
 
     console.log(`  ${pc.dim(hora)}`);
     console.log(`    ${pc.green('voce  ')} ${c.text}`);

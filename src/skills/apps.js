@@ -6,6 +6,7 @@ import {
   psQuote,
   nomeDeProcesso,
   processoVivo,
+  esperarProcesso,
 } from '../platform/win32.js';
 import { config, loadJson, saveJson } from '../core/config.js';
 
@@ -257,17 +258,22 @@ export default {
 
         // `Start-Process` volta com sucesso assim que ENTREGA o pedido ao
         // Windows — o app pode subir e morrer logo depois, e a gente estaria
-        // dizendo "abri" pra uma janela que sumiu. Confere antes de afirmar.
-        await new Promise((r) => setTimeout(r, 2500));
+        // dizendo "abri" pra uma janela que sumiu. Confere antes de afirmar,
+        // perguntando ate 8s em vez de olhar uma vez aos 2,5s: Chrome frio
+        // costuma passar disso, e Bloco de Notas responde em 300ms.
         const processo = nomeDeProcesso(target);
-        const vivo = await processoVivo(processo);
+        const { vivo } = await esperarProcesso(processo);
         if (!vivo) {
           // Nome de processo nem sempre bate com o alvo (o alias "vscode" vira
-          // "Code"), entao isto e duvida, nao veredito.
-          return (
-            `Mandei abrir ${nome}, mas nao vejo processo "${processo}" rodando — ` +
-            `pode ter fechado sozinho, ou so ter outro nome. Pergunte se abriu.`
+          // "Code"), entao isto e duvida, nao veredito. A frase e curta porque
+          // vai ser LIDA EM VOZ ALTA — a instrucao de diagnostico fica no
+          // terminal, nao no ouvido de quem pediu.
+          console.error(
+            `[apps] abri "${target}" mas nao achei processo "${processo}" em 8s. ` +
+              `Se o app abriu, o nome do processo e outro: descubra com ` +
+              `"Get-Process | Where-Object { $_.MainWindowTitle }" e corrija o alvo com register_app.`
           );
+          return `Pedi pra abrir ${nome}. Abriu aí?`;
         }
         return `Abri ${nome}${comArgumento}.`;
       },
