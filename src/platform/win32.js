@@ -1,5 +1,12 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { config } from '../core/config.js';
+import { run } from './exec.js';
+
+// Reexportado: dezenas de skills fazem `import { run } from '../platform/win32.js'`
+// e nao ha ganho nenhum em mexer em todas elas pra mover uma funcao.
+export { run };
 
 /**
  * Camada Windows. Tudo que toca a maquina passa por aqui, entao trocar de SO
@@ -15,63 +22,6 @@ function assertWindows(what) {
         'O JARVIS foi configurado pra Windows 11 — rode-o na sua maquina.'
     );
   }
-}
-
-/**
- * Executa um processo e devolve stdout/stderr/exitCode sem passar por shell,
- * entao nao existe injecao via argumento.
- */
-export function run(command, args = [], options = {}) {
-  const timeout = options.timeoutMs ?? config.safety.commandTimeoutMs;
-  return new Promise((resolve) => {
-    const child = spawn(command, args, {
-      cwd: options.cwd,
-      env: { ...process.env, ...(options.env || {}) },
-      windowsHide: true,
-      shell: false,
-      // `detached` poe o filho num grupo de processos proprio. Importa pra
-      // quem LANCA app: sem isso o app nasce no grupo do JARVIS e pode morrer
-      // junto com o PowerShell que o abriu — abre e fecha na hora.
-      detached: options.detached === true,
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, timeout);
-
-    child.stdout?.on('data', (d) => {
-      stdout += d.toString();
-    });
-    child.stderr?.on('data', (d) => {
-      stderr += d.toString();
-    });
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      resolve({ ok: false, code: -1, stdout, stderr: err.message, timedOut });
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({
-        ok: code === 0 && !timedOut,
-        code,
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
-        timedOut,
-      });
-    });
-
-    if (options.stdin) {
-      child.stdin.write(options.stdin);
-      child.stdin.end();
-    }
-  });
 }
 
 /**
@@ -270,4 +220,206 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
 [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('JARVIS').Show($toast)
 `;
   return ps(script);
+}
+
+/* ============================================================================
+ * CENTRAL DE CONTROLE — rede, brilho, volume, reiniciar.
+ *
+ * Espelha o que o linux.js faz no Raspberry. O HUD chama sempre pelo
+ * platform/index.js e nunca sabe em qual dos dois esta rodando.
+ * ==========================================================================*/
+
+/**
+ * Quebra a saida do `netsh wlan show networks`.
+ *
+ * O netsh traduz quase tudo — "Autenticacao", "Sinal" — mas NAO traduz a
+ * palavra SSID nem o simbolo `%`. A leitura se apoia so nesses dois, senao o
+ * Windows em portugues devolveria lista vazia e ninguem entenderia por que.
+ */
+export function lerRedesDoNetsh(saida) {
+  const redes = [];
+  let atual = null;
+
+  for (const linha of String(saida).split('\n')) {
+    const inicio = /^\s*SSID\s+\d+\s*:\s*(.*)$/.exec(linha);
+    if (inicio) {
+      if (atual?.nome) redes.push(atual);
+      atual = { nome: inicio[1].trim(), sinal: 0, protegida: false, conectada: false };
+      continue;
+    }
+    if (!atual) continue;
+
+    const sinal = /:\s*(\d{1,3})\s*%/.exec(linha);
+    if (sinal) atual.sinal = Math.max(atual.sinal, Number(sinal[1]));
+    if (/WPA|WEP/i.test(linha)) atual.protegida = true;
+  }
+  if (atual?.nome) redes.push(atual);
+
+  return redes.sort((a, b) => b.sinal - a.sinal);
+}
+
+export async function listarRedes() {
+  assertWindows('listar redes');
+  const r = await run('netsh', ['wlan', 'show', 'networks', 'mode=bssid'], { timeoutMs: 20000 });
+  if (!r.ok) {
+    throw new Error(
+      /nao esta em execucao|is not running|Servico/i.test(`${r.stdout}${r.stderr}`)
+        ? 'O servico de WLAN do Windows esta parado, ou a maquina nao tem Wi-Fi.'
+        : `netsh falhou: ${r.stderr || r.stdout}`
+    );
+  }
+
+  const redes = lerRedesDoNetsh(r.stdout);
+  const atual = await redeAtual();
+  for (const rede of redes) rede.conectada = rede.nome === atual;
+  return redes.sort((a, b) => (a.conectada === b.conectada ? b.sinal - a.sinal : a.conectada ? -1 : 1));
+}
+
+export async function redeAtual() {
+  const r = await run('netsh', ['wlan', 'show', 'interfaces'], { timeoutMs: 10000 });
+  if (!r.ok) return null;
+  // Mesma pegadinha do idioma: procura a linha de SSID que nao seja a de BSSID.
+  for (const linha of r.stdout.split('\n')) {
+    const m = /^\s*SSID\s*:\s*(.+)$/.exec(linha);
+    if (m) return m[1].trim();
+  }
+  return null;
+}
+
+/** SSID em hex, como o perfil XML do Windows exige junto do nome legivel. */
+function ssidHex(ssid) {
+  return Buffer.from(ssid, 'utf8').toString('hex').toUpperCase();
+}
+
+function escaparXml(texto) {
+  return String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Conecta a uma rede nova.
+ *
+ * No Windows nao existe "conectar com esta senha" em uma linha: o `netsh wlan
+ * connect` so aceita um perfil que ja exista. Pra rede nunca vista, o caminho e
+ * escrever o perfil XML, importar e so entao conectar.
+ */
+export async function conectarRede(ssid, senha) {
+  assertWindows('conectar a rede');
+  if (!ssid) throw new Error('Sem SSID.');
+
+  if (senha) {
+    const xml = `<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+  <name>${escaparXml(ssid)}</name>
+  <SSIDConfig><SSID>
+    <hex>${ssidHex(ssid)}</hex>
+    <name>${escaparXml(ssid)}</name>
+  </SSID></SSIDConfig>
+  <connectionType>ESS</connectionType>
+  <connectionMode>auto</connectionMode>
+  <MSM><security>
+    <authEncryption>
+      <authentication>WPA2PSK</authentication>
+      <encryption>AES</encryption>
+      <useOneX>false</useOneX>
+    </authEncryption>
+    <sharedKey>
+      <keyType>passPhrase</keyType>
+      <protected>false</protected>
+      <keyMaterial>${escaparXml(senha)}</keyMaterial>
+    </sharedKey>
+  </security></MSM>
+</WLANProfile>`;
+
+    const arquivo = path.join(os.tmpdir(), `vexis-wifi-${Date.now()}.xml`);
+    fs.writeFileSync(arquivo, xml, 'utf8');
+    try {
+      const add = await run('netsh', ['wlan', 'add', 'profile', `filename=${arquivo}`, 'user=all'], {
+        timeoutMs: 15000,
+      });
+      if (!add.ok) return { ok: false, erro: (add.stderr || add.stdout || '').slice(0, 200) };
+    } finally {
+      // A senha esta em texto puro dentro dele. Sai do disco na mesma hora.
+      try {
+        fs.rmSync(arquivo, { force: true });
+      } catch {
+        /* ignora */
+      }
+    }
+  }
+
+  const conn = await run('netsh', ['wlan', 'connect', `name=${ssid}`], { timeoutMs: 30000 });
+  if (!conn.ok) return { ok: false, erro: (conn.stderr || conn.stdout || 'netsh recusou').slice(0, 200) };
+
+  // O netsh volta "solicitacao concluida" antes de a rede subir. Confirma.
+  await new Promise((r) => setTimeout(r, 3000));
+  const agora = await redeAtual();
+  if (agora === ssid) return { ok: true, rede: ssid };
+  return { ok: false, erro: 'A conexao foi pedida mas nao completou — senha errada, provavelmente.' };
+}
+
+/**
+ * Brilho pela WMI. So existe em painel integrado (notebook, tudo-em-um). Em
+ * monitor de mesa a WMI simplesmente nao expoe a classe, e reportar
+ * indisponivel e melhor que devolver um numero inventado — mesma regra da GPU.
+ */
+export async function lerBrilho() {
+  if (!isWindows) return null;
+  const r = await psJson(
+    'Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightness -ErrorAction Stop | ' +
+      'Select-Object -First 1 -Property CurrentBrightness'
+  );
+  const n = r?.CurrentBrightness;
+  return typeof n === 'number' ? n : null;
+}
+
+export async function definirBrilho(percentual) {
+  assertWindows('mudar o brilho');
+  const alvo = Math.max(0, Math.min(100, Math.round(Number(percentual))));
+  const r = await ps(
+    'Get-CimInstance -Namespace root/WMI -ClassName WmiMonitorBrightnessMethods -ErrorAction Stop | ' +
+      `Invoke-CimMethod -MethodName WmiSetBrightness -Arguments @{ Brightness = ${alvo}; Timeout = 1 }`
+  );
+  if (r.ok) return { ok: true, nivel: alvo, via: 'wmi' };
+  throw new Error(
+    'Este Windows nao expoe controle de brilho: a WMI so alcanca painel integrado. ' +
+      'Em monitor de mesa, o brilho fica nos botoes do proprio monitor.'
+  );
+}
+
+/**
+ * Volume.
+ *
+ * LIMITE CONHECIDO, de proposito: o Windows nao tem comando pra ler nem
+ * escrever o volume mestre. O caminho real seria P/Invoke na IAudioEndpointVolume
+ * via Add-Type — codigo COM com ordem de vtable que, se eu errar em uma linha,
+ * chama o metodo errado em vez de falhar. Nao da pra testar isso daqui, entao
+ * fica com as teclas de midia: elas mexem de 2 em 2 e sao as mesmas que o
+ * teclado usa. O nivel exibido e o que o usuario escolheu, guardado nas
+ * preferencias — nao uma leitura do sistema.
+ */
+export async function lerVolume() {
+  return null;
+}
+
+export async function definirVolume(percentual, atual = null) {
+  assertWindows('mudar o volume');
+  const alvo = Math.max(0, Math.min(100, Math.round(Number(percentual))));
+  const partida = atual === null ? 50 : Math.max(0, Math.min(100, Math.round(atual)));
+
+  const passos = Math.round(Math.abs(alvo - partida) / 2);
+  if (passos > 0) {
+    await sendVirtualKey(alvo > partida ? VK.VOLUME_UP : VK.VOLUME_DOWN, Math.min(passos, 50));
+  }
+  return { ok: true, nivel: alvo, via: 'teclas de midia', exato: false };
+}
+
+export async function reiniciarDispositivo() {
+  assertWindows('reiniciar');
+  const r = await run('shutdown', ['/r', '/t', '0']);
+  if (r.ok) return { ok: true };
+  throw new Error(`Nao consegui reiniciar: ${r.stderr || r.stdout}`);
 }

@@ -17,7 +17,12 @@ const SKILLS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '.
  *
  * `platform` do parametro permite montar o conjunto de OUTRA maquina: o
  * servidor precisa saber quais tools o agente do PC oferece pra rotear pra la.
- * `'*'` carrega tudo, ignorando a marcacao.
+ * `'*'` no parametro carrega tudo, ignorando a marcacao.
+ *
+ * `'*'` NA SKILL e o contrario: "esta roda em qualquer lugar". Vale pras que so
+ * mexem em arquivo e rede — tempo, avisos, compras. Sem tratar esse caso aqui,
+ * o curinga se comportava como um nome de plataforma que nunca casa e a skill
+ * sumia das duas pontas, que e o oposto do que a marcacao promete.
  */
 export async function loadSkills({ platform = process.platform } = {}) {
   const skills = [];
@@ -32,7 +37,8 @@ export async function loadSkills({ platform = process.platform } = {}) {
     if (!skill?.name || !Array.isArray(skill.tools)) {
       throw new Error(`Skill invalida em ${file}: precisa exportar default { name, tools[] }`);
     }
-    if (platform !== '*' && skill.platform && skill.platform !== platform) continue;
+    const soDaqui = skill.platform && skill.platform !== '*';
+    if (platform !== '*' && soDaqui && skill.platform !== platform) continue;
     skills.push(skill);
   }
 
