@@ -45,6 +45,8 @@ class MainActivity : Activity() {
         private const val PREFS = "vexis"
         private const val CHAVE_ENDERECO = "endereco"
         private const val PORTA_PADRAO = 8791
+        // host (letras, digitos, ponto, hifen, sublinha) e porta opcional.
+        private val PADRAO_ENDERECO = Regex("^([A-Za-z0-9._-]+)(?::(\\d{1,5}))?$")
 
         private const val AZUL = 0xFF0088B0.toInt()
         private const val AZUL_CLARO = 0xFF4FD6EE.toInt()
@@ -68,21 +70,52 @@ class MainActivity : Activity() {
     /**
      * Aceita o que a pessoa realmente digita.
      *
-     * Ninguem digita "http://192.168.0.10:8791/app" — digita "192.168.0.10", ou
-     * cola com a porta, ou poe uma barra no fim. Exigir a forma completa
-     * transformaria a primeira tela numa armadilha.
+     * Ninguem digita "http://192.168.0.10:8791/app". Digita o IP, as vezes com
+     * a porta, as vezes com uma barra no fim, as vezes com um espaco que o
+     * teclado colou sozinho — e no teclado numerico do Android a virgula fica
+     * onde o brasileiro procura o ponto.
+     *
+     * Antes isto dependia do Uri.parse, que e leniente demais pra validar e
+     * severo demais pra perdoar: qualquer coisa fora do formato exato caia num
+     * "endereco nao parece valido" sem dizer o que estava errado.
      */
     private fun normalizar(bruto: String): String? {
-        var texto = bruto.trim()
+        // Todo espaco, nao so das pontas.
+        var texto = bruto.replace(Regex("\\s+"), "")
         if (texto.isEmpty()) return null
-        if (!texto.startsWith("http://") && !texto.startsWith("https://")) {
-            texto = "http://$texto"
-        }
-        val uri = Uri.parse(texto)
-        val host = uri.host ?: return null
-        if (host.isBlank()) return null
-        val porta = if (uri.port > 0) uri.port else PORTA_PADRAO
+
+        texto = texto.replace(',', '.')
+        texto = texto.replace(Regex("^https?://", RegexOption.IGNORE_CASE), "")
+        // Caminho a gente monta sozinho; o que interessa e host e porta.
+        texto = texto.substringBefore('/')
+        if (texto.isEmpty()) return null
+
+        val achado = PADRAO_ENDERECO.find(texto) ?: return null
+        val host = achado.groupValues[1]
+        // "...." casa a regex e nao e endereco de nada.
+        if (!host.any { it.isLetterOrDigit() }) return null
+
+        val porta = achado.groupValues[2].takeIf { it.isNotEmpty() }?.toIntOrNull() ?: PORTA_PADRAO
+        if (porta < 1 || porta > 65535) return null
+
         return "http://$host:$porta/app"
+    }
+
+    /**
+     * O IP do proprio celular, pra sugerir a faixa da rede.
+     *
+     * Sai das interfaces de rede e nao do WifiManager de proposito: assim nao
+     * precisa de permissao nenhuma. Quem nao sabe o IP do PC pelo menos
+     * descobre que ele comeca com os mesmos tres numeros.
+     */
+    private fun faixaDaRede(): String? = try {
+        java.net.NetworkInterface.getNetworkInterfaces().toList()
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { !it.isLoopbackAddress && it is java.net.Inet4Address }
+            ?.hostAddress
+            ?.substringBeforeLast('.')
+    } catch (e: Exception) {
+        null
     }
 
     // ── primeira tela ────────────────────────────────────────────────────────
@@ -101,9 +134,15 @@ class MainActivity : Activity() {
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 34f)
         })
 
+        val faixa = faixaDaRede()
         raiz.addView(TextView(this).apply {
-            text = erro ?: "Onde está o painel? Rode \"npm run hud\" no PC — " +
-                "o terminal mostra o endereço da rede."
+            text = erro ?: buildString {
+                append("Onde está o painel? Rode \"npm run hud\" no PC — o terminal ")
+                append("mostra o endereço da rede.")
+                // A faixa some a duvida de metade das pessoas: elas nao sabem o
+                // IP do PC, mas reconhecem os tres primeiros numeros quando veem.
+                if (faixa != null) append("\n\nSeu celular está em $faixa.x — o PC deve estar na mesma faixa.")
+            }
             setTextColor(if (erro != null) AZUL_CLARO else FRACO)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             setPadding(0, dp(10), 0, dp(22))
@@ -132,9 +171,13 @@ class MainActivity : Activity() {
             lp.topMargin = dp(16)
             layoutParams = lp
             setOnClickListener {
-                val url = normalizar(campo.text.toString())
+                val digitado = campo.text.toString()
+                val url = normalizar(digitado)
                 if (url == null) {
-                    telaDeEndereco("Endereço não parece válido. Ex: 192.168.0.10")
+                    // Mostra o que CHEGOU, entre aspas. Um erro que so diz
+                    // "invalido" e um beco: se o campo veio vazio aparece «»,
+                    // e se o teclado meteu algo estranho da pra ver o que foi.
+                    telaDeEndereco("Não entendi «$digitado». Digite só o IP, assim: 192.168.0.10")
                 } else {
                     prefs().edit().putString(CHAVE_ENDERECO, url).apply()
                     abrir(url)
