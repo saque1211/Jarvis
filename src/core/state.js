@@ -4,6 +4,9 @@ import os from 'node:os';
 import { config, ensureDirs } from './config.js';
 import { listVaultFiles, readVaultFile, today } from './vault.js';
 import { timerSnapshot } from '../skills/timer.js';
+import { lerSettings, brilhoDoMomento } from './settings.js';
+import { pendentes } from './avisos.js';
+import { listarCompras } from '../skills/compras.js';
 
 /**
  * Snapshot de estado do JARVIS — a fonte unica de verdade do HUD.
@@ -186,6 +189,41 @@ export function snapshot() {
 
     // Painel NOW PLAYING — preenchido pelo HUD via skill media, cadencia lenta.
     nowPlaying: runtime.nowPlaying || null,
+
+    // Painel AVISO — o card de cima do HUD. So o que esta pendente AGORA:
+    // dia certo, dentro da janela, e ainda nao marcado como feito hoje.
+    avisos: pendentes(),
+
+    // Painel COMPRAS — o que falta comprar. O celular abre a mesma lista.
+    compras: listarCompras().filter((i) => !i.feito),
+
+    // Preferencias que o HUD obedece pra se desenhar. Vem juntas do estado pra
+    // uma mudanca feita no celular chegar na tela pelo mesmo SSE que ja existe,
+    // sem o HUD ficar perguntando "mudou alguma coisa?" de segundo em segundo.
+    preferencias: preferenciasDoHud(),
+  };
+}
+
+/**
+ * O pedaco das preferencias que a tela precisa.
+ *
+ * Nao vai o objeto inteiro de proposito: `casa.token` e senha de Home Assistant,
+ * e o estado do HUD trafega pra qualquer navegador da rede local. O que a tela
+ * nao desenha, ela nao recebe.
+ */
+function preferenciasDoHud() {
+  const s = lerSettings();
+  return {
+    dispositivo: s.dispositivo.nome,
+    aparencia: s.aparencia,
+    brilho: { nivel: brilhoDoMomento(), auto: s.brilho.auto },
+    volume: { nivel: s.volume.nivel },
+    tempo: {
+      ativo: s.tempo.ativo,
+      configurado: s.tempo.local.lat != null,
+      mostrarDe: s.tempo.mostrarDe,
+      mostrarAte: s.tempo.mostrarAte,
+    },
   };
 }
 

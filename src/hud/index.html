@@ -1,377 +1,922 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:,">
 <title>VEXIS</title>
-<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@300;400;500;600&family=Barlow+Condensed:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-/* Paleta e tipografia vem do mockup. Fonte da Google com queda pra system-ui:
-   sem internet o layout continua igual, so muda o desenho da letra. */
-:root{
-  --bg:#131517; --panel:#16191c; --text:#e8eaec; --accent:#94bce3;
-  --linha:rgba(232,234,236,.16); --fraco:rgba(232,234,236,.45);
-  --cond:'Barlow Condensed',system-ui,sans-serif;
-  --corpo:'Barlow',system-ui,sans-serif;
+/*
+ * HUD do VEXIS.
+ *
+ * O desenho e feito em 1920x1080 fixos e depois ESCALADO pra caber na tela —
+ * a mesma pagina serve o monitor do PC, a telinha de 800x480 do Raspberry e o
+ * celular pelo IP da rede, sem tres folhas de estilo. Escalar em vez de
+ * reflowar mantem o resultado identico ao mockup em qualquer resolucao, que e o
+ * que se espera de um painel: ele tem uma cara so.
+ */
+:root {
+  --acento: #19c0dd;
+  --acento-forte: #0088b0;
+  --acento-claro: #4fd6ee;
+  --perigo: #d6006c;
+  --serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 }
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
-  font-family:var(--corpo);overflow:hidden}
-::selection{background:rgba(148,188,227,.3)}
-::-webkit-scrollbar{width:6px}::-webkit-scrollbar-thumb{background:rgba(232,234,236,.16)}
-
-@keyframes jv-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
-@keyframes jv-pulse{0%{transform:scale(.9);opacity:.5}100%{transform:scale(1.7);opacity:0}}
-@keyframes jv-spin{to{transform:rotate(360deg)}}
-@keyframes jv-spin-r{to{transform:rotate(-360deg)}}
-@keyframes jv-wave{0%,100%{transform:scaleY(.16)}50%{transform:scaleY(1)}}
-@keyframes jv-blink{0%,100%{opacity:1}50%{opacity:.25}}
-
-/* Marcas de registro nos cantos — a assinatura visual do mockup. */
-.bp{position:relative;border:1px solid var(--linha)}
-.bp>i{position:absolute;width:11px;height:11px;color:rgba(232,234,236,.55)}
-.bp>i::before,.bp>i::after{content:"";position:absolute;background:currentColor}
-.bp>i::before{left:5px;top:0;width:1px;height:100%}
-.bp>i::after{top:5px;left:0;width:100%;height:1px}
-.bp>i.tl{top:-6px;left:-6px}.bp>i.tr{top:-6px;right:-6px}
-.bp>i.bl{bottom:-6px;left:-6px}.bp>i.br{bottom:-6px;right:-6px}
-
-#fundo{position:fixed;inset:0;
-  background:radial-gradient(820px 560px at 64% 44%,rgba(148,188,227,.11),transparent 72%),var(--bg)}
-#grade{position:absolute;inset:0;pointer-events:none;
-  background-image:linear-gradient(rgba(232,234,236,.04) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(232,234,236,.04) 1px,transparent 1px);
-  background-size:56px 56px}
-
-#topo{position:absolute;top:0;left:0;right:0;height:34px;z-index:14;
-  border-bottom:1px solid rgba(232,234,236,.09);display:flex;align-items:center;
-  justify-content:space-between;padding:0 14px;-webkit-app-region:drag}
-#topo .quad{width:9px;height:9px;border:1px solid rgba(232,234,236,.32)}
-.rotulo{font:500 10px/1 var(--cond);letter-spacing:.26em;text-transform:uppercase;color:rgba(232,234,236,.4)}
-
-#veu{position:absolute;inset:34px 0 0 0;background:rgba(10,12,14,.62);z-index:18;
-  transition:opacity .3s ease;opacity:0;pointer-events:none}
-#gaveta{position:absolute;top:34px;bottom:0;left:0;width:312px;z-index:20;background:var(--panel);
-  border-right:1px solid var(--linha);display:flex;flex-direction:column;
-  transition:transform .34s cubic-bezier(.22,.9,.24,1);transform:translateX(-100%)}
-#gaveta.aberta{transform:translateX(0)}
-.nav-item{display:flex;align-items:center;gap:12px;padding:12px 20px;
-  border-left:2px solid transparent;border-bottom:1px solid rgba(232,234,236,.06);transition:background .16s}
-.nav-item:hover{background:rgba(148,188,227,.09);border-left-color:var(--accent)}
-.nav-item .ponto{width:6px;height:6px;background:rgba(148,188,227,.75);flex:none}
-
-#coluna{position:absolute;top:58px;bottom:20px;left:24px;width:296px;z-index:12;
-  display:flex;flex-direction:column;gap:16px;min-height:0;overflow-y:auto}
-.cartao{padding:15px;display:flex;flex-direction:column;gap:12px}
-.titulo{font:600 10px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--fraco)}
-.numero{font:400 26px/1 var(--cond)}
-.legenda{font:400 10.5px/1.2 var(--corpo);color:var(--fraco)}
-.barra{height:3px;background:rgba(232,234,236,.1);position:relative}
-.barra>span{position:absolute;left:0;top:0;bottom:0;background:var(--accent);transition:width .6s ease}
-
-#palco{position:absolute;top:34px;left:320px;right:0;bottom:0;display:flex;flex-direction:column;
-  align-items:center;justify-content:center;gap:30px;padding:20px 40px;min-height:0;overflow-y:auto}
-#orbe{position:relative;width:330px;height:330px;display:grid;place-items:center;flex:none;cursor:pointer}
-#orbe .anel{position:absolute;border:1px solid rgba(148,188,227,.3);border-radius:50%}
-#ondas{position:relative;display:flex;align-items:center;gap:3px;height:94px;transition:opacity .5s ease}
-#ondas div{width:3px;height:100%;background:var(--accent);transform-origin:center;
-  animation:jv-wave .9s ease-in-out infinite}
-
-#entrada{display:flex;align-items:center;gap:10px;width:100%;max-width:620px}
-#texto{flex:1;background:transparent;border:1px solid rgba(232,234,236,.18);color:var(--text);
-  padding:12px 15px;font:400 14px/1 var(--corpo);outline:none}
-#texto:focus{border-color:var(--accent)}
-#texto::placeholder{color:rgba(232,234,236,.38)}
-.botao{padding:12px 20px;border:1px solid rgba(232,234,236,.2);background:transparent;color:var(--text);
-  font:600 12px/1 var(--cond);letter-spacing:.16em;text-transform:uppercase;cursor:pointer;transition:.16s}
-.botao:hover{border-color:var(--accent);color:var(--accent)}
-
-/* Abaixo de 1000px a coluna sai da frente e o orbe fica sozinho — o HUD abre
-   no celular pelo IP da rede, e ali nao cabem as duas coisas. */
-@media (max-width:1000px){
-  #coluna{position:static;width:auto;margin:44px 16px 0;max-height:38vh}
-  #palco{position:static;padding:16px;gap:18px;min-height:52vh}
-  #orbe{width:220px;height:220px}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  height: 100%;
+  background: #000;
+  color: #fff;
+  font-family: var(--serif);
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
+#palco {
+  position: absolute; top: 0; left: 0;
+  width: 1920px; height: 1080px;
+  transform-origin: top left;
+  overflow: hidden;
+  background: #000;
+}
+
+/* ---- fundo ---- */
+#fundo { position: absolute; inset: 0; }
+#fundo img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover; display: block;
+  opacity: 0; transition: opacity 1.2s ease;
+}
+#fundo img.visivel { opacity: 1; }
+#veu {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(0,0,0,.35) 0%, rgba(0,0,0,0) 26%, rgba(0,0,0,0) 55%, rgba(0,0,0,.72) 100%);
+}
+/*
+ * Piso de legibilidade.
+ *
+ * O veu de cima e um controle do usuario e pode ir a zero. Este nao: e o que
+ * garante que o relogio continue legivel sobre uma foto CLARA. O mockup usava
+ * uma duna escura e nao precisava disso; uma foto de praia ao meio-dia apaga o
+ * texto branco por completo, e a pessoa culparia a foto, nao o ajuste.
+ *
+ * Fica so onde ha texto — canto de baixo e alto a direita — pra nao lavar a
+ * imagem inteira, que e o motivo de existir a foto.
+ */
+#chao {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    linear-gradient(180deg, transparent 52%, rgba(0,0,0,.30) 78%, rgba(0,0,0,.62) 100%),
+    radial-gradient(760px 420px at 8% 96%, rgba(0,0,0,.5), transparent 70%),
+    radial-gradient(620px 300px at 96% 4%, rgba(0,0,0,.42), transparent 72%);
+}
+
+/* Sem foto nenhuma o fundo nao pode ser preto puro: a tela pareceria
+   desligada. Uma bruma no tom do acento mostra que esta viva. */
+#semfoto {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(1200px 700px at 22% 78%, rgba(25,192,221,.14), transparent 62%),
+    radial-gradient(900px 600px at 82% 22%, rgba(0,136,176,.12), transparent 60%),
+    #06090c;
+}
+
+/* ---- relogio ---- */
+#relogio { position: absolute; left: 72px; bottom: 104px; z-index: 5; text-shadow: 0 2px 22px rgba(0,0,0,.55); }
+#hora { font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+#data { color: rgba(255,255,255,.84); }
+#tempo { display: flex; align-items: center; gap: 14px; }
+#tempo.oculto { display: none; }
+#tempo svg { width: 100%; height: 100%; }
+#chuva { font-size: 19px; color: var(--acento-claro); }
+
+/* Minimal */
+.v-minimal #hora { font-size: 138px; font-weight: 300; line-height: .9; letter-spacing: -.02em; }
+.v-minimal #data { margin-top: 16px; font-size: 27px; font-weight: 400; }
+.v-minimal #tempo { margin-top: 22px; }
+.v-minimal #tempo .ico { width: 34px; height: 34px; }
+.v-minimal #graus { font-size: 34px; font-weight: 300; }
+.v-minimal #cond { font-size: 21px; color: rgba(255,255,255,.72); }
+.v-minimal #estado { display: none; }
+
+/* Editorial */
+.v-editorial #estado { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.v-editorial #regua { width: 96px; height: 3px; background: var(--acento-forte); margin-bottom: 20px; }
+.v-editorial #hora { font-size: 154px; font-weight: 600; line-height: .86; }
+.v-editorial #data { margin-top: 18px; font-size: 29px; font-style: italic; }
+.v-editorial #tempo { margin-top: 20px; }
+.v-editorial #tempo .ico { width: 36px; height: 36px; }
+.v-editorial #graus { font-size: 36px; font-weight: 600; }
+.v-editorial #cond { font-size: 22px; font-style: italic; color: rgba(255,255,255,.78); }
+
+/* Vidro */
+.v-vidro #relogio {
+  left: 64px; bottom: 96px;
+  padding: 34px 44px 32px; border-radius: 26px;
+  background: rgba(18,22,26,.34);
+  backdrop-filter: blur(26px) saturate(1.2); -webkit-backdrop-filter: blur(26px) saturate(1.2);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 24px 70px rgba(0,0,0,.4);
+}
+.v-vidro #estado { display: flex; align-items: center; gap: 11px; margin-bottom: 14px; }
+.v-vidro #regua { display: none; }
+.v-vidro #hora { font-size: 120px; font-weight: 400; line-height: .9; letter-spacing: -.02em; }
+.v-vidro #data { margin-top: 10px; font-size: 24px; color: rgba(255,255,255,.74); }
+.v-vidro #tempo { margin-top: 18px; padding-top: 18px; border-top: 1px solid rgba(255,255,255,.18); }
+.v-vidro #tempo .ico { width: 30px; height: 30px; }
+.v-vidro #graus { font-size: 30px; }
+.v-vidro #cond { font-size: 19px; color: rgba(255,255,255,.68); }
+
+#ponto { width: 11px; height: 11px; border-radius: 50%; background: var(--acento-forte); box-shadow: 0 0 16px var(--acento-forte); transition: transform .12s linear, opacity .2s; }
+#rotulo-estado { font-family: var(--mono); font-size: 14px; letter-spacing: .42em; text-transform: uppercase; color: var(--acento-claro); }
+
+/* ---- avisos (canto superior direito) ---- */
+#avisos { position: absolute; right: 72px; top: 64px; z-index: 5; display: flex; flex-direction: column; gap: 16px; align-items: flex-end; }
+.aviso {
+  display: flex; align-items: center; gap: 26px;
+  padding: 30px 44px; border-radius: 22px;
+  background: rgba(18,22,26,.4);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 16px 40px rgba(0,0,0,.35);
+  text-shadow: 0 2px 12px rgba(0,0,0,.4);
+  cursor: pointer; transition: transform .15s, opacity .3s;
+}
+.aviso:active { transform: scale(.97); }
+.aviso.saindo { opacity: 0; transform: translateX(40px); }
+.aviso .ico { width: 44px; height: 44px; flex: none; color: var(--acento-claro); }
+.aviso .txt { font-size: 37px; font-weight: 500; }
+/* Ultima hora da janela: o card muda de cor em vez de so estar la. */
+.aviso.urgente { border-color: rgba(214,0,108,.55); box-shadow: 0 16px 40px rgba(214,0,108,.25); }
+.aviso.urgente .ico { color: var(--perigo); }
+.aviso .resta { font-family: var(--mono); font-size: 15px; letter-spacing: .18em; color: rgba(255,255,255,.5); text-transform: uppercase; }
+
+/* ---- tocando agora ---- */
+#tocando { position: absolute; right: 72px; bottom: 118px; z-index: 5; display: flex; align-items: center; gap: 18px; max-width: 440px; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
+#tocando.oculto { display: none; }
+#capa { flex: none; width: 66px; height: 66px; border-radius: 12px; background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2); display: grid; place-items: center; overflow: hidden; }
+#capa img { width: 100%; height: 100%; object-fit: cover; }
+#np-rotulo { font-family: var(--mono); font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: var(--acento-claro); margin-bottom: 5px; }
+#np-titulo { font-size: 26px; font-weight: 600; line-height: 1.1; }
+#np-artista { font-size: 19px; font-style: italic; color: rgba(255,255,255,.78); }
+.corta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- onda de voz ---- */
+#onda { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; z-index: 6; pointer-events: none; }
+#onda canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* ---- central de controle ---- */
+#pegador { position: absolute; top: 0; left: 0; right: 0; height: 64px; z-index: 70; cursor: grab; touch-action: none; }
+#pegador:active { cursor: grabbing; }
+#alca { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 120px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35); z-index: 71; pointer-events: none; }
+#cortina { position: absolute; inset: 0; z-index: 55; background: #000; opacity: 0; pointer-events: none; transition: opacity .3s; }
+#cortina.ativa { pointer-events: auto; }
+#central {
+  position: absolute; left: 40px; right: 40px; top: 0; z-index: 60;
+  border-radius: 0 0 32px 32px;
+  background: rgba(20,24,28,.72);
+  backdrop-filter: blur(30px) saturate(1.3); -webkit-backdrop-filter: blur(30px) saturate(1.3);
+  border: 1px solid rgba(255,255,255,.14); border-top: none;
+  box-shadow: 0 30px 80px rgba(0,0,0,.5);
+  overflow: hidden; padding: 76px 44px 40px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+.linha { display: flex; align-items: center; gap: 20px; padding: 18px 8px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.linha:last-child { border-bottom: none; }
+.linha.clicavel { cursor: pointer; }
+.linha.clicavel:active { background: rgba(255,255,255,.05); }
+.bolha { width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,.08); display: grid; place-items: center; flex: none; color: var(--acento-claro); }
+.rot { font-size: 22px; font-weight: 600; }
+.sub { font-size: 16px; color: rgba(255,255,255,.6); }
+.seta { color: rgba(255,255,255,.45); flex: none; }
+input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
+.cabeca { display: flex; align-items: center; gap: 18px; padding-bottom: 22px; }
+.cabeca .tit { font-size: 26px; font-weight: 700; flex: 1; }
+.voltar { cursor: pointer; padding: 6px; }
+.chave { width: 52px; height: 30px; border-radius: 15px; position: relative; cursor: pointer; transition: background .2s; flex: none; }
+.chave i { position: absolute; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: left .18s ease; }
+.some { display: none; }
+#lista-redes { max-height: 420px; overflow-y: auto; }
+.rede { display: flex; align-items: center; gap: 16px; padding: 16px 6px; border-bottom: 1px solid rgba(255,255,255,.07); cursor: pointer; }
+.rede .nome { flex: 1; font-size: 20px; }
+.vazio { padding: 40px 0; text-align: center; font-size: 19px; font-style: italic; color: rgba(255,255,255,.55); }
+.avatar { width: 56px; height: 56px; border-radius: 50%; background: var(--acento-forte); display: grid; place-items: center; font-size: 22px; font-weight: 600; flex: none; }
+.perigo { color: var(--perigo); }
+.perigo .bolha, .perigo svg { color: var(--perigo); }
+
+/* ---- torrada ---- */
+#torrada {
+  position: absolute; left: 50%; bottom: 190px; transform: translateX(-50%) translateY(20px);
+  z-index: 80; background: rgba(10,14,16,.9); border: 1px solid rgba(79,214,238,.4);
+  font-size: 18px; padding: 14px 26px; border-radius: 14px; box-shadow: 0 12px 30px rgba(0,0,0,.4);
+  max-width: 900px; text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s;
+  font-family: system-ui, sans-serif;
+}
+#torrada.ativa { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ---- primeiro boot ---- */
+#boot {
+  position: absolute; inset: 0; z-index: 90;
+  background: rgba(6,9,12,.97);
+  display: none; flex-direction: column; justify-content: center;
+  padding: 0 200px; font-family: system-ui, sans-serif;
+}
+#boot.ativo { display: flex; }
+#boot h1 { font-family: var(--serif); font-size: 72px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 12px; }
+#boot p { font-size: 24px; color: rgba(255,255,255,.6); margin-bottom: 44px; }
+#boot .passos { display: flex; gap: 12px; margin-bottom: 40px; }
+#boot .passo { height: 4px; flex: 1; background: rgba(255,255,255,.14); border-radius: 2px; }
+#boot .passo.feito { background: var(--acento); }
+.campo { display: flex; gap: 14px; margin-top: 26px; }
+.campo input {
+  flex: 1; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18);
+  border-radius: 12px; padding: 18px 22px; color: #fff; font-size: 21px; font-family: inherit;
+}
+.campo input:focus { outline: none; border-color: var(--acento); }
+.botao {
+  background: var(--acento-forte); border: none; border-radius: 12px; color: #fff;
+  padding: 18px 34px; font-size: 21px; font-weight: 600; cursor: pointer; font-family: inherit;
+}
+.botao:active { transform: scale(.98); }
+.botao.fantasma { background: transparent; border: 1px solid rgba(255,255,255,.2); }
+#sem-conexao {
+  position: absolute; left: 50%; top: 28px; transform: translateX(-50%);
+  z-index: 85; font-family: var(--mono); font-size: 15px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--perigo); background: rgba(6,9,12,.85); border: 1px solid rgba(214,0,108,.4);
+  padding: 10px 22px; border-radius: 10px; display: none;
+}
+#sem-conexao.ativo { display: block; }
 </style>
 </head>
 <body>
-<div id="fundo"><div id="grade"></div></div>
+<div id="palco" class="v-editorial">
 
-<div id="topo">
-  <div style="display:flex;gap:7px">
-    <span class="quad"></span><span class="quad"></span><span class="quad"></span>
-  </div>
-  <span class="rotulo">vexis.exe — núcleo local</span>
-  <span class="rotulo" id="relogio" style="letter-spacing:.16em;text-transform:none">--:--</span>
-</div>
+  <div id="fundo"><div id="semfoto"></div></div>
+  <div id="veu"></div>
+  <div id="chao"></div>
 
-<div id="veu"></div>
-
-<aside id="gaveta">
-  <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:20px 20px 16px;border-bottom:1px solid rgba(232,234,236,.1)">
-    <div style="display:flex;flex-direction:column;gap:3px">
-      <span style="font:600 11px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase;color:rgba(232,234,236,.42)">Painel lateral</span>
-      <span style="font:400 22px/1 var(--cond)">Meu espaço</span>
+  <div id="relogio">
+    <div id="estado">
+      <span id="ponto"></span>
+      <span id="rotulo-estado">Em espera</span>
     </div>
-    <div id="fechar" style="width:26px;height:26px;display:grid;place-items:center;border:1px solid rgba(232,234,236,.18);color:rgba(232,234,236,.6);font:400 15px/1 var(--corpo);cursor:pointer">×</div>
-  </div>
-  <div style="flex:1;min-height:0;overflow-y:auto">
-    <div id="nav"></div>
-    <div style="padding:18px 20px;display:flex;flex-direction:column;gap:9px">
-      <span style="font:600 9.5px/1 var(--cond);letter-spacing:.2em;text-transform:uppercase;color:var(--fraco)">Última resposta</span>
-      <div class="bp" style="padding:12px 14px">
-        <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
-        <span id="ultima-resposta" style="font:400 13px/1.4 var(--corpo);color:rgba(232,234,236,.85)">—</span>
-      </div>
-    </div>
-  </div>
-  <div style="padding:16px 20px;border-top:1px solid rgba(232,234,236,.1);display:flex;flex-direction:column;gap:8px">
-    <div style="display:flex;justify-content:space-between;font:400 12px/1 var(--corpo)">
-      <span style="color:var(--fraco)">Palavra de ativação</span><span id="wake" style="color:var(--accent)">—</span>
-    </div>
-    <div style="display:flex;justify-content:space-between;font:400 12px/1 var(--corpo)">
-      <span style="color:var(--fraco)">Transcrição</span><span id="stt">—</span>
-    </div>
-  </div>
-</aside>
-
-<div id="coluna">
-  <div style="display:flex;align-items:center;gap:13px">
-    <div id="abrir" class="bp" style="width:42px;height:42px;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:0 11px;cursor:pointer">
-      <span style="height:1.5px;background:var(--text)"></span>
-      <span style="height:1.5px;background:var(--text)"></span>
-      <span style="height:1.5px;background:var(--text)"></span>
-      <i class="tl"></i><i class="br"></i>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:3px">
-      <span style="font:600 15px/1 var(--cond);letter-spacing:.22em;text-transform:uppercase">Vexis</span>
-      <div style="display:flex;align-items:center;gap:6px">
-        <span id="pisca" style="width:5px;height:5px;background:var(--accent);animation:jv-blink 1.6s ease-in-out infinite"></span>
-        <span id="status-curto" style="font:400 11px/1 var(--corpo);color:rgba(232,234,236,.5)">conectando…</span>
-      </div>
+    <div id="regua"></div>
+    <div id="hora">--:--</div>
+    <div id="data">—</div>
+    <div id="tempo" class="oculto">
+      <span class="ico" id="ico-tempo"></span>
+      <span id="graus">--°</span>
+      <span id="cond">—</span>
+      <span id="chuva"></span>
     </div>
   </div>
 
-  <div class="bp cartao">
-    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
-    <span class="titulo">Uso do assistente</span>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px 10px">
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <span class="numero" id="uso-comandos">0</span><span class="legenda">comandos hoje</span>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:2px">
-        <span class="numero" id="uso-tokens">0</span><span class="legenda">tokens usados</span>
-      </div>
+  <div id="avisos"></div>
+
+  <div id="tocando" class="oculto">
+    <div id="capa">
+      <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="#4fd6ee" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
     </div>
-    <div style="height:1px;background:rgba(232,234,236,.1)"></div>
-    <span class="titulo">Últimos comandos</span>
-    <div id="comandos" style="display:flex;flex-direction:column;gap:7px"></div>
-  </div>
-
-  <div class="bp cartao">
-    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
-    <div style="display:flex;align-items:baseline;justify-content:space-between">
-      <span class="titulo">Máquina</span>
-      <span id="maquina" style="font:400 10.5px/1 var(--corpo);color:rgba(232,234,236,.35)">—</span>
+    <div style="min-width:0">
+      <div id="np-rotulo">Tocando agora</div>
+      <div id="np-titulo" class="corta">—</div>
+      <div id="np-artista" class="corta">—</div>
     </div>
-    <div id="metricas" style="display:flex;flex-direction:column;gap:10px"></div>
   </div>
 
-  <div class="bp cartao" id="cartao-timers" style="display:none">
-    <i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>
-    <span class="titulo">Em contagem</span>
-    <div id="timers" style="display:flex;flex-direction:column;gap:8px"></div>
-  </div>
-</div>
+  <div id="onda"><canvas id="tela-onda"></canvas></div>
 
-<div id="palco">
-  <div id="orbe">
-    <div class="anel" style="width:292px;height:292px;animation:jv-spin 30s linear infinite"></div>
-    <div class="anel" style="width:292px;height:116px;animation:jv-spin-r 18s linear infinite;border-color:rgba(148,188,227,.28)"></div>
-    <div class="anel" style="width:116px;height:292px;animation:jv-spin 22s linear infinite;border-color:rgba(148,188,227,.28)"></div>
-    <div style="position:absolute;width:214px;height:214px;border-radius:50%;background:radial-gradient(circle at 50% 50%,rgba(148,188,227,.24),transparent 70%);animation:jv-breathe 3s ease-in-out infinite"></div>
-    <div style="position:absolute;width:194px;height:194px;border-radius:50%;border:1px solid rgba(148,188,227,.45);animation:jv-pulse 3s ease-out infinite"></div>
-    <div id="ondas"></div>
-  </div>
+  <div id="sem-conexao">sem conexão com o núcleo</div>
 
-  <div style="display:flex;flex-direction:column;align-items:center;gap:11px;max-width:560px">
-    <span id="status" style="font:600 10.5px/1 var(--cond);letter-spacing:.3em;text-transform:uppercase;color:var(--accent)">conectando…</span>
-    <span id="transcricao" style="font:400 19px/1.5 var(--corpo);color:rgba(232,234,236,.88);text-align:center;text-wrap:pretty">—</span>
-  </div>
+  <!-- central de controle -->
+  <div id="cortina"></div>
+  <div id="central"></div>
+  <div id="pegador"></div>
+  <div id="alca"></div>
 
-  <form id="entrada">
-    <input id="texto" placeholder='Digite um comando…' autocomplete="off">
-    <button class="botao" type="submit" id="enviar">Enviar</button>
-  </form>
+  <div id="torrada"></div>
+
+  <!-- primeiro boot: Wi-Fi antes da conta -->
+  <div id="boot">
+    <div class="passos">
+      <div class="passo" id="passo1"></div>
+      <div class="passo" id="passo2"></div>
+    </div>
+    <div id="boot-conteudo"></div>
+  </div>
 </div>
 
 <script>
-// ── Desenho das 15 barras da onda ────────────────────────────────────────
-const ondas = document.getElementById('ondas');
-for (let i = 0; i < 15; i++) {
-  const b = document.createElement('div');
-  b.style.animationDelay = ((i % 6) * 0.11).toFixed(2) + 's';
-  ondas.appendChild(b);
-}
+'use strict';
 
-// Cada estado do daemon tem uma frase e uma intensidade de onda. Sem isso o
-// HUD ficaria bonito e mudo sobre o que a maquina esta fazendo.
-const ESTADOS = {
-  offline:   { texto: 'Offline · daemon parado',        curto: 'daemon parado',  onda: .10 },
-  idle:      { texto: 'Ocioso · microfone em espera',   curto: 'em espera',      onda: .22 },
-  listening: { texto: 'Ouvindo · aguardando comando',   curto: 'ouvindo',        onda: .60 },
-  thinking:  { texto: 'Processando · roteando',         curto: 'processando',    onda: .45 },
-  speaking:  { texto: 'Falando · resposta em curso',    curto: 'falando',        onda: 1   },
-};
+/* ==========================================================================
+   Escala. O desenho tem 1920x1080; a tela real tem o que tiver.
+   ========================================================================== */
+const PALCO = document.getElementById('palco');
+let escala = 1;
+
+function ajustarEscala() {
+  const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+  escala = k;
+  PALCO.style.transform =
+    'translate(' + ((innerWidth - 1920 * k) / 2) + 'px,' + ((innerHeight - 1080 * k) / 2) + 'px) scale(' + k + ')';
+}
+addEventListener('resize', ajustarEscala);
+ajustarEscala();
 
 const $ = (id) => document.getElementById(id);
-const num = (n) => (n >= 1000 ? (n / 1000).toFixed(1).replace('.', ',') + 'k' : String(n));
-const hora = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function barra(label, valor, pct) {
-  return `<div style="display:flex;flex-direction:column;gap:4px">
-    <div style="display:flex;justify-content:space-between;font:400 11.5px/1 var(--corpo)">
-      <span style="color:rgba(232,234,236,.7)">${label}</span><span>${valor}</span></div>
-    <div class="barra"><span style="width:${Math.max(0, Math.min(100, pct))}%"></span></div>
-  </div>`;
-}
+let ESTADO = {};
+let PREFS = null;
 
-function duracao(ms) {
-  const s = Math.max(0, Math.round(ms / 1000));
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${s}s`;
-}
+/* ==========================================================================
+   Conexao com o nucleo
+   ========================================================================== */
+let fonte = null;
+let tentativas = 0;
 
-function desenhar(e) {
-  const estado = ESTADOS[e.voice?.state] || ESTADOS.offline;
-  $('status').textContent = estado.texto;
-  $('status-curto').textContent = estado.curto;
-  ondas.style.opacity = estado.onda;
-  $('pisca').style.animationDuration = e.voice?.state === 'listening' ? '.7s' : '1.6s';
-
-  // A fala do JARVIS tem precedencia sobre o que voce disse: e a informacao
-  // mais nova, e e ela que voce esta ouvindo enquanto olha pra tela.
-  $('transcricao').textContent =
-    e.voice?.lastReply || e.voice?.lastTranscript || 'Diga a palavra de ativação ou digite um comando.';
-  $('ultima-resposta').textContent = e.voice?.lastReply || '—';
-  $('wake').textContent = '"' + (e.voice?.wakeWord || 'jarvis') + '"';
-  $('stt').textContent = e.voice?.sttEngine || '—';
-
-  $('relogio').textContent = hora(e.system?.clock || Date.now());
-  const up = e.system?.uptimeMs || 0;
-  const dias = Math.floor(up / 864e5);
-  const horas = Math.floor((up % 864e5) / 36e5);
-  $('maquina').textContent = `${e.system?.hostname || '—'} · ${dias}d ${String(horas).padStart(2, '0')}h`;
-
-  $('uso-comandos').textContent = e.uso?.comandos ?? 0;
-  $('uso-tokens').textContent = num((e.uso?.entrada || 0) + (e.uso?.saida || 0));
-
-  $('comandos').innerHTML = (e.commands || []).length
-    ? e.commands.map((c) => `<div style="display:flex;align-items:baseline;gap:9px">
-        <span style="font:500 10px/1.4 var(--cond);letter-spacing:.06em;color:var(--accent);width:34px;flex:none">${hora(c.at)}</span>
-        <span style="font:400 12px/1.35 var(--corpo);color:rgba(232,234,236,.8);flex:1">${c.text}</span></div>`).join('')
-    : '<span class="legenda">nenhum comando ainda hoje</span>';
-
-  // Metricas: memoria vem do snapshot (barata, 1s); o resto vem dos vitais,
-  // que rodam a cada 5s. Cada uma so aparece quando ha numero de verdade.
-  const v = e.vitais || {};
-  const linhas = [];
-  if (v.cpu?.uso != null) linhas.push(barra('CPU', v.cpu.uso + '%', v.cpu.uso));
-  if (e.system?.memory)
-    linhas.push(barra('RAM', `${e.system.memory.usedGb} / ${e.system.memory.totalGb} GB`, e.system.memory.percent));
-  if (v.gpu?.util != null) linhas.push(barra('GPU', v.gpu.util + '%', v.gpu.util));
-  if (v.gpu?.temp != null) linhas.push(barra('Temperatura', v.gpu.temp + ' °C', v.gpu.temp));
-  if (v.disco)
-    linhas.push(barra('Disco', `${Math.round(v.disco.usadoGb)} / ${Math.round(v.disco.totalGb)} GB`,
-      (v.disco.usadoGb / v.disco.totalGb) * 100));
-  $('metricas').innerHTML = linhas.join('') || '<span class="legenda">lendo vitais…</span>';
-
-  const timers = e.timers || [];
-  $('cartao-timers').style.display = timers.length ? 'flex' : 'none';
-  $('timers').innerHTML = timers.map((t) => {
-    const restante = new Date(t.endsAt).getTime() - Date.now();
-    const total = t.durationMs || 1;
-    return `<div style="display:flex;flex-direction:column;gap:4px">
-      <div style="display:flex;justify-content:space-between;font:400 11.5px/1 var(--corpo)">
-        <span style="color:rgba(232,234,236,.7)">${t.label || 'timer'}</span>
-        <span>${duracao(restante)}</span></div>
-      <div class="barra"><span style="width:${100 - (restante / total) * 100}%"></span></div>
-    </div>`;
-  }).join('');
-
-  const menu = [
-    ['Comandos de hoje', e.uso?.comandos ?? 0],
-    ['Tarefas abertas', e.tasks?.total ?? 0],
-    ['Timers rodando', timers.length],
-    ['Lembretes', (e.reminders || []).length],
-    ['Notas no vault', (e.vault || []).length],
-    ['Tools executadas', (e.activity || []).length],
-  ];
-  $('nav').innerHTML = menu.map(([label, meta]) =>
-    `<div class="nav-item"><span class="ponto"></span>
-     <span style="font:400 14px/1 var(--corpo);flex:1;color:rgba(232,234,236,.9)">${label}</span>
-     <span style="font:500 11px/1 var(--cond);letter-spacing:.1em;color:var(--fraco)">${meta}</span></div>`).join('');
-}
-
-// ── Fluxo de estado ──────────────────────────────────────────────────────
-// O EventSource reconecta sozinho quando o daemon cai e volta; so avisamos
-// na tela pra diferenca nao passar por "tudo parado".
-let fonte;
 function conectar() {
   fonte = new EventSource('/estado');
-  fonte.onmessage = (ev) => desenhar(JSON.parse(ev.data));
-  // O EventSource reconecta sozinho, entao "sem conexao" quase sempre quer
-  // dizer que o processo do servidor caiu ou foi fechado — nao que a rede
-  // piscou. Dizer o que fazer poupa a caçada.
+
+  fonte.onopen = () => {
+    tentativas = 0;
+    $('sem-conexao').classList.remove('ativo');
+  };
+
+  fonte.onmessage = (ev) => {
+    try {
+      ESTADO = JSON.parse(ev.data);
+      desenhar();
+    } catch (e) {
+      console.error('estado ilegivel', e);
+    }
+  };
+
+  // Um HUD e uma tela que fica ligada por semanas. Reconectar sozinho, com
+  // espera crescente, e a diferenca entre "piscou" e "morreu de madrugada".
   fonte.onerror = () => {
-    $('status').textContent = 'Sem conexão com o núcleo';
-    $('transcricao').textContent =
-      'O servidor não está respondendo. Ele ainda está rodando? Suba de novo com: npm run hud';
-    ondas.style.opacity = .06;
+    fonte.close();
+    $('sem-conexao').classList.add('ativo');
+    const espera = Math.min(30000, 1000 * Math.pow(2, tentativas++));
+    setTimeout(conectar, espera);
   };
 }
-conectar();
 
-// ── Gaveta ───────────────────────────────────────────────────────────────
-const gaveta = $('gaveta'), veu = $('veu');
-const abrir = (sim) => {
-  gaveta.classList.toggle('aberta', sim);
-  veu.style.opacity = sim ? 1 : 0;
-  veu.style.pointerEvents = sim ? 'auto' : 'none';
-};
-$('abrir').onclick = () => abrir(true);
-$('fechar').onclick = () => abrir(false);
-veu.onclick = () => abrir(false);
-document.addEventListener('keydown', (e) => e.key === 'Escape' && abrir(false));
+async function mandar(rota, metodo, corpo) {
+  const r = await fetch(rota, {
+    method: metodo,
+    headers: corpo ? { 'content-type': 'application/json' } : undefined,
+    body: corpo ? JSON.stringify(corpo) : undefined,
+  });
+  return r.json();
+}
 
-// ── Caixa de comando ─────────────────────────────────────────────────────
-$('entrada').onsubmit = async (ev) => {
-  ev.preventDefault();
-  const campo = $('texto');
-  const texto = campo.value.trim();
-  if (!texto) return;
+let tempoTorrada = null;
+function torrada(texto) {
+  const el = $('torrada');
+  el.textContent = texto;
+  el.classList.add('ativa');
+  clearTimeout(tempoTorrada);
+  tempoTorrada = setTimeout(() => el.classList.remove('ativa'), 3200);
+}
 
-  campo.value = '';
-  campo.disabled = true;
-  $('enviar').textContent = '···';
-  $('transcricao').textContent = texto;
-  try {
-    const r = await fetch('/comando', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ texto }),
-    }).then((x) => x.json());
-    if (!r.ok) $('transcricao').textContent = r.erro;
-  } catch (err) {
-    $('transcricao').textContent = 'Falhou: ' + err.message;
-  } finally {
-    campo.disabled = false;
-    $('enviar').textContent = 'Enviar';
-    campo.focus();
+/* ==========================================================================
+   Fundo — as fotos que voce mandou pelo celular
+   ========================================================================== */
+let fotos = [];
+let fotoAtual = -1;
+let relogioFoto = null;
+
+function aplicarFotos(lista, rotacaoMin) {
+  const mudou = lista.join('|') !== fotos.join('|');
+  if (mudou) {
+    fotos = lista;
+    fotoAtual = -1;
+    $('fundo').querySelectorAll('img').forEach((i) => i.remove());
+    if (fotos.length) trocarFoto();
   }
+  $('semfoto').style.display = fotos.length ? 'none' : 'block';
+
+  clearInterval(relogioFoto);
+  if (fotos.length > 1 && rotacaoMin > 0) {
+    relogioFoto = setInterval(trocarFoto, rotacaoMin * 60000);
+  }
+}
+
+function trocarFoto() {
+  if (!fotos.length) return;
+  fotoAtual = (fotoAtual + 1) % fotos.length;
+
+  const img = document.createElement('img');
+  img.src = '/fotos/' + encodeURIComponent(fotos[fotoAtual]);
+  // So aparece depois de carregada: sem isso a troca pisca preto no meio.
+  img.onload = () => {
+    img.classList.add('visivel');
+    const velhas = $('fundo').querySelectorAll('img.visivel');
+    setTimeout(() => velhas.forEach((v) => { if (v !== img) v.remove(); }), 1300);
+  };
+  img.onerror = () => img.remove();
+  $('fundo').appendChild(img);
+}
+
+/* ==========================================================================
+   Icones do tempo
+   ========================================================================== */
+const CAMINHOS = {
+  'Sol': '<circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8l1.8-1.8M18 6l1.8-1.8"/>',
+  'Parcialmente nublado': '<circle cx="9" cy="9" r="3.2"/><path d="M9 3v1.4M9 12.6V14M3 9h1.4M12.6 9H14M4.9 4.9l1 1M12.1 4.9l-1 1"/><path d="M12 19a3.6 3.6 0 0 1-.6-7.15 4.4 4.4 0 0 1 8.5-1.3A3.9 3.9 0 0 1 19.4 19H12z"/>',
+  'Nublado': '<path d="M7 18a4 4 0 0 1-.7-7.94 5 5 0 0 1 9.6-1.5A4.5 4.5 0 0 1 17 18H7z"/>',
+  'Chuva': '<path d="M7 15a4 4 0 0 1-.7-7.94 5 5 0 0 1 9.6-1.5A4.5 4.5 0 0 1 17 15H7z"/><path d="M8 18l-1 3M12 18l-1 3M16 18l-1 3"/>',
+  'Neve': '<path d="M7 15a4 4 0 0 1-.7-7.94 5 5 0 0 1 9.6-1.5A4.5 4.5 0 0 1 17 15H7z"/><path d="M8 19h.01M12 19h.01M16 19h.01M10 21.5h.01M14 21.5h.01"/>',
+  'Tempestade': '<path d="M7 15a4 4 0 0 1-.7-7.94 5 5 0 0 1 9.6-1.5A4.5 4.5 0 0 1 17 15H7z"/><path d="M13 17l-3 4h4l-3 4"/>',
 };
-$('texto').focus();
+const svg = (dentro, cor) =>
+  '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="' + (cor || 'currentColor') +
+  '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + dentro + '</svg>';
+
+/* ==========================================================================
+   Desenho principal
+   ========================================================================== */
+function desenhar() {
+  const p = ESTADO.preferencias;
+  if (p) {
+    PREFS = p;
+    PALCO.className = 'v-' + (p.aparencia.variante || 'Editorial').toLowerCase();
+    document.documentElement.style.setProperty('--acento', p.aparencia.acento || '#19c0dd');
+    $('veu').style.opacity = (p.aparencia.scrim == null ? 30 : p.aparencia.scrim) / 100;
+    aplicarFotos(p.aparencia.fotos || [], p.aparencia.rotacaoMin);
+  }
+
+  const agora = new Date();
+  $('hora').textContent = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false }).format(agora);
+  const semana = new Intl.DateTimeFormat('pt-BR', { weekday: 'long' }).format(agora);
+  const dia = new Intl.DateTimeFormat('pt-BR', { day: 'numeric', month: 'long' }).format(agora);
+  $('data').textContent = semana.charAt(0).toUpperCase() + semana.slice(1) + ', ' + dia;
+
+  // Estado da voz
+  const vs = ESTADO.voice?.state || 'offline';
+  const rotulos = { idle: 'Em espera', listening: 'Ouvindo', thinking: 'Pensando', speaking: 'Falando', offline: 'Desligado' };
+  $('rotulo-estado').textContent = rotulos[vs] || vs;
+
+  desenharTempo();
+  desenharAvisos();
+  desenharTocando();
+
+  if (!arrastando && !aberto) verificarBoot();
+}
+
+function desenharTempo() {
+  const t = ESTADO.tempo;
+  const bloco = $('tempo');
+  if (!t || !t.mostrar) { bloco.classList.add('oculto'); return; }
+
+  bloco.classList.remove('oculto');
+  $('ico-tempo').innerHTML = svg(CAMINHOS[t.condicao] || CAMINHOS['Sol']);
+  $('graus').textContent = t.temperatura + '°';
+  $('cond').textContent = t.condicao;
+  // A chance de chuva so aparece quando muda alguma decisao. Escrever "5%"
+  // todo dia treina a pessoa a nao ler a linha.
+  $('chuva').textContent = t.chuva?.vaiChover ? '· ' + t.chuva.chance + '% de chuva' : '';
+}
+
+const ICONE_AVISO = '<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/>';
+
+function desenharAvisos() {
+  const lista = ESTADO.avisos || [];
+  const alvo = $('avisos');
+  const jaNaTela = new Set([...alvo.children].map((c) => c.dataset.id));
+  const querNaTela = new Set(lista.map((a) => String(a.id)));
+
+  for (const filho of [...alvo.children]) {
+    if (!querNaTela.has(filho.dataset.id)) filho.remove();
+  }
+
+  for (const a of lista) {
+    if (jaNaTela.has(String(a.id))) continue;
+    const card = document.createElement('div');
+    card.className = 'aviso' + (a.minutosRestantes <= 60 ? ' urgente' : '');
+    card.dataset.id = a.id;
+    card.innerHTML =
+      '<span class="ico">' + svg(ICONE_AVISO) + '</span>' +
+      '<span><span class="txt">' + esc(a.texto) + '</span>' +
+      (a.minutosRestantes <= 60 ? '<div class="resta">falta ' + a.minutosRestantes + ' min</div>' : '') +
+      '</span>';
+    // Tocar no card e dizer "ja fiz". E o gesto que faz o painel valer a pena
+    // — sem ele o aviso vira decoracao que fica ate a janela fechar sozinha.
+    card.onclick = async () => {
+      card.classList.add('saindo');
+      const r = await mandar('/aviso/' + a.id + '/feito', 'POST');
+      torrada(r.ok ? esc(a.texto) + ' — feito' : 'Nao consegui marcar.');
+    };
+    alvo.appendChild(card);
+  }
+}
+
+function desenharTocando() {
+  const np = ESTADO.nowPlaying;
+  const bloco = $('tocando');
+  if (!np || !np.title) { bloco.classList.add('oculto'); return; }
+  bloco.classList.remove('oculto');
+  $('np-titulo').textContent = np.title;
+  $('np-artista').textContent = np.artist || '';
+}
+
+/* ==========================================================================
+   Onda de voz
+   ==========================================================================
+   Nao usa microfone. O mockup lia o mic do navegador, mas aqui o dono do
+   microfone e o daemon — e o HUD pode estar num celular do outro lado da casa.
+   A onda e desenhada a partir do ESTADO que chega pelo SSE.
+   E nao ha leitura de nivel real de proposito: publicar amplitude 10x por
+   segundo significaria gravar no cartao SD 10x por segundo, e cartao de
+   Raspberry morre de escrita.
+   ========================================================================== */
+const canvas = $('tela-onda');
+const ctx = canvas.getContext('2d');
+
+function amostras(n, t, modo) {
+  const saida = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const x = i / n;
+    if (modo === 'speaking') {
+      const env = 0.35 + 0.65 * Math.abs(Math.sin(t * 1.6 + x * 3.1));
+      saida[i] = (Math.sin(x * 46 + t * 9) * 0.6 + Math.sin(x * 15 - t * 5.3) * 0.4) * env * (0.55 + 0.45 * Math.sin(t * 2.7));
+    } else if (modo === 'listening') {
+      // Mais calmo e mais regular que a fala: quem olha de longe distingue
+      // "estou te ouvindo" de "estou respondendo" sem ler texto nenhum.
+      saida[i] = Math.sin(x * 22 + t * 3.4) * 0.32 * (0.6 + 0.4 * Math.sin(t * 1.3 + x * 2));
+    } else {
+      // Pensando: onda baixa correndo, so pra tela nao parecer travada.
+      saida[i] = Math.sin(x * 9 - t * 6) * 0.12;
+    }
+  }
+  return saida;
+}
+
+function rgba(hex, a) {
+  let h = String(hex || '#19c0dd').slice(1);
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const n = parseInt(h, 16);
+  return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+}
+
+function laco() {
+  requestAnimationFrame(laco);
+
+  const vs = ESTADO.voice?.state;
+  const ativo = vs === 'speaking' || vs === 'listening' || vs === 'thinking';
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  if (canvas.width !== w) { canvas.width = w; canvas.height = h; }
+  ctx.clearRect(0, 0, w, h);
+
+  const ponto = $('ponto');
+  ponto.style.opacity = ativo ? 1 : 0.35;
+
+  if (!ativo) { ponto.style.transform = 'scale(.8)'; return; }
+
+  const t = performance.now() / 1000;
+  const acento = PREFS?.aparencia?.acento || '#19c0dd';
+  const larguraBarra = 10, vao = 5, alturaSeg = 9, vaoSeg = 4;
+  const n = Math.max(1, Math.floor(w / (larguraBarra + vao)));
+  const s = amostras(n, t, vs);
+
+  let pico = 0;
+  for (const v of s) pico = Math.max(pico, Math.abs(v));
+  ponto.style.transform = 'scale(' + (1 + Math.min(0.6, pico * 0.8)) + ')';
+
+  ctx.save();
+  ctx.shadowColor = acento;
+  ctx.shadowBlur = 40;
+  const base = h, maxA = h - 4;
+  for (let i = 0; i < n; i++) {
+    const x = i * (larguraBarra + vao) + vao / 2;
+    const bal = 0.7 + 0.3 * Math.sin(t * 7 + i * 0.6);
+    const altura = Math.min(maxA, Math.max(8, Math.abs(s[i]) * maxA * 1.5 * bal));
+    let y = base;
+    while (y > base - altura) {
+      const topo = Math.max(base - altura, y - alturaSeg);
+      ctx.fillStyle = rgba(acento, Math.min(1, 0.45 + 0.55 * ((base - topo) / altura)));
+      ctx.fillRect(x, topo, larguraBarra, y - topo);
+      y = topo - vaoSeg;
+    }
+  }
+  ctx.restore();
+}
+requestAnimationFrame(laco);
+
+/* ==========================================================================
+   Central de controle
+   ========================================================================== */
+const ALTURA_PAINEL = 620;
+let aberto = false, arrastando = false, deslocamento = 0, subtela = 'principal';
+let redes = [], wifiLigado = true;
+
+function aplicarPainel(px, comAnimacao) {
+  const c = $('central');
+  c.style.transition = comAnimacao ? 'transform .32s cubic-bezier(.22,1,.36,1)' : 'none';
+  c.style.transform = 'translateY(' + (px - ALTURA_PAINEL) + 'px)';
+  const prog = px / ALTURA_PAINEL;
+  const cortina = $('cortina');
+  cortina.style.opacity = Math.min(0.5, prog * 0.5);
+  cortina.classList.toggle('ativa', prog > 0.02);
+}
+
+$('pegador').addEventListener('pointerdown', (ev) => {
+  ev.preventDefault();
+  $('pegador').setPointerCapture(ev.pointerId);
+  arrastando = true;
+  // O palco esta escalado; sem dividir pela escala o painel anda mais que o
+  // dedo em tela pequena e menos em tela grande.
+  const inicioY = ev.clientY / escala;
+  const inicioOff = aberto ? ALTURA_PAINEL : 0;
+
+  const mover = (e) => {
+    deslocamento = Math.min(ALTURA_PAINEL, Math.max(0, inicioOff + (e.clientY / escala - inicioY)));
+    aplicarPainel(deslocamento, false);
+  };
+  const soltar = () => {
+    $('pegador').removeEventListener('pointermove', mover);
+    $('pegador').removeEventListener('pointerup', soltar);
+    $('pegador').removeEventListener('pointercancel', soltar);
+    arrastando = false;
+    aberto = deslocamento > ALTURA_PAINEL * 0.35;
+    aplicarPainel(aberto ? ALTURA_PAINEL : 0, true);
+    if (aberto) abrirCentral();
+  };
+  $('pegador').addEventListener('pointermove', mover);
+  $('pegador').addEventListener('pointerup', soltar);
+  $('pegador').addEventListener('pointercancel', soltar);
+});
+
+$('cortina').onclick = fecharCentral;
+
+function fecharCentral() {
+  aberto = false; deslocamento = 0; subtela = 'principal';
+  aplicarPainel(0, true);
+}
+
+function abrirCentral() {
+  subtela = 'principal';
+  renderCentral();
+  carregarRedes();
+}
+
+const SETA = '<svg class="seta" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>';
+const I_WIFI = '<path d="M2 8.5a17 17 0 0 1 20 0"/><path d="M5.5 12.5a11.5 11.5 0 0 1 13 0"/><path d="M9 16.3a6 6 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/>';
+const I_SOL = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.3M12 19.2v2.3M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.4 19.6l1.6-1.6M18 6l1.6-1.6"/>';
+const I_SOM = '<path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M17 8.5a5.5 5.5 0 0 1 0 7"/>';
+const I_AJUSTES = '<circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.5 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.5-2.4a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5z"/>';
+const I_CADEADO = '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>';
+const I_CHECK = '<path d="M5 12.5l4.5 4.5L19 7"/>';
+
+function renderCentral() {
+  const cap = ESTADO.capacidades || {};
+  const p = PREFS || {};
+  const c = $('central');
+
+  if (subtela === 'wifi') { c.innerHTML = telaWifi(); ligarWifi(); return; }
+  if (subtela === 'ajustes') { c.innerHTML = telaAjustes(); ligarAjustes(); return; }
+
+  // Principal. Cada controle so aparece se a maquina souber executa-lo — a
+  // regra que combinamos: dado ausente some do painel, nao vira zero.
+  let html = '';
+
+  if (cap.wifi !== false) {
+    html +=
+      '<div class="linha clicavel" id="ir-wifi">' +
+      '<div class="bolha">' + svg(I_WIFI, 'currentColor') + '</div>' +
+      '<div style="flex:1;min-width:0"><div class="rot">Wi-Fi</div><div class="sub corta" id="sub-wifi">…</div></div>' +
+      SETA + '</div>';
+  }
+
+  if (cap.brilho) {
+    html +=
+      '<div class="linha"><div class="bolha">' + svg(I_SOL, 'currentColor') + '</div>' +
+      '<input type="range" min="5" max="100" value="' + (p.brilho?.nivel ?? 85) + '" id="sl-brilho"></div>';
+  }
+
+  if (cap.volume !== false) {
+    html +=
+      '<div class="linha"><div class="bolha">' + svg(I_SOM, 'currentColor') + '</div>' +
+      '<input type="range" min="0" max="100" value="' + (p.volume?.nivel ?? 60) + '" id="sl-volume"></div>';
+  }
+
+  html +=
+    '<div class="linha clicavel" id="ir-ajustes">' +
+    '<div class="bolha">' + svg(I_AJUSTES, 'currentColor') + '</div>' +
+    '<div class="rot" style="flex:1">Ajustes</div>' + SETA + '</div>';
+
+  c.innerHTML = html;
+
+  const irWifi = $('ir-wifi');
+  if (irWifi) irWifi.onclick = () => { subtela = 'wifi'; renderCentral(); };
+  $('ir-ajustes').onclick = () => { subtela = 'ajustes'; renderCentral(); };
+
+  const sw = $('sub-wifi');
+  if (sw) sw.textContent = wifiLigado ? (redes.find((r) => r.conectada)?.nome || 'não conectado') : 'desativado';
+
+  const slB = $('sl-brilho');
+  if (slB) slB.onchange = async () => {
+    const r = await mandar('/brilho', 'POST', { nivel: +slB.value });
+    if (!r.ok) torrada(r.erro || 'Não consegui mudar o brilho.');
+  };
+
+  const slV = $('sl-volume');
+  if (slV) slV.onchange = async () => {
+    const r = await mandar('/volume', 'POST', { nivel: +slV.value });
+    if (!r.ok) torrada(r.erro || 'Não consegui mudar o volume.');
+    else if (r.exato === false) torrada('Volume ajustado pelas teclas de mídia (o Windows não expõe o valor exato).');
+  };
+}
+
+function telaWifi() {
+  let corpo;
+  if (!wifiLigado) {
+    corpo = '<div class="vazio">Wi-Fi desativado</div>';
+  } else if (!redes.length) {
+    corpo = '<div class="vazio">Procurando redes…</div>';
+  } else {
+    corpo = '<div id="lista-redes">' + redes.map((r, i) =>
+      '<div class="rede" data-i="' + i + '">' +
+      '<span style="width:22px;height:22px;color:var(--acento-claro)">' + svg(I_WIFI, 'currentColor') + '</span>' +
+      '<span class="nome">' + esc(r.nome) + '</span>' +
+      '<span class="sub">' + r.sinal + '%</span>' +
+      (r.protegida ? '<span style="width:18px;height:18px;color:rgba(255,255,255,.5)">' + svg(I_CADEADO, 'currentColor') + '</span>' : '') +
+      (r.conectada ? '<span style="width:22px;height:22px;color:var(--acento-claro)">' + svg(I_CHECK, 'currentColor') + '</span>' : '') +
+      '</div>').join('') + '</div>';
+  }
+
+  return '<div class="cabeca">' +
+    '<div class="voltar" id="voltar"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></div>' +
+    '<div class="tit">Wi-Fi</div>' +
+    '<div class="chave" id="chave-wifi" style="background:' + (wifiLigado ? 'rgba(25,192,221,.9)' : 'rgba(255,255,255,.18)') + '">' +
+    '<i style="left:' + (wifiLigado ? 25 : 3) + 'px"></i></div></div>' + corpo;
+}
+
+function ligarWifi() {
+  $('voltar').onclick = () => { subtela = 'principal'; renderCentral(); };
+  $('chave-wifi').onclick = () => { wifiLigado = !wifiLigado; renderCentral(); if (wifiLigado) carregarRedes(); };
+  document.querySelectorAll('.rede').forEach((el) => {
+    el.onclick = () => pedirSenha(redes[+el.dataset.i]);
+  });
+}
+
+function pedirSenha(rede) {
+  if (rede.conectada) { torrada('Já conectado em ' + rede.nome + '.'); return; }
+  if (!rede.protegida) return conectar_(rede.nome, null);
+
+  $('central').innerHTML =
+    '<div class="cabeca"><div class="voltar" id="voltar"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></div>' +
+    '<div class="tit">' + esc(rede.nome) + '</div></div>' +
+    '<div class="campo"><input type="password" id="senha" placeholder="Senha da rede" autocomplete="off">' +
+    '<button class="botao" id="ok">Conectar</button></div>';
+
+  $('voltar').onclick = () => { subtela = 'wifi'; renderCentral(); };
+  $('senha').focus();
+  const enviar = () => conectar_(rede.nome, $('senha').value);
+  $('ok').onclick = enviar;
+  $('senha').onkeydown = (e) => { if (e.key === 'Enter') enviar(); };
+}
+
+async function conectar_(ssid, senha) {
+  torrada('Conectando em ' + ssid + '…');
+  const r = await mandar('/wifi', 'POST', { ssid: ssid, senha: senha });
+  torrada(r.ok ? 'Conectado em ' + ssid + '.' : (r.erro || 'Não consegui conectar.'));
+  if (r.ok) { subtela = 'wifi'; await carregarRedes(); }
+}
+
+async function carregarRedes() {
+  try {
+    const r = await fetch('/wifi').then((x) => x.json());
+    redes = r.redes || [];
+    if (r.erro && subtela === 'wifi') torrada(r.erro);
+  } catch { redes = []; }
+  if (aberto) renderCentral();
+}
+
+function telaAjustes() {
+  const nome = PREFS?.dispositivo || 'Sem nome';
+  const iniciais = nome.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase() || 'VX';
+  return '<div class="cabeca">' +
+    '<div class="voltar" id="voltar"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></div>' +
+    '<div class="tit">Ajustes</div></div>' +
+    '<div class="linha"><div class="avatar">' + esc(iniciais) + '</div>' +
+    '<div><div class="rot">' + esc(nome) + '</div><div class="sub">' + esc(ESTADO.conta?.email || 'nenhuma conta conectada') + '</div></div></div>' +
+    '<div class="linha clicavel" id="reiniciar"><div class="bolha">' +
+    svg('<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>', 'currentColor') + '</div><div class="rot">Reiniciar dispositivo</div></div>' +
+    '<div class="linha clicavel" id="resetar"><div class="bolha">' +
+    svg('<path d="M12 4V2M12 22v-2M4 12H2M22 12h-2"/><circle cx="12" cy="12" r="6.5"/>', 'currentColor') + '</div><div class="rot">Resetar configurações</div></div>' +
+    '<div class="linha clicavel perigo" id="desconectar"><div class="bolha">' +
+    svg('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>', 'currentColor') +
+    '</div><div class="rot perigo">Desconectar conta</div></div>';
+}
+
+function ligarAjustes() {
+  $('voltar').onclick = () => { subtela = 'principal'; renderCentral(); };
+
+  $('reiniciar').onclick = async () => {
+    torrada('Reiniciando…');
+    const r = await mandar('/sistema/reiniciar', 'POST');
+    if (!r.ok) torrada(r.erro || 'Não consegui reiniciar.');
+  };
+
+  // Duas etapas de propósito. Um toque errado aqui apaga fotos, avisos e lista
+  // de compras — a mesma regra das tools destrutivas do resto do sistema.
+  $('resetar').onclick = async () => {
+    const previa = await mandar('/sistema/resetar', 'POST', {});
+    if (previa.confirmar && !confirm(previa.confirmar)) return;
+    const r = await mandar('/sistema/resetar', 'POST', { confirmado: true });
+    torrada(r.ok ? 'Configurações resetadas.' : (r.erro || 'Falhou.'));
+    if (r.ok) fecharCentral();
+  };
+
+  $('desconectar').onclick = () => torrada('A conta ainda não está ligada — o núcleo na nuvem é o próximo passo.');
+}
+
+/* ==========================================================================
+   Primeiro boot: Wi-Fi ANTES da conta
+   ========================================================================== */
+let bootPasso = null;
+
+function verificarBoot() {
+  // Sem nome de dispositivo, este aparelho nunca foi configurado.
+  const configurado = Boolean(PREFS?.dispositivo);
+
+  if (configurado) {
+    // Some sozinho quando o nome chega de fora. Sem isto, batizar o aparelho
+    // pelo celular deixaria a tela de boas-vindas na frente do HUD ate alguem
+    // recarregar a pagina — e ninguem recarrega um painel de parede.
+    if (bootPasso !== 'feito') {
+      bootPasso = 'feito';
+      $('boot').classList.remove('ativo');
+    }
+    return;
+  }
+
+  if (bootPasso) return;
+  bootPasso = 'wifi';
+  renderBoot();
+}
+
+function renderBoot() {
+  const b = $('boot');
+  b.classList.add('ativo');
+  $('passo1').classList.toggle('feito', true);
+  $('passo2').classList.toggle('feito', bootPasso === 'conta');
+
+  if (bootPasso === 'wifi') {
+    const conectada = redes.find((r) => r.conectada);
+    $('boot-conteudo').innerHTML =
+      '<h1>Primeiro, a rede.</h1>' +
+      '<p>Sem Wi-Fi o VEXIS não fala com o núcleo — nem para entrar na sua conta.</p>' +
+      (conectada
+        ? '<div class="rot">Conectado em ' + esc(conectada.nome) + '</div>' +
+          '<div class="campo"><button class="botao" id="proximo">Continuar</button>' +
+          '<button class="botao fantasma" id="trocar">Trocar de rede</button></div>'
+        : '<div class="campo"><button class="botao" id="escolher">Escolher rede</button></div>');
+
+    const prox = $('proximo');
+    if (prox) prox.onclick = () => { bootPasso = 'conta'; renderBoot(); };
+    for (const id of ['escolher', 'trocar']) {
+      const el = $(id);
+      if (el) el.onclick = () => { b.classList.remove('ativo'); aberto = true; aplicarPainel(ALTURA_PAINEL, true); subtela = 'wifi'; renderCentral(); };
+    }
+    carregarRedes().then(() => { if (bootPasso === 'wifi') renderBoot(); });
+    return;
+  }
+
+  // Passo 2 — a conta. O pareamento por código ainda não existe; em vez de
+  // desenhar uma tela que não faz nada, o aparelho só pede um nome e segue.
+  $('boot-conteudo').innerHTML =
+    '<h1>Como se chama este aparelho?</h1>' +
+    '<p>"Sala", "Quarto", "Cozinha" — é o nome que vai aparecer no app do celular.</p>' +
+    '<div class="campo"><input id="nome-disp" placeholder="Sala" autocomplete="off">' +
+    '<button class="botao" id="salvar">Pronto</button></div>';
+
+  $('nome-disp').focus();
+  const salvar = async () => {
+    const nome = $('nome-disp').value.trim();
+    if (!nome) return;
+    await mandar('/config', 'POST', { dispositivo: { nome: nome } });
+    b.classList.remove('ativo');
+    bootPasso = 'feito';
+    torrada('Pronto. Este aparelho é o ' + nome + '.');
+  };
+  $('salvar').onclick = salvar;
+  $('nome-disp').onkeydown = (e) => { if (e.key === 'Enter') salvar(); };
+}
+
+/* ========================================================================== */
+conectar();
+setInterval(desenhar, 1000);
+aplicarPainel(0, false);
 </script>
 </body>
 </html>

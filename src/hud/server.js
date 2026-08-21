@@ -4,6 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { snapshot } from '../core/state.js';
 import { route } from '../core/router.js';
+import { atenderControle } from './controle.js';
+import { previsao, deveMostrar } from '../skills/weather.js';
+import { capacidades } from '../platform/index.js';
 
 /**
  * Servidor do HUD.
@@ -23,10 +26,18 @@ const AQUI = path.dirname(fileURLToPath(import.meta.url));
 // numero continua util e a maquina nem sente.
 const CADENCIA_ESTADO = 1000;
 const CADENCIA_VITAIS = 5000;
+// Tempo muda de 15 em 15 minutos no mundo real. Perguntar mais que isso gasta
+// rede pra receber o mesmo numero.
+const CADENCIA_TEMPO = 5 * 60 * 1000;
 
 export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   const clientes = new Set();
   let vitais = null;
+  // Tempo e capacidades entram no mesmo pacote do estado, mas nao sao lidos na
+  // mesma cadencia: um custa uma ida a internet, o outro so muda quando o
+  // hardware muda. Guardados aqui, o snapshot continua custando milissegundos.
+  let tempo = null;
+  let capacidadesDaMaquina = null;
 
   const servidor = http.createServer(async (req, res) => {
     try {
@@ -62,7 +73,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       // erro, sem tela, sem pista.
       let primeiro;
       try {
-        primeiro = JSON.stringify({ ...snapshot(), vitais });
+        primeiro = JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: capacidadesDaMaquina });
       } catch (err) {
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ erro: `nao consegui ler o estado: ${err.message}` }));
@@ -99,6 +110,9 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       return;
     }
 
+    // Fotos e central de controle. Devolve true quando atendeu.
+    if (await atenderControle(req, res, url)) return;
+
     res.writeHead(404);
     res.end();
   }
@@ -113,7 +127,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
 
     let linha;
     try {
-      linha = `data: ${JSON.stringify({ ...snapshot(), vitais })}\n\n`;
+      linha = `data: ${JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: capacidadesDaMaquina })}\n\n`;
     } catch (err) {
       console.error(`[hud] falhei ao montar o estado: ${err.message}`);
       return;
@@ -129,6 +143,34 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   };
 
   const tickEstado = setInterval(emitir, CADENCIA_ESTADO);
+
+  // Previsao do tempo. A skill ja guarda por 10 minutos; este intervalo so
+  // decide de quanto em quanto o HUD pergunta a ela. `deveMostrar` mora aqui e
+  // nao no navegador porque a regra ("das 6 as 12, mas aparece fora de hora se
+  // for chover") e a mesma do celular — duplicar daria duas verdades.
+  const lerTempo = async () => {
+    try {
+      const dados = await previsao();
+      tempo = dados ? { ...dados, mostrar: deveMostrar(dados) } : null;
+    } catch (err) {
+      // Internet fora nao pode apagar o resto da tela. Fica o ultimo valor
+      // conhecido, com a marca de quando foi lido.
+      if (!tempo) tempo = null;
+      console.error(`[hud] previsao indisponivel: ${err.message}`);
+    }
+  };
+  lerTempo();
+  const tickTempo = setInterval(lerTempo, CADENCIA_TEMPO);
+
+  // O que esta maquina consegue controlar. Nao muda em uso normal, entao roda
+  // uma vez — e o HUD esconde o que nao existe em vez de mostrar controle morto.
+  capacidades()
+    .then((c) => {
+      capacidadesDaMaquina = c;
+    })
+    .catch(() => {
+      capacidadesDaMaquina = null;
+    });
 
   // Os vitais rodam soltos do envio: se um PowerShell demorar, o HUD continua
   // atualizando o resto com o ultimo valor conhecido em vez de congelar.
@@ -156,6 +198,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
     stop() {
       clearInterval(tickEstado);
       clearInterval(tickVitais);
+      clearInterval(tickTempo);
       for (const c of clientes) c.end();
       servidor.close();
     },

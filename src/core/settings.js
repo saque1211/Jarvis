@@ -31,7 +31,7 @@ const PADRAO = {
     // Troca de foto sozinha. 0 desliga e fixa na primeira.
     rotacaoMin: 30,
     // Escurecimento por cima da foto, pra letra branca ter contraste.
-    scrim: 30,
+    scrim: 45,
     acento: '#19c0dd',
   },
 
