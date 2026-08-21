@@ -81,20 +81,39 @@ não diz que o problema é a pasta.
 
 ## Estado atual
 
-17 skills / 99 tools. Cobertura: apps, exec, files, media, hardware (inclui
-Quest 3S), capture, browser, build, scaffold, search, tasks, timer, notify,
-integrations, freelance, memory, voice.
+20 skills / 109 tools. No Windows carregam todas; no Raspberry e na nuvem,
+as 9 que não tocam a máquina (weather, avisos, compras, memory, tasks,
+search, voice, integrations, freelance).
+
+Uma skill marca `platform: 'win32'` pra rodar só no PC, ou `platform: '*'`
+pra rodar em qualquer lugar. Sem marcação nenhuma também vale em todo lugar
+— o `'*'` existe pra dizer isso de propósito em vez de por omissão.
 
 `src/core/state.js` monta o snapshot que o HUD consome — é o contrato entre
 dado e visual. Brief de design em `HUD-SPEC.md`.
+
+**Duas configurações, e elas não se misturam.** `.env` é de quem instala:
+chaves, caminhos, escrito uma vez com o editor aberto. `src/core/settings.js`
+(JSON no vault) é de quem usa: variante do HUD, fotos, avisos, lista de
+compras, janela da previsão — mudado do celular, no meio do dia, sem
+terminal. Foi misturar as duas que corrompeu o `.env` três vezes.
 
 **HUD** (`src/hud/`): servidor HTTP + SSE e uma página só. Não é Electron de
 propósito — o navegador já está na máquina, e `--app` dá janela sem barra de
 endereço pelo mesmo efeito sem empacotar 200 MB de runtime. Como é HTTP, abre
 no celular pelo IP da rede de graça. Estado a cada 1s; vitais (CPU/GPU/disco,
-que custam um PowerShell cada) a cada 5s.
+que custam um PowerShell cada) a cada 5s; previsão a cada 5min.
 
-**Falta:** integração de calendário e de e-mail.
+A página desenha em 1920x1080 fixos e é **escalada** pra caber na tela. Uma
+folha de estilo só serve o monitor do PC, os 800x480 do Pi e o celular.
+
+`src/platform/index.js` despacha rede/brilho/volume/reiniciar pro `win32.js`
+ou pro `linux.js`. O HUD nunca sabe em qual dos dois está. `capacidades()`
+diz o que a máquina realmente faz, e **controle que não mexe em nada some da
+tela** em vez de existir enganando.
+
+**Falta:** contas e pareamento na nuvem, app do celular (PWA), casa
+inteligente, calendário e e-mail.
 
 ## Limites conhecidos, documentados de propósito
 
@@ -105,6 +124,17 @@ que custam um PowerShell cada) a cada 5s.
   caos, você abre a janela certa de uma vez.
 - **GPU** depende de `nvidia-smi`. Em AMD/Intel a tool reporta indisponível em
   vez de inventar número.
+- **Xiaomi Home não tem API pública de consumidor.** O caminho honesto é o
+  Home Assistant como intermediário: ele tem REST com token, e a integração
+  Xiaomi Miio dele já resolve o protocolo. Uma integração cobre Xiaomi, Tuya
+  e Zigbee de uma vez, em vez de uma nuvem por fabricante.
+- **Volume no Windows não é lido nem escrito por comando.** O caminho exato
+  seria P/Invoke na `IAudioEndpointVolume`, que erra em silêncio se a ordem
+  da vtable estiver torta. Fica nas teclas de mídia, de 2 em 2, e o nível
+  exibido é o que você escolheu — não uma leitura do sistema.
+- **Brilho por WMI só existe em painel integrado.** Monitor de mesa obedece
+  DDC/CI, não a WMI; no Pi, `/sys/class/backlight` precisa de regra de udev.
+  Em qualquer um dos casos o controle some da tela.
 - **`Add-Content` no PowerShell cola** o texto novo no fim da última linha
   quando o arquivo não termina com quebra de linha. Já corrompeu o `.env` três
   vezes aqui (STT_PROMPT, JARVIS_SPEAKER_PORT, ELEVENLABS_API_KEY), sempre com
