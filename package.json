@@ -25,7 +25,8 @@
     "voices:edge": "node scripts/voices-edge.js",
     "voice:piper": "node scripts/setup-piper.js",
     "hud:state": "node scripts/hud-state.js",
-    "auth:spotify": "node scripts/auth-spotify.js"
+    "auth:spotify": "node scripts/auth-spotify.js",
+    "wake": "node scripts/wake.js"
   },
   "keywords": [
     "jarvis",

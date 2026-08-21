@@ -147,6 +147,24 @@ export const config = {
     // Caminho pra um .ppn customizado, se voce treinar o seu.
     wakeWordPath: process.env.JARVIS_WAKE_WORD_PATH || null,
     sensitivity: Number(process.env.JARVIS_WAKE_SENSITIVITY || 0.6),
+
+    // Quanto o nome pode sair torto e ainda contar. E distancia de edicao
+    // DEPOIS de reduzir ao som, entao 2 ja aceita "vexes", "bexis", "vecsis",
+    // "vex is". Subir pra 3 pega quase tudo — e tambem a TV ligada na sala.
+    wakeTolerancia: Number(process.env.VEXIS_WAKE_TOLERANCIA || 2),
+    // Grafias que voce viu ele errar e quer aceitar de vez. Uma alias vale
+    // mais que subir a tolerancia: ela abre uma porta especifica em vez de
+    // afrouxar todas.
+    wakeAliases: (process.env.VEXIS_WAKE_ALIASES || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    // Teto do pedaco que a escuta manda pro Whisper. A palavra sozinha cabe
+    // de sobra; o resto so faria a deteccao demorar.
+    wakeMaxMs: Number(process.env.VEXIS_WAKE_MAX_MS || 2200),
+    // Silencio que fecha o pedaco. Curto: aqui nao e a frase inteira, e so o
+    // nome.
+    wakeSilencioMs: Number(process.env.VEXIS_WAKE_SILENCIO_MS || 350),
     // Silencio (ms) que encerra a captura depois que voce para de falar. E
     // tempo morto puro — voce ja acabou e o daemon ainda esta esperando pra ter
     // certeza —, entao vale apertar. O preco de apertar demais e cortar quem

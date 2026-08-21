@@ -21,8 +21,23 @@ import { config } from '../core/config.js';
  * O ganho grande vem dos nomes que SO existem nesta maquina — os apps que voce
  * cadastrou. Um vocabulario generico ajuda pouco; o seu ajuda muito.
  */
+/**
+ * O nome do assistente entra no vocabulario, e entra PRIMEIRO.
+ *
+ * No modo de escuta continua, quem decide se ele acorda e a transcricao do
+ * proprio nome — e "vexis" nao existe em portugues, entao o whisper chuta
+ * "vexes", "vex is", "bexis". O casamento por som cobre esses casos, mas
+ * cobrir e o segundo melhor: avisar que a palavra existe faz ele escrever
+ * certo de primeira, e a deteccao para de depender de tolerancia.
+ */
+function nomeDoAssistente() {
+  const nome = String(config.voice.wakeWord || '').trim();
+  if (!nome) return '';
+  const bonito = nome.charAt(0).toUpperCase() + nome.slice(1);
+  return `${bonito}. Ei ${bonito}. ${bonito}, `;
+}
+
 const VOCAB_BASE =
-  'Comandos para o assistente Jarvis. ' +
   'Abrir, fechar, iniciar, parar, tocar, pausar, pular, aumentar, diminuir. ' +
   'Timer, pomodoro, cronometro, lembrete, tarefa, anotacao. ' +
   'CPU, RAM, GPU, disco, bateria, volume, brilho, monitor. ' +
@@ -108,6 +123,11 @@ const RESERVA_COMANDOS = 380;
 
 export function promptDeVocabulario() {
   const partes = [];
+  // Primeiro de todos: o teto corta o FIM do prompt, e o nome do assistente
+  // e a unica palavra cuja transcricao decide se ele acorda ou nao.
+  const nome = nomeDoAssistente();
+  if (nome) partes.push(nome);
+
   const doUsuario = config.voice.sttPrompt ? limparPrompt(config.voice.sttPrompt) : '';
   if (doUsuario) partes.push(doUsuario);
 

@@ -65,6 +65,7 @@ npm run hud                # HUD como app (janela sem barra de endereço)
 npm run doctor             # diagnóstico de setup
 npm run env:check          # acha linha colada/repetida no .env (add "-- --corrigir")
 npm run test:voice         # mic + STT + TTS isolados do resto
+npm run wake              # calibra a palavra de ativacao (ao vivo ou com frases)
 npm run voices             # lista e fala com cada voz do Windows
 npm run voices:eleven      # vozes do ElevenLabs (add "-- --ouvir" pra escutar)
 npm run whisper:server     # whisper.cpp com o modelo carregado, pra latência
@@ -106,6 +107,24 @@ que custam um PowerShell cada) a cada 5s; previsão a cada 5min.
 
 A página desenha em 1920x1080 fixos e é **escalada** pra caber na tela. Uma
 folha de estilo só serve o monitor do PC, os 800x480 do Pi e o celular.
+
+**Palavra de ativação** (`JARVIS_TRIGGER=escuta`): o microfone fica aberto, um
+porteiro de energia decide o que é fala, e o Whisper — que já está carregado —
+transcreve só esses pedaços. `src/voice/wake.js` compara por **som**, não por
+grafia: `x→ks`, `c→k`, `z→s`, `b→v`, e aceita distância de edição até
+`VEXIS_WAKE_TOLERANCIA`.
+
+Não é Porcupine porque o Porcupine só reconhece palavras de fábrica ou um
+`.ppn` treinado no console da Picovoice, e "vexis" não é palavra nenhuma. O
+preço é uma transcrição por pedaço de fala no cômodo; o ganho é um nome
+inventado funcionando sem cadastro, com a tolerância na sua mão.
+
+O nome entra **primeiro** no prompt inicial do Whisper. Avisar que a palavra
+existe faz ele escrever certo de primeira — melhor que depender da tolerância
+para consertar depois. Calibre com `npm run wake`.
+
+Quando o nome vem junto com o pedido ("Vexis, toca música"), o comando é
+aproveitado da mesma transcrição em vez de reabrir o microfone.
 
 `src/platform/index.js` despacha rede/brilho/volume/reiniciar pro `win32.js`
 ou pro `linux.js`. O HUD nunca sabe em qual dos dois está. `capacidades()`

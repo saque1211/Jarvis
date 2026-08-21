@@ -8,6 +8,7 @@ import { resolverSom } from '../src/skills/timer.js';
 import { isConfigured as elevenPronto, cota as elevenCota } from '../src/integrations/elevenlabs.js';
 import { run } from '../src/platform/win32.js';
 import { isConfigured as spotifyReady } from '../src/integrations/spotify.js';
+import { fonetizar } from '../src/voice/wake.js';
 
 /**
  * Diagnostico: diz exatamente o que ja funciona e o que falta configurar,
@@ -74,7 +75,17 @@ async function main() {
   console.log(pc.bold('\n  Voz'));
 
   const trigger = config.voice.trigger;
-  if (trigger === 'wakeword') {
+  if (trigger === 'escuta') {
+    ok(`gatilho: escuta continua — diga "${config.voice.wakeWord}"`);
+    warn(`som alvo "${fonetizar(config.voice.wakeWord)}", tolerancia ${config.voice.wakeTolerancia}`);
+    if (config.voice.wakeAliases.length) {
+      info(`aliases: ${config.voice.wakeAliases.join(', ')}`);
+    }
+    // Sem servidor, cada barulho da sala recarregaria o modelo do disco.
+    if (config.voice.sttServerUrl) ok(`whisper-server em ${config.voice.sttServerUrl}`);
+    else fail('a escuta continua EXIGE STT_SERVER_URL — sem ele, cada ruido custa ~2s');
+    warn('calibre com: npm run wake');
+  } else if (trigger === 'wakeword') {
     ok(`gatilho: wake word ("${config.voice.wakeWord}")`);
     if (config.voice.picovoiceKey) ok('PICOVOICE_ACCESS_KEY presente');
     else fail('PICOVOICE_ACCESS_KEY ausente — ou use JARVIS_TRIGGER=hotkey, sem chave');
@@ -90,7 +101,7 @@ async function main() {
   } else if (trigger === 'enter') {
     ok('gatilho: Enter no terminal (sem chave, terminal precisa estar em foco)');
   } else {
-    fail(`JARVIS_TRIGGER="${trigger}" nao existe — use wakeword, hotkey ou enter`);
+    fail(`JARVIS_TRIGGER="${trigger}" nao existe — use escuta, wakeword, hotkey ou enter`);
   }
 
   try {

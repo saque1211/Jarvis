@@ -178,7 +178,20 @@ async function captureCommand(onParcial) {
   return { audio: Int16Array.from(frames), parcialValida };
 }
 
-async function handleUtterance() {
+/**
+ * `comandoPronto` chega quando a palavra de ativacao veio na MESMA tirada que
+ * o pedido — "Vexis, toca musica". O texto ja foi transcrito pela escuta, e
+ * abrir o microfone de novo pra pedir que a pessoa repita seria fingir que
+ * nao ouviu o que ouviu.
+ */
+async function handleUtterance(comandoPronto = null) {
+  if (comandoPronto) {
+    writeRuntime({ voiceState: 'thinking' });
+    log('voce', pc.white(comandoPronto) + pc.dim('  (junto com o nome)'), pc.green);
+    writeRuntime({ lastTranscript: comandoPronto });
+    return responder(comandoPronto, { sttMs: 0, heard: 0, adiantada: false });
+  }
+
   log('escuta', pc.cyan('pode falar'), pc.cyan);
   writeRuntime({ voiceState: 'listening' });
 
@@ -280,6 +293,17 @@ async function handleUtterance() {
   log('voce', pc.white(text), pc.green);
   writeRuntime({ lastTranscript: text });
 
+  return responder(text, { sttMs, heard, adiantada });
+}
+
+/**
+ * Do texto ate o audio da resposta.
+ *
+ * Separado da captura porque existem duas portas de entrada: o caminho normal
+ * (gatilho, grava, transcreve) e o atalho de quem falou o nome junto com o
+ * pedido — que chega aqui ja com o texto na mao.
+ */
+async function responder(text, { sttMs = 0, heard = 0, adiantada = false } = {}) {
   try {
     const { reply, steps, timings } = await route(text, {
       source: 'voice',
@@ -294,7 +318,9 @@ async function handleUtterance() {
 
     // Pico contra chiado: quando essa distancia e curta, nenhum modelo salva a
     // transcricao — o problema esta no microfone, nao no whisper.
-    if (lastLevels) {
+    // `heard` zero = veio pelo atalho do nome-junto-com-o-comando, e nao houve
+    // captura nenhuma. Imprimir os niveis aqui mostraria os da vez anterior.
+    if (lastLevels && heard > 0) {
       const { peak, floor } = lastLevels;
       const ratio = floor > 0 ? peak / floor : Infinity;
       const veredito =
@@ -316,7 +342,9 @@ async function handleUtterance() {
     // "adiantada" = o palpite pegou, e esse numero e so o que sobrou pra
     // esperar. Se ele quase nunca aparecer, STT_SPECULATE_MS esta alto demais
     // e disparando no meio da frase.
-    const partes = [`${s(sttMs)} transcricao${adiantada ? pc.green(' (adiantada)') : ''}`];
+    const partes = [];
+    if (sttMs > 0) partes.push(`${s(sttMs)} transcricao${adiantada ? pc.green(' (adiantada)') : ''}`);
+    else partes.push(pc.green('transcricao ja veio com o nome'));
     if (timings.preselect) partes.push(`${s(timings.preselect)} escolha`);
     partes.push(`${s(timings.llm)} modelo`);
     if (timings.tools) partes.push(`${s(timings.tools)} tools`);
@@ -339,10 +367,12 @@ async function handleUtterance() {
       `${pc.bold(s(totalMs))} do fim da sua frase ate o fim do audio  ` +
         pc.dim(`(${partes.join(' · ')})`)
     );
-    log(
-      'audio-in',
-      pc.dim(`${heard.toFixed(1)}s de fala + ${s(config.voice.silenceMs)} de silencio esperado`)
-    );
+    if (heard > 0) {
+      log(
+        'audio-in',
+        pc.dim(`${heard.toFixed(1)}s de fala + ${s(config.voice.silenceMs)} de silencio esperado`)
+      );
+    }
   } catch (err) {
     log('erro', pc.red(err.message), pc.red);
     await speak('Deu erro aqui. Confira o terminal.');
@@ -441,12 +471,12 @@ async function main() {
   }, 1000);
 
   while (running) {
-    await trigger.wait(recorder);
+    const disparo = await trigger.wait(recorder);
     if (!running) break;
 
     if (!trigger.needsAudio) recorder.start();
     try {
-      await handleUtterance();
+      await handleUtterance(disparo?.comando || null);
     } finally {
       if (!trigger.needsAudio) recorder.stop();
     }

@@ -1,7 +1,13 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import readline from 'node:readline';
 import pc from 'picocolors';
 import { config } from '../core/config.js';
 import { psLines } from '../platform/win32.js';
+import { transcribe } from './stt.js';
+import { writeWav, frameEnergy } from './wav.js';
+import { casaWake } from './wake.js';
 
 /**
  * O que faz o JARVIS comecar a ouvir.
@@ -68,6 +74,166 @@ async function wakeWordTrigger() {
       }
     },
     release: () => engine.release(),
+  };
+}
+
+// ─── Escuta continua (Whisper + casamento por som) ──────────────────────────
+
+const SAMPLE_RATE_ESCUTA = 16000;
+// Piso absoluto de energia, pra microfone muito limpo.
+const PISO_ABSOLUTO = 0.006;
+// Quantas vezes o chiado medido ainda conta como fala. Mais baixo que o da
+// captura de comando (2.5) de proposito: aqui o erro barato e transcrever um
+// pedaco a toa; o erro caro e nao ouvir voce chamando.
+const MARGEM_DE_RUIDO = 2.0;
+
+/**
+ * Descarta o audio que ficou na fila enquanto o assistente falava.
+ *
+ * O microfone nao para de gravar durante a resposta, e o gravador entrega
+ * esses frames depois, de uma vez. Sem jogar fora, a primeira coisa que a
+ * escuta ouve e a PROPRIA voz do assistente — e uma resposta que mencione o
+ * nome dele o faz acordar sozinho, em loop.
+ *
+ * Frame que volta instantaneo veio da fila; frame que demora o tempo dele
+ * esta chegando em tempo real. E assim que da pra saber onde a fila acaba.
+ */
+async function drenarFila(recorder, frameMs) {
+  const TETO = 300;
+  for (let i = 0; i < TETO; i++) {
+    const t = Date.now();
+    await recorder.read();
+    if (Date.now() - t > frameMs * 0.5) return i;
+  }
+  return TETO;
+}
+
+/**
+ * Espera alguem falar e devolve so esse pedacinho.
+ *
+ * Nao e a captura de comando: aqui o alvo e uma palavra, entao o pedaco e
+ * curto e o silencio que o encerra tambem. Quanto menor o pedaco, mais rapido
+ * o Whisper responde — e a espera entre chamar e ser ouvido e o que separa
+ * "ele me escuta" de "ele demora".
+ */
+export async function pedacoDeFala(recorder, frameLength) {
+  const frameMs = (frameLength / SAMPLE_RATE_ESCUTA) * 1000;
+  const preRoll = Math.max(1, Math.ceil(300 / frameMs));
+  const maxFrames = Math.ceil(config.voice.wakeMaxMs / frameMs);
+  const silencioFrames = Math.max(1, Math.ceil(config.voice.wakeSilencioMs / frameMs));
+  const minFrames = Math.ceil(220 / frameMs);
+
+  const anel = [];
+  let chiado = Infinity;
+
+  // 1) Espera a energia subir. O anel guarda os ultimos 300ms: sem ele, a
+  // gravacao comeca no meio do "-xis" e o Whisper recebe meia palavra.
+  while (true) {
+    const frame = await recorder.read();
+    const energia = frameEnergy(frame);
+
+    // Desce rapido, sobe devagar: o chiado do comodo muda quando liga o
+    // ventilador, mas nao muda porque alguem falou.
+    chiado = chiado === Infinity ? energia : energia < chiado ? energia : chiado * 0.999 + energia * 0.001;
+
+    anel.push(frame);
+    if (anel.length > preRoll) anel.shift();
+
+    if (energia > Math.max(PISO_ABSOLUTO, chiado * MARGEM_DE_RUIDO)) break;
+  }
+
+  // 2) Coleta ate o silencio fechar o pedaco, ou ate o teto.
+  const frames = [];
+  for (const f of anel) frames.push(...f);
+
+  let mudo = 0;
+  for (let i = 0; i < maxFrames; i++) {
+    const frame = await recorder.read();
+    frames.push(...frame);
+
+    const limiar = Math.max(PISO_ABSOLUTO, chiado * MARGEM_DE_RUIDO);
+    if (frameEnergy(frame) > limiar) mudo = 0;
+    else if (++mudo >= silencioFrames && i >= minFrames) break;
+  }
+
+  // Estalo de porta, tosse, clique de mouse: curto demais pra ser um nome.
+  if (frames.length < minFrames * frameLength) return null;
+  return Int16Array.from(frames);
+}
+
+/**
+ * Gatilho de escuta continua.
+ *
+ * O Porcupine so reconhece as palavras que ele ja traz de fabrica; qualquer
+ * outra exige treinar um modelo no console da Picovoice. Como o Whisper ja
+ * esta na maquina e ja fica carregado, ele serve de detector — e de quebra a
+ * tolerancia passa a ser um numero que voce ajusta, o que importa muito num
+ * nome que a transcricao erra de dez jeitos.
+ *
+ * O preco e honesto: cada pedaco de fala no comodo custa uma transcricao. Por
+ * isso o porteiro de energia vem antes, e o pedaco e curto.
+ */
+async function escutaTrigger() {
+  if (!config.voice.sttServerUrl) {
+    // Sem servidor, cada pedaco recarregaria o modelo do disco: ~2s por
+    // barulho na sala. O remedio custaria mais que a doenca.
+    throw new Error(
+      'A escuta continua precisa do whisper-server no ar (STT_SERVER_URL no .env).\n' +
+        'Sem ele, cada barulho da sala recarregaria o modelo do disco.\n' +
+        'Rode "npm run whisper:server" numa janela, ou use JARVIS_TRIGGER=hotkey.'
+    );
+  }
+
+  let ouvindoAgora = false;
+
+  return {
+    kind: 'escuta',
+    frameLength: FRAME_LENGTH,
+    label: `Diga ${pc.bold(`"${config.voice.wakeWord}"`)} pra comecar.`,
+    needsAudio: true,
+
+    async wait(recorder) {
+      // Primeira coisa: jogar fora o que sobrou da resposta anterior.
+      const frameMs = (FRAME_LENGTH / SAMPLE_RATE_ESCUTA) * 1000;
+      await drenarFila(recorder, frameMs);
+
+      while (true) {
+        const pedaco = await pedacoDeFala(recorder, FRAME_LENGTH);
+        if (!pedaco) continue;
+
+        let texto;
+        const arquivo = path.join(os.tmpdir(), `vexis-wake-${Date.now()}.wav`);
+        try {
+          writeWav(arquivo, pedaco, SAMPLE_RATE_ESCUTA);
+          texto = await transcribe(arquivo);
+        } catch (err) {
+          // Servidor caiu no meio da noite: avisa uma vez e continua tentando.
+          // Um gatilho que morre em silencio deixa a casa inteira sem voz.
+          if (!ouvindoAgora) {
+            console.error(pc.yellow(`[escuta] ${err.message}`));
+            ouvindoAgora = true;
+          }
+          continue;
+        } finally {
+          fs.rmSync(arquivo, { force: true });
+        }
+        ouvindoAgora = false;
+
+        if (!texto) continue;
+
+        const r = casaWake(texto);
+        if (config.voice.vadDebug) {
+          console.log(pc.dim(`  [escuta] "${texto}" ${r.casou ? `→ acordou (d=${r.distancia})` : '→ nao era'}`));
+        }
+        if (!r.casou) continue;
+
+        // Chamou e ja mandou na mesma tirada. Aproveitar isso e o que separa
+        // "Vexis... (bipe) ...toca musica" de "Vexis, toca musica".
+        return r.sobra ? { comando: r.sobra } : true;
+      }
+    },
+
+    release: () => {},
   };
 }
 
@@ -189,6 +355,7 @@ function enterTrigger() {
 
 const TRIGGERS = {
   wakeword: wakeWordTrigger,
+  escuta: escutaTrigger,
   hotkey: hotkeyTrigger,
   enter: enterTrigger,
 };
@@ -198,7 +365,7 @@ export async function createTrigger() {
   const build = TRIGGERS[wanted];
   if (!build) {
     throw new Error(
-      `JARVIS_TRIGGER="${wanted}" nao existe. Use wakeword, hotkey ou enter.`
+      `JARVIS_TRIGGER="${wanted}" nao existe. Use escuta, wakeword, hotkey ou enter.`
     );
   }
   return build();
