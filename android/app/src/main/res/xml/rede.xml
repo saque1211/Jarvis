@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  O painel serve HTTP na rede local, e desde o Android 9 o sistema bloqueia
+  HTTP em texto puro por padrao. Sem esta permissao o app abre em branco e
+  nao diz por que.
+
+  Nao ha HTTPS aqui de proposito: certificado valido exige dominio publico, e
+  isto e um aparelho na sua casa falando com outro aparelho na sua casa. O
+  dia em que existir a conta na nuvem, aquele caminho e que sera HTTPS.
+-->
+<network-security-config>
+  <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
