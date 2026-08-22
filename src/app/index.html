@@ -39,11 +39,20 @@
 }
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body {
-  background: var(--fundo); color: var(--texto);
+  color: var(--texto);
   font-family: var(--sans); font-size: 16px;
   overscroll-behavior-y: contain;
 }
-body { padding-bottom: calc(76px + var(--seguro-base)); }
+body {
+  padding-bottom: calc(76px + var(--seguro-base));
+  /* Um brilho fraco no topo tira o app do preto chapado sem virar enfeite —
+     dá profundidade e um ponto de luz pra tela respirar. */
+  background:
+    radial-gradient(130% 55% at 50% -12%, rgba(25,192,221,.11), transparent 62%),
+    var(--fundo);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
 
 /* ---- cabeçalho ---- */
 header {
@@ -62,12 +71,38 @@ header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display:
 /* ---- páginas ---- */
 main { padding: 18px 16px 24px; }
 .pagina { display: none; }
-.pagina.ativa { display: block; }
+.pagina.ativa { display: block; animation: entra .3s cubic-bezier(.22,.61,.36,1); }
+@keyframes entra { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 h2 { font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 26px 0 12px; }
 h2:first-child { margin-top: 4px; }
 .ajuda { font-size: 13px; color: var(--fraco); margin: -6px 0 12px; line-height: 1.5; }
 
-.carta { background: var(--carta); border: 1px solid var(--borda); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+/* ---- saudação (topo da Casa) ---- */
+.saudacao { margin: 2px 2px 20px; }
+.saudacao .ola { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1.08; }
+.saudacao .data {
+  display: flex; align-items: baseline; gap: 10px; margin-top: 7px;
+  color: var(--fraco); font-size: 14px;
+}
+.saudacao .data .qual-dia { text-transform: capitalize; }
+.saudacao .relogio { margin-left: auto; color: var(--texto); font-size: 15px; font-variant-numeric: tabular-nums; }
+
+.carta {
+  background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.022));
+  border: 1px solid var(--borda); border-radius: 16px; padding: 16px; margin-bottom: 12px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 10px 26px -20px rgba(0,0,0,.9);
+}
+
+/* ---- card de voz vivo ---- */
+.orb { width: 14px; height: 14px; border-radius: 50%; background: var(--fraco); flex: none; position: relative; transition: background .3s, box-shadow .3s; }
+.cartao-voz[data-estado="listening"] .orb,
+.cartao-voz[data-estado="thinking"] .orb,
+.cartao-voz[data-estado="speaking"] .orb { background: var(--acento); box-shadow: 0 0 14px var(--acento); }
+.cartao-voz[data-estado="listening"] .orb::after {
+  content: ''; position: absolute; inset: -7px; border-radius: 50%;
+  border: 2px solid var(--acento); animation: pulso 1.5s ease-out infinite;
+}
+@keyframes pulso { 0% { transform: scale(.55); opacity: .7; } 100% { transform: scale(1.6); opacity: 0; } }
 .linha { display: flex; align-items: center; gap: 14px; min-height: 46px; }
 .linha + .linha { border-top: 1px solid var(--borda); margin-top: 4px; padding-top: 10px; }
 .cresce { flex: 1; min-width: 0; }
@@ -118,7 +153,10 @@ select {
   background: rgba(0,0,0,.62); border: none; color: #fff; font-size: 17px; line-height: 1; cursor: pointer;
   display: grid; place-items: center;
 }
-.vazio { text-align: center; padding: 34px 16px; color: var(--fraco); font-style: italic; font-size: 15px; }
+.vazio {
+  text-align: center; padding: 40px 20px; color: var(--fraco); font-style: italic; font-size: 15px;
+  border: 1px dashed var(--borda); border-radius: 16px; background: rgba(255,255,255,.014);
+}
 
 /* ---- lista de compras ---- */
 .item { display: flex; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--borda); }
@@ -138,13 +176,23 @@ nav {
   border-top: 1px solid var(--borda);
 }
 nav button {
+  position: relative;
   flex: 1; background: none; border: none; cursor: pointer;
-  padding: 10px 2px 12px; color: var(--fraco);
+  padding: 11px 2px 12px; color: var(--fraco);
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   font-size: 10.5px; letter-spacing: .02em;
+  transition: color .2s;
 }
 nav button.on { color: var(--acento-claro); }
-nav svg { width: 23px; height: 23px; }
+/* Pino luminoso sobre a aba ativa — diz onde você está sem precisar ler. */
+nav button.on::before {
+  content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 26px; height: 3px; border-radius: 0 0 3px 3px;
+  background: var(--acento-claro); box-shadow: 0 0 8px var(--acento);
+}
+nav button.on svg { filter: drop-shadow(0 0 6px rgba(25,192,221,.5)); }
+nav svg { width: 23px; height: 23px; transition: transform .2s; }
+nav button:active svg { transform: scale(.9); }
 
 /* ---- torrada ---- */
 #torrada {
@@ -167,8 +215,17 @@ nav svg { width: 23px; height: 23px; }
 <main>
   <!-- ═══ CASA ═══ -->
   <section class="pagina ativa" id="p-casa">
-    <div class="carta" id="cartao-voz">
+    <div class="saudacao">
+      <div class="ola" id="saudacao">Olá</div>
+      <div class="data">
+        <span class="qual-dia" id="data-hoje">—</span>
+        <span class="relogio" id="relogio">—</span>
+      </div>
+    </div>
+
+    <div class="carta cartao-voz" id="cartao-voz">
       <div class="linha">
+        <span class="orb" id="voz-orb"></span>
         <div class="cresce">
           <div class="rotulo" id="voz-estado">—</div>
           <div class="sub" id="voz-ultima">—</div>
@@ -386,7 +443,9 @@ const ROTULOS = { idle: 'Em espera', listening: 'Ouvindo você', thinking: 'Pens
 function pintarAoVivo() {
   const p = ESTADO.preferencias;
   $('dispositivo').textContent = p?.dispositivo || 'sem nome';
-  $('voz-estado').textContent = ROTULOS[ESTADO.voice?.state] || '—';
+  const estado = ESTADO.voice?.state || 'offline';
+  $('cartao-voz').dataset.estado = estado;
+  $('voz-estado').textContent = ROTULOS[estado] || '—';
   $('voz-ultima').textContent = ESTADO.voice?.lastTranscript
     ? '“' + ESTADO.voice.lastTranscript + '”'
     : 'nada dito ainda';
@@ -654,6 +713,23 @@ for (const b of document.querySelectorAll('nav button')) {
     CARREGA[b.dataset.p]?.();
   };
 }
+
+/* ── relógio e saudação (topo da Casa) ─────────────────────────────────── */
+function saudacaoDoDia() {
+  const h = new Date().getHours();
+  if (h < 5) return 'Boa madrugada';
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+function tickRelogio() {
+  const agora = new Date();
+  $('saudacao').textContent = saudacaoDoDia();
+  $('data-hoje').textContent = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('relogio').textContent = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+tickRelogio();
+setInterval(tickRelogio, 20000);
 
 conectar();
 carregarConfig();
