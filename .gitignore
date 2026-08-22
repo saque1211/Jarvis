@@ -9,3 +9,7 @@ config/tab-workspaces.json
 .DS_Store
 .vscode/
 .idea/
+
+# Cache do Python (pi/)
+__pycache__/
+*.pyc
