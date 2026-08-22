@@ -4,6 +4,7 @@ import {
   findDeviceById,
   findDevicesByUserId,
   findDeviceByApprovalToken,
+  findDeviceByPollSecret,
   approveDevice,
   revokeDevice,
   assignDeviceToUser,
@@ -24,20 +25,55 @@ router.post('/register', async (req, res) => {
   }
 
   try {
-    // For now, devices register without a user — the user approves and claims them
-    // In production, the user would be extracted from a token if device is already linked
+    // O aparelho se registra sozinho, ainda sem dono. O usuario reivindica
+    // depois digitando o codigo de 6 digitos no portal (rota /claim).
     const device = registerDevice(null, deviceName, deviceType);
 
     res.status(201).json({
       ok: true,
       device: {
         id: device.id,
-        approvalToken: device.approvalToken,
+        // Codigo de 6 digitos: o aparelho fala em voz alta, a pessoa digita.
+        pairingCode: device.approvalToken,
+        // Segredo longo: o aparelho guarda e usa em /poll pra pegar o token.
+        pollSecret: device.pollSecret,
       },
     });
   } catch (err) {
     res.status(500).json({ erro: err.message });
   }
+});
+
+/**
+ * O aparelho pergunta "ja me aprovaram?".
+ *
+ * Autenticado pelo pollSecret (longo, so o aparelho tem), nao pelo codigo de 6
+ * digitos. Enquanto pendente, devolve approved:false. Depois que o usuario
+ * aprova no celular, devolve o deviceToken — que o aparelho salva e passa a
+ * usar em tudo.
+ */
+router.post('/poll', async (req, res) => {
+  const { pollSecret } = req.body;
+
+  if (!pollSecret) {
+    return res.status(400).json({ erro: 'pollSecret obrigatório.' });
+  }
+
+  const device = findDeviceByPollSecret(pollSecret);
+  if (!device) {
+    return res.status(404).json({ erro: 'Dispositivo não encontrado.' });
+  }
+
+  if (!device.approved) {
+    return res.json({ ok: true, approved: false });
+  }
+
+  res.json({
+    ok: true,
+    approved: true,
+    deviceToken: device.deviceToken,
+    device: { id: device.id, name: device.name, type: device.type },
+  });
 });
 
 router.post('/claim', verifyUserAuth, async (req, res) => {
@@ -56,13 +92,15 @@ router.post('/claim', verifyUserAuth, async (req, res) => {
     assignDeviceToUser(device.id, req.userId);
     const approved = approveDevice(device.id);
 
+    // De proposito NAO devolve o deviceToken aqui: quem reivindica e o celular,
+    // mas quem precisa do token e o aparelho. O aparelho pega o dele sozinho
+    // pela rota /poll, com o pollSecret que so ele tem.
     res.json({
       ok: true,
       device: {
         id: approved.id,
         name: approved.name,
         type: approved.type,
-        deviceToken: approved.deviceToken,
       },
     });
   } catch (err) {

@@ -65,8 +65,14 @@ export function registerDevice(userId, deviceName, deviceType) {
     name: deviceName,
     type: deviceType, // 'pi', 'pc', 'phone'
     approved: false,
+    // O que a pessoa digita: 6 digitos, o aparelho fala em voz alta.
     approvalToken: gerarCodigoCurto(devices),
     approvalExpiresAt: new Date(agora + VALIDADE_CODIGO_MS).toISOString(),
+    // O que o APARELHO guarda em segredo: longo e imprevisivel. E com ele que
+    // o aparelho pergunta "ja me aprovaram?" e recebe o deviceToken. Separar
+    // dos 6 digitos e o que impede quem adivinha o codigo curto de roubar o
+    // token — aprovar exige a conta logada; pegar o token exige este segredo.
+    pollSecret: crypto.randomUUID(),
     deviceToken: null,
     registeredAt: new Date().toISOString(),
     approvedAt: null,
@@ -76,6 +82,11 @@ export function registerDevice(userId, deviceName, deviceType) {
   writeDevices(devices);
 
   return device;
+}
+
+export function findDeviceByPollSecret(secret) {
+  const devices = readDevices();
+  return devices.find(d => d.pollSecret === secret);
 }
 
 export function findDeviceById(id) {
