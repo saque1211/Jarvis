@@ -233,9 +233,9 @@ async function telaConta() {
     <div id="lista-disp"><div class="vazio">Carregando…</div></div>
 
     <h2>Parear um novo</h2>
-    <p class="ajuda">No dispositivo (Pi, PC), vai aparecer um código de pareamento. Digite ele aqui para liberar o acesso.</p>
+    <p class="ajuda">Ligue o dispositivo (Pi, PC). Ele vai falar um código de 6 dígitos — digite ele aqui para liberar o acesso. O código vale por 10 minutos.</p>
     <div class="duplo">
-      <input type="text" id="codigo" placeholder="código de pareamento" autocomplete="off">
+      <input type="text" id="codigo" placeholder="000000" autocomplete="off" inputmode="numeric" maxlength="6" pattern="[0-9]*">
       <button class="botao" id="parear">Parear</button>
     </div>
 
