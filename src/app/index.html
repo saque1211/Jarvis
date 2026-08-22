@@ -294,8 +294,6 @@ nav svg { width: 23px; height: 23px; }
       <button class="botao fantasma largo" id="reiniciar" style="margin-top:12px">Reiniciar o painel</button>
       <button class="botao perigo largo" id="resetar" style="margin-top:10px">Apagar tudo e recomeçar</button>
     </div>
-
-    <div id="secao-nucleus"></div>
   </section>
 </main>
 
@@ -322,80 +320,15 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
 
 let ESTADO = {};
 let CONFIG = null;
-let MODO = 'local'; // 'local' ou 'nucleus'
-let NUCLEUS_URL = null; // preenchido se estiver em modo nucleus
-let NUCLEUS_TOKEN = null; // JWT token do nucleus
-
-/* ── auth nucleus ──────────────────────────────────────────────────────── */
-function lerNucleus() {
-  NUCLEUS_TOKEN = localStorage.getItem('nucleus_token');
-  NUCLEUS_URL = localStorage.getItem('nucleus_url');
-  if (NUCLEUS_TOKEN && NUCLEUS_URL) {
-    MODO = 'nucleus';
-  }
-}
-
-async function registrarNucleus(email, senha, url) {
-  try {
-    const r = await fetch(url + '/auth/register', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: senha }),
-    });
-    const j = await r.json();
-    if (!j.ok && !j.token) throw new Error(j.erro || 'Falha no registro.');
-    localStorage.setItem('nucleus_token', j.token);
-    localStorage.setItem('nucleus_url', url);
-    NUCLEUS_TOKEN = j.token;
-    NUCLEUS_URL = url;
-    MODO = 'nucleus';
-    return true;
-  } catch (err) {
-    throw err;
-  }
-}
-
-async function loginNucleus(email, senha, url) {
-  try {
-    const r = await fetch(url + '/auth/login', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ email, password: senha }),
-    });
-    const j = await r.json();
-    if (!j.ok && !j.token) throw new Error(j.erro || 'Falha no login.');
-    localStorage.setItem('nucleus_token', j.token);
-    localStorage.setItem('nucleus_url', url);
-    NUCLEUS_TOKEN = j.token;
-    NUCLEUS_URL = url;
-    MODO = 'nucleus';
-    return true;
-  } catch (err) {
-    throw err;
-  }
-}
-
-function logoutNucleus() {
-  localStorage.removeItem('nucleus_token');
-  localStorage.removeItem('nucleus_url');
-  NUCLEUS_TOKEN = null;
-  NUCLEUS_URL = null;
-  MODO = 'local';
-}
 
 /* ── conversa com o núcleo ─────────────────────────────────────────────── */
+// Mesma origem sempre: o app e servido pelo mesmo servidor que responde os
+// dados (HUD local ou nucleus na nuvem), entao rota relativa basta. Conta e
+// pareamento de dispositivo ficam no portal separado, em /conta.
 async function api(rota, metodo = 'GET', corpo) {
-  let url = rota;
-  const headers = corpo ? { 'content-type': 'application/json' } : {};
-
-  if (MODO === 'nucleus' && NUCLEUS_URL && NUCLEUS_TOKEN) {
-    url = NUCLEUS_URL + rota;
-    headers['authorization'] = 'Bearer ' + NUCLEUS_TOKEN;
-  }
-
-  const r = await fetch(url, {
+  const r = await fetch(rota, {
     method: metodo,
-    headers,
+    headers: corpo ? { 'content-type': 'application/json' } : undefined,
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
   if (!r.ok && r.status !== 400) throw new Error('HTTP ' + r.status);
@@ -666,27 +599,6 @@ async function carregarConfig() {
          Home Assistant no meio: ele fala com todos e tem uma API de verdade.
          <br><br>Ainda não configurado — é o próximo pedaço.
        </div>`;
-
-  if (MODO === 'nucleus') {
-    $('secao-nucleus').innerHTML = `
-      <h2>Nuvem</h2>
-      <div class="carta">
-        <div class="linha">
-          <div class="cresce">
-            <div class="rotulo">Conectado a</div>
-            <div class="sub">${esc(NUCLEUS_URL)}</div>
-          </div>
-        </div>
-        <button class="botao fantasma largo" id="sair-nucleus" style="margin-top:12px">Sair da conta</button>
-      </div>
-    `;
-    $('sair-nucleus').onclick = () => {
-      if (confirm('Desconectar de ' + NUCLEUS_URL + '?')) {
-        logoutNucleus();
-        location.reload();
-      }
-    };
-  }
 }
 
 const textoRotacao = () => {
@@ -743,93 +655,9 @@ for (const b of document.querySelectorAll('nav button')) {
   };
 }
 
-lerNucleus();
-if (MODO === 'nucleus' && !NUCLEUS_TOKEN) {
-  document.body.innerHTML = `
-    <style>
-      .tela-auth {
-        display: grid; place-items: center; height: 100vh;
-        padding: 20px; background: var(--fundo); color: var(--texto);
-      }
-      .cartao-auth {
-        max-width: 340px; width: 100%;
-        background: var(--carta); border: 1px solid var(--borda);
-        border-radius: 16px; padding: 32px 24px;
-      }
-      .cartao-auth h1 { font-family: var(--serif); font-size: 24px; margin-bottom: 24px; }
-      .cartao-auth input { width: 100%; margin-bottom: 12px; }
-      .cartao-auth button { width: 100%; margin-top: 16px; }
-      .abas-auth { display: flex; gap: 10px; margin-bottom: 20px; }
-      .abas-auth button { flex: 1; background: var(--borda); border: none; padding: 10px;
-        border-radius: 8px; color: var(--fraco); cursor: pointer; }
-      .abas-auth button.on { background: var(--acento-forte); color: #fff; }
-    </style>
-    <div class="tela-auth">
-      <div class="cartao-auth">
-        <h1>VEXIS</h1>
-        <div class="abas-auth">
-          <button class="on" id="btn-login">Entrar</button>
-          <button id="btn-reg">Registrar</button>
-        </div>
-        <input type="email" id="email" placeholder="seu@email.com" autocomplete="username">
-        <input type="password" id="senha" placeholder="senha" autocomplete="current-password">
-        <input type="url" id="nucleus-url" placeholder="https://nucleus.seu.dominio.com" style="font-size:13px">
-        <button class="botao largo" id="submit" style="margin-top:20px">Entrar</button>
-        <div id="erro-auth" style="color:var(--perigo);font-size:13px;margin-top:12px;text-align:center;display:none"></div>
-      </div>
-    </div>
-    <script>
-      const modo = 'login';
-      const btnLogin = document.getElementById('btn-login');
-      const btnReg = document.getElementById('btn-reg');
-      const submit = document.getElementById('submit');
-      const errAuth = document.getElementById('erro-auth');
-
-      btnLogin.onclick = () => {
-        btnLogin.classList.add('on');
-        btnReg.classList.remove('on');
-        submit.textContent = 'Entrar';
-      };
-      btnReg.onclick = () => {
-        btnReg.classList.add('on');
-        btnLogin.classList.remove('on');
-        submit.textContent = 'Registrar';
-      };
-
-      submit.onclick = async () => {
-        const email = document.getElementById('email').value.trim();
-        const senha = document.getElementById('senha').value;
-        const url = document.getElementById('nucleus-url').value.trim();
-
-        if (!email || !senha || !url) {
-          errAuth.textContent = 'Preencha todos os campos.';
-          errAuth.style.display = 'block';
-          return;
-        }
-
-        try {
-          submit.disabled = true;
-          submit.textContent = 'Aguarde…';
-          if (btnReg.classList.contains('on')) {
-            await registrarNucleus(email, senha, url);
-          } else {
-            await loginNucleus(email, senha, url);
-          }
-          location.reload();
-        } catch (err) {
-          errAuth.textContent = err.message;
-          errAuth.style.display = 'block';
-          submit.disabled = false;
-          submit.textContent = btnReg.classList.contains('on') ? 'Registrar' : 'Entrar';
-        }
-      };
-    </script>
-  `;
-} else {
-  conectar();
-  carregarConfig();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
-}
+conectar();
+carregarConfig();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
 </script>
 </body>
 </html>
