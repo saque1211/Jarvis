@@ -18,14 +18,54 @@ import { sintetizar, ttsConfigurado } from './tts.js';
 
 const LIMITE_AUDIO = 8 * 1024 * 1024; // ~4 min de WAV 16 kHz mono
 
-function autorizado(req) {
+// Onde o nucleus valida token de dispositivo. Mesmo VPS por padrao, entao a
+// chamada e local e barata.
+const NUCLEUS = (process.env.JARVIS_NUCLEUS_URL || 'http://localhost:3000').replace(/\/$/, '');
+
+// Token de dispositivo validado fica em cache curto: um Pi tagarela nao pode
+// gerar uma chamada ao nucleus por comando. 60s e curto o bastante pra uma
+// revogacao valer quase na hora, e longo o bastante pra nao pesar.
+const TTL_DISPOSITIVO = 60 * 1000;
+const cacheDispositivo = new Map(); // token -> quando expira (ms)
+
+function tokenFixoBate(veio) {
   const esperado = process.env.JARVIS_CLOUD_TOKEN;
-  if (!esperado) return false;
-  const veio = (req.headers.authorization || '').replace(/^Bearer /i, '');
-  if (veio.length !== esperado.length) return false;
+  if (!esperado || !veio || veio.length !== esperado.length) return false;
   // Comparacao de tempo constante: comparar com === vaza o tamanho do prefixo
-  // certo pelo tempo de resposta, e o token e o unico portao daqui.
+  // certo pelo tempo de resposta, e o token e um dos portoes daqui.
   return crypto.timingSafeEqual(Buffer.from(veio), Buffer.from(esperado));
+}
+
+async function dispositivoValido(token) {
+  if (!token) return false;
+  const agora = Date.now();
+  const exp = cacheDispositivo.get(token);
+  if (exp && exp > agora) return true;
+  try {
+    const r = await fetch(`${NUCLEUS}/devices/ping`, { headers: { 'x-device-token': token } });
+    if (r.ok) {
+      cacheDispositivo.set(token, agora + TTL_DISPOSITIVO);
+      return true;
+    }
+  } catch {
+    // Nucleus fora do ar: nega. Melhor um Pi mudo por uns segundos que um
+    // executor de comandos aberto porque o portao caiu.
+  }
+  cacheDispositivo.delete(token);
+  return false;
+}
+
+/**
+ * Quem pode mandar. Dois portoes:
+ *   1. JARVIS_CLOUD_TOKEN — token fixo, pra teste e administracao.
+ *   2. Token de dispositivo do pareamento — o Pi manda em x-device-token; o
+ *      nucleus diz se e de um aparelho aprovado.
+ */
+async function autorizado(req) {
+  const veio = (req.headers.authorization || '').replace(/^Bearer /i, '');
+  if (tokenFixoBate(veio)) return true;
+  const disp = req.headers['x-device-token'] || veio;
+  return dispositivoValido(disp);
 }
 
 function json(res, status, corpo) {
@@ -70,7 +110,7 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
     // nao revela nada.
     if (url.pathname === '/saude') return json(res, 200, { ok: true, tts: ttsConfigurado() });
 
-    if (!autorizado(req)) return json(res, 401, { erro: 'token invalido ou ausente' });
+    if (!(await autorizado(req))) return json(res, 401, { erro: 'token invalido ou ausente' });
 
     // ── Pi: manda WAV, recebe resposta falada ────────────────────────────
     if (url.pathname === '/v1/audio' && req.method === 'POST') {
