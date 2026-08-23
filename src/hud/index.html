@@ -341,8 +341,15 @@ let PREFS = null;
 let fonte = null;
 let tentativas = 0;
 
+// Login (o mesmo do app, mesma origem — o localStorage e compartilhado). No
+// PC ou celular onde voce ja entrou no app, o HUD abre logado. Numa tela nova
+// (um painel de parede), sem login, manda pro app pra entrar/parear.
+const JWT = localStorage.getItem('vexis_token') || '';
+const COMLOGIN = JWT ? { authorization: 'Bearer ' + JWT } : {};
+
 function conectar() {
-  fonte = new EventSource('/estado');
+  // Sem cabecalho no EventSource: o token vai na URL, como no app.
+  fonte = new EventSource('/estado' + (JWT ? '?token=' + encodeURIComponent(JWT) : ''));
 
   fonte.onopen = () => {
     tentativas = 0;
@@ -369,9 +376,11 @@ function conectar() {
 }
 
 async function mandar(rota, metodo, corpo) {
+  const headers = { ...COMLOGIN };
+  if (corpo) headers['content-type'] = 'application/json';
   const r = await fetch(rota, {
     method: metodo,
-    headers: corpo ? { 'content-type': 'application/json' } : undefined,
+    headers,
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
   return r.json();
@@ -819,7 +828,7 @@ async function carregarRedes() {
   if (escaneando) return;
   escaneando = true;
   try {
-    const r = await fetch('/wifi').then((x) => x.json());
+    const r = await fetch('/wifi', { headers: COMLOGIN }).then((x) => x.json());
     redes = r.redes || [];
     erroDeRede = r.erro || null;
     if (r.erro && subtela === 'wifi') torrada(r.erro);
@@ -973,9 +982,16 @@ function renderBoot() {
 }
 
 /* ========================================================================== */
-conectar();
-setInterval(desenhar, 1000);
-aplicarPainel(0, false);
+// Servido pela nuvem, o HUD exige login como o app. Sem token, vai pro app
+// pra entrar. (No PC/celular onde voce ja entrou, o localStorage e o mesmo e
+// isto nem dispara.) Localmente, sem nucleus, nao ha login e segue direto.
+if (location.port === '3000' && !JWT) {
+  location.href = '/app';
+} else {
+  conectar();
+  setInterval(desenhar, 1000);
+  aplicarPainel(0, false);
+}
 </script>
 </body>
 </html>

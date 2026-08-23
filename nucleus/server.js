@@ -84,6 +84,12 @@ app.use(async (req, res, next) => {
     return servirArquivo(res, path.join(APP_DIR, 'index.html'), 'text/html');
   }
 
+  // O HUD — o painel de parede (relogio, tempo, fotos, avisos). Mesma casca
+  // aberta; o proprio HUD manda pro /app se nao houver login.
+  if (p === '/hud' || p === '/hud/' || p === '/painel') {
+    return servirArquivo(res, path.join(__dirname, '..', 'src', 'hud', 'index.html'), 'text/html');
+  }
+
   const asset = /^\/app\/(manifest\.json|sw\.js|icone(?:-mascara)?\.png)$/.exec(p);
   if (asset) {
     const tipo = asset[1].endsWith('.json')
