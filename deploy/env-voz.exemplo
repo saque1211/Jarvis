@@ -1,0 +1,24 @@
+# Modelo do /opt/jarvis/.env para o servidor de voz.
+# Copie para /opt/jarvis/.env e preencha. NAO comite este arquivo preenchido.
+
+# Portao do servidor de voz. Gere um forte:  openssl rand -base64 24
+JARVIS_CLOUD_TOKEN=
+
+# O cerebro (Claude). LLM_PROVIDER=anthropic e OBRIGATORIO: sem ele, a
+# presenca da GROQ_API_KEY faria o Groq virar o cerebro tambem.
+ANTHROPIC_API_KEY=
+LLM_PROVIDER=anthropic
+JARVIS_MODEL=claude-haiku-4-5
+
+# Transcricao (Whisper). Gratis: console.groq.com/keys
+GROQ_API_KEY=
+
+# Voz principal — ElevenLabs (a mesma que voce usa no Windows).
+# O VOICE_ID voce ja tem no .env do PC, ou lista com: npm run voices:eleven
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=
+
+# Voz de reserva — Piper (gratis, roda no VPS). Preenchido sozinho se voce
+# rodar o setup com --piper. So entra quando a cota do ElevenLabs acaba.
+# PIPER_BIN=/opt/piper/piper/piper
+# PIPER_VOICE=/opt/piper/pt_BR-faber-medium.onnx

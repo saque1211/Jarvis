@@ -1,0 +1,17 @@
+[Unit]
+Description=JARVIS Voz — servidor de voz na nuvem (transcreve, pensa, fala)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/jarvis
+# npm run cloud sobe o src/cloud/server.js na porta 8080. O config.js carrega
+# o /opt/jarvis/.env sozinho (dotenv), entao as chaves entram por la.
+ExecStart=/usr/bin/npm run cloud
+Restart=always
+RestartSec=3
+User=root
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
