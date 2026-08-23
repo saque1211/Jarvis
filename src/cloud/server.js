@@ -1,9 +1,14 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { route } from '../core/router.js';
 import { snapshot } from '../core/state.js';
 import { transcreverNaNuvem } from './stt.js';
 import { sintetizar, ttsConfigurado } from './tts.js';
+
+const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Servidor do JARVIS na nuvem.
@@ -110,6 +115,19 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
     // nao revela nada.
     if (url.pathname === '/saude') return json(res, 200, { ok: true, tts: ttsConfigurado() });
 
+    // Testador de voz no navegador — aberto porque e so a casca; o token de
+    // verdade a pessoa digita nela, e cada chamada a /v1/audio segue exigindo.
+    if (url.pathname === '/voz' || url.pathname === '/voz/') {
+      try {
+        const html = fs.readFileSync(path.join(AQUI, 'voz.html'), 'utf8');
+        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+        res.end(html);
+      } catch {
+        json(res, 404, { erro: 'pagina de voz nao encontrada' });
+      }
+      return;
+    }
+
     if (!(await autorizado(req))) return json(res, 401, { erro: 'token invalido ou ausente' });
 
     // ── Pi: manda WAV, recebe resposta falada ────────────────────────────
@@ -118,7 +136,10 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
         const wav = await lerCorpo(req, LIMITE_AUDIO);
         if (!wav.length) return json(res, 400, { erro: 'audio vazio' });
 
-        const transcricao = await transcreverNaNuvem(wav, url.searchParams.get('vocab'));
+        // O Pi manda audio/wav; o navegador manda audio/webm. Repassa o tipo pra
+        // transcricao mandar a extensao certa ao Groq.
+        const tipo = String(req.headers['content-type'] || 'audio/wav');
+        const transcricao = await transcreverNaNuvem(wav, url.searchParams.get('vocab'), tipo);
         if (!transcricao) {
           return json(res, 200, { transcricao: null, resposta: 'Nao entendi.', audio: null });
         }

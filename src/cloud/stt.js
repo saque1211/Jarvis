@@ -21,11 +21,24 @@ const ENDPOINT = process.env.JARVIS_STT_URL || 'https://api.groq.com/openai/v1/a
 // voz curto a diferenca de qualidade nao aparece e a de latencia aparece muito.
 const MODELO = process.env.JARVIS_STT_MODELO || 'whisper-large-v3-turbo';
 
+// O Pi manda WAV; o navegador manda webm/opus (ou mp4 no Safari). O Groq aceita
+// os dois — o que ele precisa e o nome do arquivo com a extensao certa e o
+// content-type batendo. Sem isto, o audio do navegador viraria "wav" torto e
+// a transcricao voltaria vazia sem dizer por que.
+function extDoTipo(tipo) {
+  if (tipo.includes('webm')) return 'webm';
+  if (tipo.includes('ogg')) return 'ogg';
+  if (tipo.includes('mp4') || tipo.includes('m4a') || tipo.includes('aac')) return 'm4a';
+  if (tipo.includes('mpeg') || tipo.includes('mp3')) return 'mp3';
+  return 'wav';
+}
+
 /**
- * @param {Buffer} wav  audio 16 kHz mono
+ * @param {Buffer} audio  bytes do audio (WAV do Pi, webm/mp4 do navegador)
  * @param {string} vocabulario  nomes proprios que o modelo deve esperar ouvir
+ * @param {string} tipo  content-type do audio; decide a extensao mandada ao Groq
  */
-export async function transcreverNaNuvem(wav, vocabulario = null) {
+export async function transcreverNaNuvem(audio, vocabulario = null, tipo = 'audio/wav') {
   const chave = process.env.GROQ_API_KEY;
   if (!chave) {
     throw new Error(
@@ -34,8 +47,9 @@ export async function transcreverNaNuvem(wav, vocabulario = null) {
     );
   }
 
+  const limpo = String(tipo || 'audio/wav').split(';')[0].trim() || 'audio/wav';
   const form = new FormData();
-  form.append('file', new Blob([wav], { type: 'audio/wav' }), 'comando.wav');
+  form.append('file', new Blob([audio], { type: limpo }), `comando.${extDoTipo(limpo)}`);
   form.append('model', MODELO);
   form.append('language', 'pt');
   form.append('response_format', 'json');

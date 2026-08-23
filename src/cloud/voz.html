@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#06090c">
+<title>VEXIS — voz</title>
+<style>
+:root {
+  --acento: #19c0dd; --acento-forte: #0088b0; --acento-claro: #4fd6ee;
+  --perigo: #d6006c; --fundo: #06090c; --carta: rgba(255,255,255,.055);
+  --borda: rgba(255,255,255,.11); --texto: #eef2f4; --fraco: rgba(238,242,244,.55);
+  --serif: 'Source Serif 4', Georgia, serif; --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: var(--sans); color: var(--texto); min-height: 100vh;
+  background: radial-gradient(130% 55% at 50% -12%, rgba(25,192,221,.12), transparent 62%), var(--fundo);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 32px 20px calc(40px + env(safe-area-inset-bottom,0px));
+}
+h1 { font-family: var(--serif); font-size: 30px; font-weight: 600; letter-spacing: -.02em; margin-bottom: 4px; }
+.sub { color: var(--fraco); font-size: 14px; margin-bottom: 28px; text-align: center; }
+
+.token-cx { width: 100%; max-width: 420px; margin-bottom: 24px; }
+.token-cx label { display: block; font-size: 12px; color: var(--fraco); margin: 0 0 6px 2px; }
+.token-cx input {
+  width: 100%; background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 12px 14px; color: var(--texto); font-size: 14px; font-family: inherit;
+}
+.token-cx input:focus { outline: none; border-color: var(--acento); }
+
+/* botão de falar */
+.falar {
+  width: 200px; height: 200px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, var(--acento-forte), #044f66);
+  color: #fff; font-size: 19px; font-weight: 600; font-family: inherit;
+  box-shadow: 0 20px 60px -22px var(--acento), inset 0 2px 6px rgba(255,255,255,.25);
+  display: grid; place-items: center; gap: 8px; user-select: none; -webkit-user-select: none;
+  transition: transform .12s, box-shadow .2s; position: relative; margin: 8px 0 26px;
+}
+.falar:disabled { opacity: .4; cursor: not-allowed; }
+.falar.gravando { transform: scale(1.06); background: radial-gradient(circle at 50% 40%, var(--perigo), #7a0040); box-shadow: 0 0 0 0 rgba(214,0,108,.6); animation: bate 1.2s ease-out infinite; }
+@keyframes bate { 0% { box-shadow: 0 0 0 0 rgba(214,0,108,.55); } 100% { box-shadow: 0 0 0 34px rgba(214,0,108,0); } }
+.falar svg { width: 46px; height: 46px; }
+
+.dica { color: var(--fraco); font-size: 13px; margin-bottom: 22px; text-align: center; }
+
+.bolha {
+  width: 100%; max-width: 460px; background: var(--carta); border: 1px solid var(--borda);
+  border-radius: 16px; padding: 16px 18px; margin-bottom: 12px; display: none;
+}
+.bolha.on { display: block; animation: sobe .25s ease; }
+@keyframes sobe { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.bolha .quem { font-size: 12px; color: var(--fraco); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+.bolha.voce { border-color: rgba(25,192,221,.3); }
+.bolha .txt { font-size: 16px; line-height: 1.5; }
+.bolha.vexis .txt { font-family: var(--serif); }
+
+.aviso { color: var(--perigo); font-size: 14px; text-align: center; min-height: 20px; margin-top: 6px; }
+</style>
+</head>
+<body>
+<h1>VEXIS</h1>
+<div class="sub">Segure o botão, fale, solte. O Vexis ouve, pensa e responde por voz.</div>
+
+<div class="token-cx">
+  <label for="token">Token do servidor (JARVIS_CLOUD_TOKEN)</label>
+  <input type="password" id="token" placeholder="cole o token uma vez" autocomplete="off">
+</div>
+
+<button class="falar" id="falar" disabled>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+  <span id="rotulo">Segurar pra falar</span>
+</button>
+<div class="dica" id="dica">Cole o token acima pra liberar.</div>
+
+<div class="bolha voce" id="b-voce"><div class="quem">Você</div><div class="txt" id="t-voce"></div></div>
+<div class="bolha vexis" id="b-vexis"><div class="quem">Vexis</div><div class="txt" id="t-vexis"></div></div>
+<div class="aviso" id="aviso"></div>
+
+<audio id="player" hidden></audio>
+
+<script>
+'use strict';
+const $ = (id) => document.getElementById(id);
+const botao = $('falar'), rotulo = $('rotulo'), dica = $('dica'), aviso = $('aviso');
+
+// Token guardado só neste aparelho, pra não colar toda vez.
+$('token').value = localStorage.getItem('vexis_cloud_token') || '';
+function temToken() { return $('token').value.trim().length > 0; }
+function atualizar() {
+  botao.disabled = !temToken();
+  dica.textContent = temToken() ? 'Segure pra falar.' : 'Cole o token acima pra liberar.';
+}
+$('token').oninput = () => { localStorage.setItem('vexis_cloud_token', $('token').value.trim()); atualizar(); };
+atualizar();
+
+let rec = null, pedacos = [], gravando = false;
+
+async function comecar() {
+  if (gravando || botao.disabled) return;
+  aviso.textContent = '';
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch {
+    aviso.textContent = 'Preciso de permissão do microfone.';
+    return;
+  }
+  pedacos = [];
+  rec = new MediaRecorder(stream);
+  rec.ondataavailable = (e) => { if (e.data.size) pedacos.push(e.data); };
+  rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); enviar(); };
+  rec.start();
+  gravando = true;
+  botao.classList.add('gravando');
+  rotulo.textContent = 'Ouvindo…';
+}
+
+function parar() {
+  if (!gravando) return;
+  gravando = false;
+  botao.classList.remove('gravando');
+  rotulo.textContent = 'Pensando…';
+  try { rec.stop(); } catch {}
+}
+
+async function enviar() {
+  const blob = new Blob(pedacos, { type: rec.mimeType || 'audio/webm' });
+  if (!blob.size) { rotulo.textContent = 'Segurar pra falar'; return; }
+  try {
+    const r = await fetch('/v1/audio', {
+      method: 'POST',
+      headers: { 'authorization': 'Bearer ' + $('token').value.trim(), 'content-type': blob.type },
+      body: blob,
+    });
+    if (r.status === 401) { aviso.textContent = 'Token inválido.'; rotulo.textContent = 'Segurar pra falar'; return; }
+    const j = await r.json();
+    if (j.transcricao) { $('t-voce').textContent = j.transcricao; $('b-voce').classList.add('on'); }
+    if (j.resposta) { $('t-vexis').textContent = j.resposta; $('b-vexis').classList.add('on'); }
+    if (j.erro && !j.resposta) aviso.textContent = j.erro;
+    if (j.audio) {
+      // O servidor manda WAV (Piper) ou MP3 (ElevenLabs) em base64. O <audio>
+      // toca os dois; o data: URI evita uma segunda requisição.
+      const bin = atob(j.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const som = new Blob([bytes], { type: bin.slice(0, 3) === 'ID3' || bin.charCodeAt(0) === 0xff ? 'audio/mpeg' : 'audio/wav' });
+      $('player').src = URL.createObjectURL(som);
+      $('player').play().catch(() => {});
+    }
+  } catch (err) {
+    aviso.textContent = 'Falhou: ' + err.message;
+  } finally {
+    rotulo.textContent = 'Segurar pra falar';
+  }
+}
+
+// Segurar (mouse e toque). preventDefault no toque evita o menu de seleção.
+botao.addEventListener('mousedown', comecar);
+botao.addEventListener('mouseup', parar);
+botao.addEventListener('mouseleave', parar);
+botao.addEventListener('touchstart', (e) => { e.preventDefault(); comecar(); }, { passive: false });
+botao.addEventListener('touchend', (e) => { e.preventDefault(); parar(); }, { passive: false });
+</script>
+</body>
+</html>
