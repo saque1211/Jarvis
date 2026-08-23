@@ -346,6 +346,15 @@ let tentativas = 0;
 // (um painel de parede), sem login, manda pro app pra entrar/parear.
 const JWT = localStorage.getItem('vexis_token') || '';
 const COMLOGIN = JWT ? { authorization: 'Bearer ' + JWT } : {};
+let CONTA = null; // {email} — de quem esta logado, pra Ajustes mostrar a conta
+
+async function carregarConta() {
+  if (!JWT) return;
+  try {
+    const r = await fetch('/auth/profile', { headers: COMLOGIN });
+    if (r.ok) { CONTA = (await r.json()).user || null; if (aberto) renderCentral(); }
+  } catch { /* sem conta e so um rotulo; nao trava o painel */ }
+}
 
 function conectar() {
   // Sem cabecalho no EventSource: o token vai na URL, como no app.
@@ -855,7 +864,7 @@ function telaAjustes() {
     '<div class="voltar" id="voltar"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></div>' +
     '<div class="tit">Ajustes</div></div>' +
     '<div class="linha"><div class="avatar">' + esc(iniciais) + '</div>' +
-    '<div><div class="rot">' + esc(nome) + '</div><div class="sub">' + esc(ESTADO.conta?.email || 'nenhuma conta conectada') + '</div></div></div>' +
+    '<div><div class="rot">' + esc(nome) + '</div><div class="sub">' + esc(CONTA?.email || ESTADO.conta?.email || 'nenhuma conta conectada') + '</div></div></div>' +
     '<div class="linha clicavel" id="reiniciar"><div class="bolha">' +
     svg('<path d="M3 12a9 9 0 1 1 3 6.7"/><path d="M3 21v-5h5"/>', 'currentColor') + '</div><div class="rot">Reiniciar dispositivo</div></div>' +
     '<div class="linha clicavel" id="resetar"><div class="bolha">' +
@@ -989,6 +998,7 @@ if (location.port === '3000' && !JWT) {
   location.href = '/app';
 } else {
   conectar();
+  carregarConta();
   setInterval(desenhar, 1000);
   aplicarPainel(0, false);
 }
