@@ -58,8 +58,9 @@ jobs:
           APK=android/app/build/outputs/apk/debug/app-debug.apk
           NOTAS="APK de debug, montado a partir de ${GITHUB_SHA:0:7}.
           Instala de lado (o Android vai pedir pra permitir fonte desconhecida).
-          Na primeira abertura ele pergunta o endereco do painel — o que o
-          \`npm run hud\` mostra no terminal do PC."
+          Abre direto no servidor na nuvem e cai no login — nao pede endereco
+          nenhum. Em \"Trocar endereco\" da pra apontar num dominio ou num
+          painel local, se precisar."
 
           gh release view apk >/dev/null 2>&1 \
             || gh release create apk --title "VEXIS — app do celular" --notes "$NOTAS" --target "$GITHUB_SHA"

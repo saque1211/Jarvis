@@ -31,9 +31,10 @@ import android.widget.TextView
  * gaveta, tela cheia sem barra de endereco, e o seletor de arquivos ligado no
  * botao de enviar foto.
  *
- * O ENDERECO nao e fixo no codigo de proposito. O IP do PC muda quando o
- * roteador reinicia, e um APK com IP embutido vira lixo naquele dia — a
- * pessoa teria que esperar alguem recompilar.
+ * O ENDERECO PADRAO agora e a nuvem — um IP de VPS, que e FIXO (nao muda como
+ * o IP do PC na rede de casa mudava). Entao o app abre direto la e cai no
+ * login, sem pedir nada. "Trocar endereco" continua existindo pra apontar num
+ * dominio (quando houver HTTPS) ou num painel local.
  */
 class MainActivity : Activity() {
 
@@ -42,9 +43,12 @@ class MainActivity : Activity() {
 
     companion object {
         private const val PEDIDO_ARQUIVO = 1001
+        private const val PEDIDO_MIC = 1002
         private const val PREFS = "vexis"
         private const val CHAVE_ENDERECO = "endereco"
-        private const val PORTA_PADRAO = 8791
+        // Servidor na nuvem — endereco fixo do VPS. Trocavel em "Trocar endereco".
+        private const val PADRAO_NUVEM = "http://163.245.213.167:3000/app"
+        private const val PORTA_PADRAO = 3000
         // host (letras, digitos, ponto, hifen, sublinha) e porta opcional.
         private val PADRAO_ENDERECO = Regex("^([A-Za-z0-9._-]+)(?::(\\d{1,5}))?$")
 
@@ -61,8 +65,10 @@ class MainActivity : Activity() {
         window.statusBarColor = FUNDO
         window.navigationBarColor = FUNDO
 
+        // Sem endereco salvo, vai direto pra nuvem (login) em vez de pedir IP —
+        // a nuvem tem endereco fixo, entao nao ha o que a pessoa precise digitar.
         val salvo = prefs().getString(CHAVE_ENDERECO, null)
-        if (salvo.isNullOrBlank()) telaDeEndereco(null) else abrir(salvo)
+        abrir(if (salvo.isNullOrBlank()) PADRAO_NUVEM else salvo)
     }
 
     private fun prefs() = getSharedPreferences(PREFS, MODE_PRIVATE)
@@ -251,6 +257,26 @@ class MainActivity : Activity() {
 
         web.webChromeClient = object : WebChromeClient() {
             /**
+             * O botao de microfone do app chama getUserMedia; sem isto o WebView
+             * nega por padrao e a voz nao grava. So libera o microfone — e so o
+             * que o app pede. (Sobre HTTP inseguro o proprio WebView ainda pode
+             * bloquear; e por isso que a voz de verdade pede HTTPS.)
+             */
+            override fun onPermissionRequest(pedido: android.webkit.PermissionRequest?) {
+                val querMic = pedido?.resources?.contains(
+                    android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE
+                ) == true
+                if (querMic && temPermissaoMic()) {
+                    pedido?.grant(arrayOf(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                } else if (querMic) {
+                    pedirPermissaoMic()
+                    pedido?.deny()
+                } else {
+                    pedido?.deny()
+                }
+            }
+
+            /**
              * Sem isto o botao "Enviar foto" nao faz NADA dentro de um WebView.
              * Nao da erro, nao abre nada — e o defeito que faz o app parecer
              * quebrado justamente na funcao que motivou ele existir.
@@ -359,6 +385,16 @@ class MainActivity : Activity() {
         // Voltar dentro do app antes de sair dele: e o que o botao de voltar
         // significa pra quem esta usando.
         if (this::web.isInitialized && web.canGoBack()) web.goBack() else super.onBackPressed()
+    }
+
+    // ── microfone ─────────────────────────────────────────────────────────────
+
+    private fun temPermissaoMic(): Boolean =
+        checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+
+    private fun pedirPermissaoMic() {
+        requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), PEDIDO_MIC)
     }
 
     private fun dp(valor: Int): Int =
