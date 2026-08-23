@@ -34,8 +34,14 @@ import wave
 import audioop
 import base64
 import io
+import platform
 import subprocess
 import tempfile
+
+# Roda tanto no Raspberry (Linux) quanto no PC (Windows/Mac) — pra dar pra
+# testar a voz no computador antes de ter o Pi, e sem a trava de HTTPS que o
+# microfone do navegador tem.
+SISTEMA = platform.system()
 
 try:
     import requests
@@ -135,6 +141,24 @@ def falar_texto(texto):
     depende de rede, que e exatamente o que o codigo de pareamento precisa:
     ser falado ANTES de existir conexao nenhuma.
     """
+    # No Windows, a voz do proprio sistema (SAPI) fala sem instalar nada.
+    if SISTEMA == "Windows":
+        seguro = texto.replace("'", " ")
+        ps = ("Add-Type -AssemblyName System.Speech;"
+              "$v=New-Object System.Speech.Synthesis.SpeechSynthesizer;"
+              f"$v.Speak('{seguro}')")
+        try:
+            subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
+            return True
+        except FileNotFoundError:
+            pass
+    elif SISTEMA == "Darwin":
+        try:
+            subprocess.run(["say", "-v", "Luciana", texto], capture_output=True)
+            return True
+        except FileNotFoundError:
+            pass
+
     for prog in (["espeak-ng", "-v", "pt-br"], ["espeak-ng", "-v", "pt"],
                  ["espeak", "-v", "pt-br"], ["espeak", "-v", "pt"]):
         try:
@@ -143,7 +167,7 @@ def falar_texto(texto):
                 return True
         except FileNotFoundError:
             continue
-    log("aviso", "espeak nao instalado (sudo apt install espeak-ng) — so vou mostrar na tela")
+    log("aviso", "sem voz de sistema pra falar o codigo — veja o numero na tela acima")
     return False
 
 
@@ -321,20 +345,47 @@ def falar(dados):
     """
     e_mp3 = dados[:3] == b"ID3" or dados[:2] == b"\xff\xfb"
     sufixo = ".mp3" if e_mp3 else ".wav"
-    # mpg123 vem no Raspberry Pi OS; se faltar, o apt resolve numa linha.
-    player = ["mpg123", "-q"] if e_mp3 else ["aplay", "-q"]
 
     with tempfile.NamedTemporaryFile(suffix=sufixo, delete=False) as f:
         f.write(dados)
         caminho = f.name
     try:
-        r = subprocess.run(player + [caminho], capture_output=True)
-        if r.returncode != 0:
-            log("erro", f"{player[0]} falhou: {r.stderr.decode()[:120]}")
-            if e_mp3:
-                log("dica", "instale com: sudo apt install mpg123")
+        if SISTEMA == "Windows":
+            _tocar_windows(caminho, e_mp3)
+        elif SISTEMA == "Darwin":
+            subprocess.run(["afplay", caminho], capture_output=True)
+        else:
+            # mpg123 vem no Raspberry Pi OS; se faltar, o apt resolve numa linha.
+            player = ["mpg123", "-q"] if e_mp3 else ["aplay", "-q"]
+            r = subprocess.run(player + [caminho], capture_output=True)
+            if r.returncode != 0:
+                log("erro", f"{player[0]} falhou: {r.stderr.decode()[:120]}")
+                if e_mp3:
+                    log("dica", "instale com: sudo apt install mpg123")
     finally:
-        os.unlink(caminho)
+        try:
+            os.unlink(caminho)
+        except OSError:
+            pass
+
+
+def _tocar_windows(caminho, e_mp3):
+    """
+    Toca no Windows sem instalar nada. WAV vai pelo winsound (built-in); MP3
+    (voz do ElevenLabs) vai pelo MediaPlayer do PowerShell, que espera a
+    duracao do arquivo pra nao cortar a fala no meio.
+    """
+    if not e_mp3:
+        import winsound
+        winsound.PlaySound(caminho, winsound.SND_FILENAME)
+        return
+    ps = ("Add-Type -AssemblyName presentationCore;"
+          "$p=New-Object System.Windows.Media.MediaPlayer;"
+          f"$p.Open([uri]'{caminho}');"
+          "Start-Sleep -Milliseconds 400; $p.Play();"
+          "$s=0; while($p.NaturalDuration.HasTimeSpan -eq $false -and $s -lt 30){Start-Sleep -Milliseconds 100; $s++};"
+          "if($p.NaturalDuration.HasTimeSpan){Start-Sleep -Seconds ([int]$p.NaturalDuration.TimeSpan.TotalSeconds + 1)}")
+    subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
 
 
 # ── Processar um comando (gravar ja feito) ───────────────────────────────────
