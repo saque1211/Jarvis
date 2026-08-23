@@ -203,14 +203,72 @@ nav button:active svg { transform: scale(.9); }
   pointer-events: none;
 }
 #torrada.on { opacity: 1; transform: translateY(0); }
+
+/* ---- login ---- */
+#login {
+  position: fixed; inset: 0; z-index: 60; display: none;
+  place-items: center; padding: 24px;
+  background: radial-gradient(130% 55% at 50% -12%, rgba(25,192,221,.12), transparent 62%), var(--fundo);
+}
+#login.on { display: grid; }
+#login .cx { width: 100%; max-width: 360px; }
+#login h1 { font-family: var(--serif); font-size: 32px; font-weight: 600; letter-spacing: -.02em; }
+#login .legenda { color: var(--fraco); font-size: 14px; margin: 4px 0 24px; }
+#login .abas { display: flex; gap: 8px; margin-bottom: 20px; }
+#login .abas button { flex: 1; background: transparent; border: 1px solid var(--borda); padding: 11px;
+  border-radius: 11px; color: var(--fraco); font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+#login .abas button.on { background: var(--acento-forte); border-color: var(--acento-forte); color: #fff; }
+#login input { margin-bottom: 14px; }
+#login .erro { color: var(--perigo); font-size: 14px; margin-top: 12px; text-align: center; min-height: 20px; }
+
+/* ---- botão de microfone (fala com o Vexis) ---- */
+#mic {
+  position: fixed; right: 18px; bottom: calc(90px + var(--seguro-base)); z-index: 35;
+  width: 62px; height: 62px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, var(--acento-forte), #044f66); color: #fff;
+  box-shadow: 0 14px 34px -12px var(--acento), inset 0 2px 5px rgba(255,255,255,.25);
+  display: grid; place-items: center; user-select: none; -webkit-user-select: none;
+  transition: transform .12s;
+}
+#mic svg { width: 28px; height: 28px; }
+#mic.gravando { background: radial-gradient(circle at 50% 40%, var(--perigo), #7a0040); animation: micbate 1.2s ease-out infinite; }
+@keyframes micbate { 0% { box-shadow: 0 0 0 0 rgba(214,0,108,.5); } 100% { box-shadow: 0 0 0 26px rgba(214,0,108,0); } }
+#mic-legenda {
+  position: fixed; right: 18px; bottom: calc(158px + var(--seguro-base)); z-index: 35;
+  background: rgba(12,17,20,.96); border: 1px solid var(--borda); border-radius: 10px;
+  padding: 8px 12px; font-size: 13px; max-width: 240px; text-align: right;
+  opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none;
+}
+#mic-legenda.on { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
+
+<!-- ═══ LOGIN ═══ -->
+<div id="login">
+  <div class="cx">
+    <h1>VEXIS</h1>
+    <p class="legenda">Entre para ver e comandar o seu Vexis.</p>
+    <div class="abas">
+      <button class="on" id="aba-entrar">Entrar</button>
+      <button id="aba-criar">Criar conta</button>
+    </div>
+    <input type="email" id="log-email" placeholder="voce@email.com" autocomplete="username" inputmode="email">
+    <input type="password" id="log-senha" placeholder="senha" autocomplete="current-password">
+    <button class="botao largo" id="log-enviar">Entrar</button>
+    <div class="erro" id="log-erro"></div>
+  </div>
+</div>
 
 <header>
   <h1>VEXIS</h1>
   <span class="onde"><span class="bolinha" id="pulso"></span><span id="dispositivo">—</span></span>
 </header>
+
+<button id="mic" title="Segurar pra falar">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+</button>
+<div id="mic-legenda"></div>
 
 <main>
   <!-- ═══ CASA ═══ -->
@@ -377,17 +435,26 @@ const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) =>
 
 let ESTADO = {};
 let CONFIG = null;
+let JWT = localStorage.getItem('vexis_token') || null;
 
 /* ── conversa com o núcleo ─────────────────────────────────────────────── */
 // Mesma origem sempre: o app e servido pelo mesmo servidor que responde os
-// dados (HUD local ou nucleus na nuvem), entao rota relativa basta. Conta e
-// pareamento de dispositivo ficam no portal separado, em /conta.
+// dados. O login (JWT) vai no cabecalho; sem ele, o servidor recusa e o app
+// cai na tela de login. O token de servidor de voz nunca aparece aqui — quem
+// fala com o servidor de voz e o proprio nucleus, por dentro.
 async function api(rota, metodo = 'GET', corpo) {
+  const headers = {};
+  if (corpo) headers['content-type'] = 'application/json';
+  if (JWT) headers['authorization'] = 'Bearer ' + JWT;
   const r = await fetch(rota, {
     method: metodo,
-    headers: corpo ? { 'content-type': 'application/json' } : undefined,
+    headers,
     body: corpo ? JSON.stringify(corpo) : undefined,
   });
+  if (r.status === 401) {
+    mostrarLogin();
+    throw new Error('Faça login.');
+  }
   if (!r.ok && r.status !== 400) throw new Error('HTTP ' + r.status);
   return r.json();
 }
@@ -426,7 +493,10 @@ function gravar(patch, aviso) {
 /* ── estado ao vivo ────────────────────────────────────────────────────── */
 let fonte = null, tentativas = 0;
 function conectar() {
-  fonte = new EventSource('/estado');
+  // O EventSource nao manda cabecalho, entao o token vai na URL — o servidor
+  // aceita as duas formas. Sem token, nem conecta.
+  if (!JWT) return;
+  fonte = new EventSource('/estado?token=' + encodeURIComponent(JWT));
   fonte.onopen = () => { tentativas = 0; $('pulso').classList.add('viva'); };
   fonte.onmessage = (ev) => {
     try { ESTADO = JSON.parse(ev.data); pintarAoVivo(); } catch {}
@@ -731,8 +801,134 @@ function tickRelogio() {
 tickRelogio();
 setInterval(tickRelogio, 20000);
 
-conectar();
-carregarConfig();
+/* ── login ─────────────────────────────────────────────────────────────── */
+let criandoConta = false;
+function mostrarLogin() {
+  $('login').classList.add('on');
+  if (fonte) { try { fonte.close(); } catch {} }
+}
+function esconderLogin() { $('login').classList.remove('on'); }
+
+$('aba-entrar').onclick = () => {
+  criandoConta = false;
+  $('aba-entrar').classList.add('on'); $('aba-criar').classList.remove('on');
+  $('log-enviar').textContent = 'Entrar'; $('log-erro').textContent = '';
+};
+$('aba-criar').onclick = () => {
+  criandoConta = true;
+  $('aba-criar').classList.add('on'); $('aba-entrar').classList.remove('on');
+  $('log-enviar').textContent = 'Criar conta'; $('log-erro').textContent = '';
+};
+
+async function entrar() {
+  const email = $('log-email').value.trim();
+  const senha = $('log-senha').value;
+  $('log-erro').textContent = '';
+  if (!email || !senha) { $('log-erro').textContent = 'Preencha email e senha.'; return; }
+  if (criandoConta && senha.length < 8) { $('log-erro').textContent = 'A senha precisa de 8+ caracteres.'; return; }
+  $('log-enviar').disabled = true;
+  const antes = $('log-enviar').textContent;
+  $('log-enviar').textContent = 'Aguarde…';
+  try {
+    const r = await fetch(criandoConta ? '/auth/register' : '/auth/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, password: senha }),
+    });
+    const j = await r.json();
+    if (!j.token) throw new Error(j.erro || 'Não deu certo.');
+    JWT = j.token;
+    localStorage.setItem('vexis_token', JWT);
+    esconderLogin();
+    iniciarApp();
+  } catch (err) {
+    $('log-erro').textContent = err.message;
+  } finally {
+    $('log-enviar').disabled = false;
+    $('log-enviar').textContent = antes;
+  }
+}
+$('log-enviar').onclick = entrar;
+$('log-senha').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
+
+/* ── microfone (fala com o Vexis pela nuvem) ───────────────────────────── */
+let rec = null, pedacosMic = [], gravandoMic = false;
+function dicaMic(txt, ligar = true) {
+  $('mic-legenda').textContent = txt;
+  $('mic-legenda').classList.toggle('on', ligar && !!txt);
+  if (ligar && txt) { clearTimeout(dicaMic._t); dicaMic._t = setTimeout(() => $('mic-legenda').classList.remove('on'), 3200); }
+}
+async function micComecar() {
+  if (gravandoMic) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { dicaMic('Preciso da permissão do microfone.'); return; }
+  pedacosMic = [];
+  rec = new MediaRecorder(stream);
+  rec.ondataavailable = (e) => { if (e.data.size) pedacosMic.push(e.data); };
+  rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); micEnviar(); };
+  rec.start();
+  gravandoMic = true;
+  $('mic').classList.add('gravando');
+  dicaMic('Ouvindo… solte pra enviar', false); $('mic-legenda').classList.add('on');
+}
+function micParar() {
+  if (!gravandoMic) return;
+  gravandoMic = false;
+  $('mic').classList.remove('gravando');
+  dicaMic('Pensando…', false); $('mic-legenda').classList.add('on');
+  try { rec.stop(); } catch {}
+}
+async function micEnviar() {
+  const blob = new Blob(pedacosMic, { type: rec.mimeType || 'audio/webm' });
+  if (!blob.size) { dicaMic(''); return; }
+  try {
+    const r = await fetch('/voz', {
+      method: 'POST',
+      headers: { 'authorization': 'Bearer ' + JWT, 'content-type': blob.type },
+      body: blob,
+    });
+    if (r.status === 401) { mostrarLogin(); return; }
+    const j = await r.json();
+    if (j.resposta) dicaMic(j.resposta);
+    else if (j.erro) dicaMic(j.erro);
+    if (j.audio) {
+      const bin = atob(j.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const mp3 = bin.slice(0, 3) === 'ID3' || bin.charCodeAt(0) === 0xff;
+      const som = new Audio(URL.createObjectURL(new Blob([bytes], { type: mp3 ? 'audio/mpeg' : 'audio/wav' })));
+      som.play().catch(() => {});
+    }
+  } catch (err) {
+    dicaMic('Falhou: ' + err.message);
+  }
+}
+$('mic').addEventListener('mousedown', micComecar);
+$('mic').addEventListener('mouseup', micParar);
+$('mic').addEventListener('mouseleave', micParar);
+$('mic').addEventListener('touchstart', (e) => { e.preventDefault(); micComecar(); }, { passive: false });
+$('mic').addEventListener('touchend', (e) => { e.preventDefault(); micParar(); }, { passive: false });
+
+/* ── início ────────────────────────────────────────────────────────────── */
+function iniciarApp() {
+  conectar();
+  carregarConfig();
+}
+
+async function abrir() {
+  if (!JWT) { mostrarLogin(); return; }
+  // Confere se o login ainda vale antes de mostrar o app.
+  try {
+    const r = await fetch('/auth/profile', { headers: { 'authorization': 'Bearer ' + JWT } });
+    if (!r.ok) { JWT = null; localStorage.removeItem('vexis_token'); mostrarLogin(); return; }
+  } catch {
+    /* sem rede: tenta abrir mesmo assim, o api() reabre o login se recusar */
+  }
+  iniciarApp();
+}
+abrir();
+
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/app/sw.js').catch(() => {});
 </script>
 </body>

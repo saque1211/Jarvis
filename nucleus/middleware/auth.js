@@ -8,6 +8,32 @@ export function sign(payload) {
   return jwt.sign(payload, SECRET, { expiresIn: '30d' });
 }
 
+/** Valida um token JWT cru. Devolve o payload ou null. */
+export function verificarToken(token) {
+  if (!token) return null;
+  try {
+    return jwt.verify(token, SECRET);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Diz se a requisicao esta logada, olhando o cabecalho Authorization E a query
+ * `?token=`. A query existe porque o EventSource do /estado nao manda cabecalho
+ * nenhum — e a unica forma de autenticar um fluxo SSE do navegador.
+ * Serve pro middleware cru que roda antes do express.json.
+ */
+export function verificarJwt(req, url) {
+  const auth = req.headers['authorization'] || '';
+  if (auth.startsWith('Bearer ')) {
+    const p = verificarToken(auth.slice(7));
+    if (p) return p;
+  }
+  if (url) return verificarToken(url.searchParams.get('token'));
+  return null;
+}
+
 export function verifyUserAuth(req, res, next) {
   const auth = req.headers.authorization;
   if (!auth || !auth.startsWith('Bearer ')) {
