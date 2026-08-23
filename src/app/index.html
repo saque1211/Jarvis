@@ -571,7 +571,14 @@ $('arquivo').onchange = async (e) => {
   if (!arq) return;
   torrada('Enviando…');
   try {
-    const r = await fetch('/fotos', { method: 'POST', headers: { 'content-type': arq.type }, body: arq });
+    // fetch direto (arquivo binário, não JSON) — mas ainda precisa do login,
+    // senão o servidor recusa com "faça login".
+    const r = await fetch('/fotos', {
+      method: 'POST',
+      headers: { 'content-type': arq.type, 'authorization': 'Bearer ' + JWT },
+      body: arq,
+    });
+    if (r.status === 401) { mostrarLogin(); return; }
     const j = await r.json();
     torrada(j.ok ? 'Foto no painel.' : (j.erro || 'Não deu.'));
     carregarFotos();
