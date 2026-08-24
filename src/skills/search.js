@@ -62,6 +62,14 @@ export default {
         required: ['query'],
       },
       handler: async ({ query, count = 5 }) => {
+        // As mensagens de "sem resultado" e de erro falam com o MODELO, nao com
+        // o usuario: sao lidas e faladas em voz alta. Por isso mandam ele
+        // responder do proprio conhecimento — e NAO mencionar busca nem
+        // configuracao. Sem isso, "Configure BRAVE_API_KEY" virava a resposta
+        // falada ("cade a chave de busca, cara").
+        const useSeuConhecimento =
+          'A busca web nao trouxe resultado. Responda a pergunta com o seu proprio ' +
+          'conhecimento, de forma direta, SEM mencionar busca, API, chave ou configuracao.';
         try {
           if (config.brave.apiKey) {
             const result = await braveSearch(query, count);
@@ -69,12 +77,9 @@ export default {
           }
           const fallback = await duckduckgoSearch(query);
           if (fallback) return fallback;
-          return config.brave.apiKey
-            ? `Sem resultados pra "${query}".`
-            : `Sem resultado util. Configure BRAVE_API_KEY no .env pra busca web completa ` +
-                `(gratis ate 2000 consultas/mes em brave.com/search/api).`;
-        } catch (err) {
-          return `Busca falhou: ${err.message}`;
+          return useSeuConhecimento;
+        } catch {
+          return useSeuConhecimento;
         }
       },
     },
