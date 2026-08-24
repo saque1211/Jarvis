@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { route } from '../core/router.js';
-import { snapshot } from '../core/state.js';
+import { snapshot, writeRuntime } from '../core/state.js';
 import { transcreverNaNuvem } from './stt.js';
 import { sintetizar, ttsConfigurado } from './tts.js';
 
@@ -136,16 +136,29 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
         const wav = await lerCorpo(req, LIMITE_AUDIO);
         if (!wav.length) return json(res, 400, { erro: 'audio vazio' });
 
+        // Chegou audio = o aparelho ja ouviu e esta esperando resposta. Escreve
+        // o estado no runtime que o HUD le, pra o painel acender "Pensando"
+        // enquanto transcreve e pensa. E o que faz o painel reagir a voz.
+        writeRuntime({ voiceState: 'thinking' });
+
         // O Pi manda audio/wav; o navegador manda audio/webm. Repassa o tipo pra
         // transcricao mandar a extensao certa ao Groq.
         const tipo = String(req.headers['content-type'] || 'audio/wav');
         const transcricao = await transcreverNaNuvem(wav, url.searchParams.get('vocab'), tipo);
         if (!transcricao) {
+          writeRuntime({ voiceState: 'idle' });
           return json(res, 200, { transcricao: null, resposta: 'Nao entendi.', audio: null });
         }
+        writeRuntime({ voiceState: 'thinking', lastTranscript: transcricao });
 
         const r = await route(transcricao, { source: 'pi' });
         const fala = await sintetizar(r.reply);
+
+        // "Falando" enquanto o aparelho toca a resposta; volta pra "em espera"
+        // uns segundos depois — tempo de a fala acabar. Sem esse reset, o painel
+        // ficaria "Falando" pra sempre depois do primeiro comando.
+        writeRuntime({ voiceState: 'speaking', lastReply: r.reply });
+        setTimeout(() => writeRuntime({ voiceState: 'idle' }), 8000);
 
         emitir();
         return json(res, 200, {
