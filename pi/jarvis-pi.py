@@ -36,12 +36,29 @@ import sys
 import json
 import time
 import wave
-import audioop
+import array
 import base64
 import io
+import math
 import platform
 import subprocess
 import tempfile
+
+
+def _rms(dados):
+    """
+    Volume (RMS) de um bloco de audio 16-bit. Feito na mao porque o modulo
+    `audioop`, que fazia isto, foi REMOVIDO do Python 3.13 — e importar ele
+    derrubava o programa antes de tudo. Puro Python: funciona em toda versao.
+    """
+    amostras = array.array('h')  # 'h' = inteiro de 16 bits com sinal
+    amostras.frombytes(dados)
+    if not len(amostras):
+        return 0
+    soma = 0
+    for s in amostras:
+        soma += s * s
+    return int(math.sqrt(soma / len(amostras)))
 
 # Roda tanto no Raspberry (Linux) quanto no PC (Windows/Mac) — pra dar pra
 # testar a voz no computador antes de ter o Pi, e sem a trava de HTTPS que o
@@ -281,7 +298,7 @@ def _gravar_quadros(stream):
         dados = stream.read(BLOCO, exception_on_overflow=False)
         quadros.append(dados)
 
-        nivel = audioop.rms(dados, 2)
+        nivel = _rms(dados)
         ms = (BLOCO / TAXA) * 1000
         duracao_ms += ms
 
