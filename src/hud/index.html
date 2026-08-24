@@ -250,6 +250,25 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
   padding: 10px 22px; border-radius: 10px; display: none;
 }
 #sem-conexao.ativo { display: block; }
+/* ---- segurar pra falar ---- */
+#falar-hud {
+  position: fixed; right: 40px; bottom: 40px; z-index: 50;
+  width: 96px; height: 96px; border-radius: 50%; border: none; cursor: pointer;
+  background: radial-gradient(circle at 50% 40%, #0088b0, #044f66); color: #fff;
+  box-shadow: 0 20px 50px -16px #19c0dd, inset 0 2px 6px rgba(255,255,255,.25);
+  display: grid; place-items: center; user-select: none; -webkit-user-select: none;
+  transition: transform .12s;
+}
+#falar-hud svg { width: 44px; height: 44px; }
+#falar-hud.gravando { background: radial-gradient(circle at 50% 40%, #d6006c, #7a0040); animation: falarbate 1.2s ease-out infinite; }
+@keyframes falarbate { 0% { box-shadow: 0 0 0 0 rgba(214,0,108,.55); } 100% { box-shadow: 0 0 0 40px rgba(214,0,108,0); } }
+#falar-dica {
+  position: fixed; right: 40px; bottom: 150px; z-index: 50;
+  background: rgba(12,17,20,.96); border: 1px solid rgba(79,214,238,.38);
+  border-radius: 14px; padding: 14px 20px; font-size: 22px; max-width: 620px; text-align: right;
+  color: #eef2f4; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: none;
+}
+#falar-dica.on { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
@@ -291,6 +310,14 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
   <div id="onda"><canvas id="tela-onda"></canvas></div>
 
   <div id="sem-conexao">sem conexão com o núcleo</div>
+
+  <!-- Segurar pra falar. Sem palavra de ativacao (que exigiria Picovoice, e
+       ele pede email corporativo): toca/segura, fala, solta. Ou a barra de
+       espaco, pra um painel com teclado. -->
+  <button id="falar-hud" title="Segure pra falar (ou barra de espaço)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
+  </button>
+  <div id="falar-dica"></div>
 
   <!-- central de controle -->
   <div id="cortina"></div>
@@ -988,6 +1015,73 @@ function renderBoot() {
   };
   $('salvar').onclick = salvar;
   $('nome-disp').onkeydown = (e) => { if (e.key === 'Enter') salvar(); };
+}
+
+/* ── segurar pra falar ─────────────────────────────────────────────────────
+   Grava o comando, manda pro /voz (o nucleus repassa pro servidor de voz com
+   o token guardado do lado dele), e toca a resposta. O painel ja reage sozinho
+   (o servidor de voz escreve "Pensando/Falando" no estado que o HUD le). */
+const botaoFalar = document.getElementById('falar-hud');
+let recHud = null, pedacosHud = [], gravandoHud = false;
+function dicaFalar(txt, sumir = true) {
+  const el = document.getElementById('falar-dica');
+  el.textContent = txt;
+  el.classList.toggle('on', !!txt);
+  if (sumir && txt) { clearTimeout(dicaFalar._t); dicaFalar._t = setTimeout(() => el.classList.remove('on'), 6000); }
+}
+async function falarComecar() {
+  if (gravandoHud || !JWT) return;
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch { dicaFalar('Preciso da permissão do microfone.'); return; }
+  pedacosHud = [];
+  recHud = new MediaRecorder(stream);
+  recHud.ondataavailable = (e) => { if (e.data.size) pedacosHud.push(e.data); };
+  recHud.onstop = () => { stream.getTracks().forEach((t) => t.stop()); falarEnviar(); };
+  recHud.start();
+  gravandoHud = true;
+  botaoFalar.classList.add('gravando');
+  dicaFalar('Ouvindo…', false);
+}
+function falarParar() {
+  if (!gravandoHud) return;
+  gravandoHud = false;
+  botaoFalar.classList.remove('gravando');
+  dicaFalar('Pensando…', false);
+  try { recHud.stop(); } catch {}
+}
+async function falarEnviar() {
+  const blob = new Blob(pedacosHud, { type: recHud.mimeType || 'audio/webm' });
+  if (!blob.size) { dicaFalar(''); return; }
+  try {
+    const r = await fetch('/voz', {
+      method: 'POST',
+      headers: { 'authorization': 'Bearer ' + JWT, 'content-type': blob.type },
+      body: blob,
+    });
+    const j = await r.json();
+    if (j.resposta) dicaFalar(j.resposta);
+    else if (j.erro) dicaFalar(j.erro);
+    if (j.audio) {
+      const bin = atob(j.audio);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const mp3 = bin.slice(0, 3) === 'ID3' || bin.charCodeAt(0) === 0xff;
+      new Audio(URL.createObjectURL(new Blob([bytes], { type: mp3 ? 'audio/mpeg' : 'audio/wav' }))).play().catch(() => {});
+    }
+  } catch (err) {
+    dicaFalar('Falhou: ' + err.message);
+  }
+}
+if (botaoFalar) {
+  botaoFalar.addEventListener('mousedown', falarComecar);
+  botaoFalar.addEventListener('mouseup', falarParar);
+  botaoFalar.addEventListener('mouseleave', falarParar);
+  botaoFalar.addEventListener('touchstart', (e) => { e.preventDefault(); falarComecar(); }, { passive: false });
+  botaoFalar.addEventListener('touchend', (e) => { e.preventDefault(); falarParar(); }, { passive: false });
+  // Barra de espaco: segurar pra falar, num painel com teclado.
+  document.addEventListener('keydown', (e) => { if (e.code === 'Space' && !e.repeat) { e.preventDefault(); falarComecar(); } });
+  document.addEventListener('keyup', (e) => { if (e.code === 'Space') { e.preventDefault(); falarParar(); } });
 }
 
 /* ========================================================================== */
