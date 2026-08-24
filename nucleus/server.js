@@ -186,8 +186,10 @@ app.use(async (req, res, next) => {
   next();
 });
 
-// Empurra o estado pra quem esta ouvindo. Sem trafego, proxy e operadora
-// derrubam a conexao ociosa; um comentario a cada tick tambem serve de batida.
+// Empurra o estado pra quem esta ouvindo. 350ms (nao 1s) pra o painel reagir
+// quase na hora quando voce fala — o "Pensando/Falando" aparecer com 1-2s de
+// atraso deixava o demo lento. O snapshot e barato (le uns JSONs pequenos),
+// entao 350ms nao pesa. Sem trafego, um comentario tambem serve de batida.
 setInterval(() => {
   if (!clientesEstado.size) return;
   let linha;
@@ -203,7 +205,7 @@ setInterval(() => {
       clientesEstado.delete(c);
     }
   }
-}, 1000);
+}, 350);
 
 // ── Contas e pareamento (precisam do JSON parseado) ──────────────────────────
 app.use(express.json());
