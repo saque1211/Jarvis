@@ -76,6 +76,24 @@ except ImportError:
 pyaudio = None
 
 
+def listar_microfones():
+    """Lista os microfones (entradas de audio) com seus indices. `--mics`."""
+    pa = carregar_audio().PyAudio()
+    print("\n  Microfones disponiveis (use JARVIS_MIC=<indice>):\n")
+    padrao = None
+    try:
+        padrao = pa.get_default_input_device_info().get("index")
+    except Exception:
+        pass
+    for i in range(pa.get_device_count()):
+        info = pa.get_device_info_by_index(i)
+        if info.get("maxInputChannels", 0) > 0:
+            marca = "  <- padrao" if i == padrao else ""
+            print(f"   [{i}] {info.get('name')}{marca}")
+    print()
+    pa.terminate()
+
+
 def carregar_audio():
     global pyaudio
     if pyaudio is None:
@@ -112,6 +130,12 @@ NUCLEUS = NUCLEUS or CLOUD
 
 TRIGGER = os.environ.get("JARVIS_TRIGGER", "escuta").strip().lower()
 GPIO_BOTAO = os.environ.get("JARVIS_BOTAO_GPIO")
+
+# Qual microfone. Vazio = o padrao do sistema (que as vezes e o errado, dando
+# silencio). `python jarvis-pi.py --mics` lista os indices; escolha com
+# JARVIS_MIC=<numero>.
+MIC = os.environ.get("JARVIS_MIC")
+MIC = int(MIC) if MIC not in (None, "") else None
 
 # Token fixo (modo antigo/manual): se existir, pula o pareamento inteiro.
 TOKEN_FIXO = os.environ.get("JARVIS_CLOUD_TOKEN", "")
@@ -331,7 +355,7 @@ def gravar(audio):
     """Abre um stream proprio, grava um comando e fecha. Usado por botao/Enter."""
     stream = audio.open(
         format=FORMATO, channels=CANAIS, rate=TAXA,
-        input=True, frames_per_buffer=BLOCO,
+        input=True, frames_per_buffer=BLOCO, input_device_index=MIC,
     )
     try:
         return _gravar_quadros(stream)
@@ -508,7 +532,7 @@ def laco_escuta(audio, token):
     QUADRO_OWW = 1280
     stream = audio.open(
         format=FORMATO, channels=CANAIS, rate=TAXA,
-        input=True, frames_per_buffer=QUADRO_OWW,
+        input=True, frames_per_buffer=QUADRO_OWW, input_device_index=MIC,
     )
     log("pronto", f'diga "{nome_palavra}" e fale o comando  (WAKE_DEBUG=1 mostra nivel e pontuacao)')
 
@@ -572,4 +596,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if "--mics" in sys.argv:
+        listar_microfones()
+    else:
+        main()
