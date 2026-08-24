@@ -10,16 +10,21 @@ nele leva segundos. O servidor faz as duas coisas em milissegundos.
 Depende so de coisas que ja vem no Raspberry Pi OS mais:
     sudo apt install python3-pyaudio alsa-utils mpg123 espeak-ng
     pip install requests
-    pip install pvporcupine        # so pra palavra de ativacao
+    pip install openwakeword       # so pra palavra de ativacao (mãos livres)
 
 Configuracao em /etc/jarvis.env ou variaveis de ambiente:
     JARVIS_NUCLEUS_URL=http://SEU_IP:3000    # contas e pareamento
     JARVIS_CLOUD_URL=http://SEU_IP:8080      # voz (router); cai no nucleus se vazio
     JARVIS_TRIGGER=escuta                    # escuta | botao | enter
     JARVIS_BOTAO_GPIO=17                      # so se JARVIS_TRIGGER=botao
-    PORCUPINE_ACCESS_KEY=...                  # chave gratis do console Picovoice
-    PORCUPINE_KEYWORD=jarvis                  # palavra de fabrica, ou:
-    PORCUPINE_KEYWORD_PATH=/caminho/vexis.ppn # .ppn treinado ("vexis")
+    WAKE_MODELO=hey_jarvis                    # de fabrica (gratis), ou:
+    WAKE_MODELO=/caminho/vexis.onnx          # modelo treinado ("vexis")
+    WAKE_LIMIAR=0.5                          # 0-1; menor = mais sensivel
+
+A palavra de ativacao e openWakeWord — open-source, gratis, sem cadastro (a
+Porcupine sairia mais barata em CPU, mas o cadastro do Picovoice pede email
+corporativo). Roda em Python: funciona IGUAL no PC (pra testar antes de
+comprar o Pi) e no Raspberry, sem botao.
 
 Pareamento (primeira vez):
     O Pi se registra sozinho, FALA um codigo de 6 digitos, e espera voce
@@ -438,45 +443,55 @@ def laco_enter(audio, token):
 
 def laco_escuta(audio, token):
     """
-    Palavra de ativacao via Porcupine — detecta LOCALMENTE, sem transcrever.
+    Palavra de ativacao via openWakeWord — detecta LOCALMENTE, sem transcrever.
 
-    E por isso que da pra usar palavra de ativacao no Pi: cada barulho do
-    comodo NAO vira uma chamada de nuvem. So quando o Porcupine ouve a palavra
-    e que o comando seguinte e gravado e enviado — uma transcricao por comando
-    de verdade, nao por ruido. Sem isso, a cota do Whisper evapora.
+    Nao e a Porcupine de proposito: a Porcupine exige o Picovoice, e o cadastro
+    dele pede email corporativo. O openWakeWord e open-source, gratis, sem
+    cadastro, e roda no proprio aparelho — em Python, entao roda IGUAL no PC
+    (pra testar antes de comprar o Pi) e no Raspberry.
+
+    Detectar local e o que torna viavel: cada barulho do comodo NAO vira uma
+    chamada de nuvem. So quando a palavra e ouvida e que o comando seguinte e
+    gravado e enviado — uma transcricao por comando de verdade, nao por ruido.
     """
     try:
-        import pvporcupine
+        from openwakeword.model import Model
+        import openwakeword.utils
+        import numpy as np
     except ImportError:
-        sys.exit("Falta o pvporcupine: pip install pvporcupine  (ou use JARVIS_TRIGGER=botao)")
+        sys.exit("Falta o openwakeword: pip install openwakeword  (ou use JARVIS_TRIGGER=botao)")
 
-    chave = os.environ.get("PORCUPINE_ACCESS_KEY")
-    if not chave:
-        sys.exit("Falta PORCUPINE_ACCESS_KEY (pegue de graca em console.picovoice.ai)")
+    # "hey_jarvis" ja vem pronto no openWakeWord. Um caminho .onnx/.tflite
+    # aponta pra um modelo treinado (ex: "vexis" treinado por voce).
+    modelo = os.environ.get("WAKE_MODELO", "hey_jarvis")
+    limiar = float(os.environ.get("WAKE_LIMIAR", "0.5"))
 
-    caminho_ppn = os.environ.get("PORCUPINE_KEYWORD_PATH")
-    if caminho_ppn:
-        porcupine = pvporcupine.create(access_key=chave, keyword_paths=[caminho_ppn])
-        nome_palavra = os.path.basename(caminho_ppn)
-    else:
-        palavra = os.environ.get("PORCUPINE_KEYWORD", "jarvis")
-        porcupine = pvporcupine.create(access_key=chave, keywords=[palavra])
-        nome_palavra = palavra
+    # Os modelos de fabrica sao baixados uma vez, no primeiro uso.
+    if not modelo.endswith((".onnx", ".tflite")):
+        try:
+            openwakeword.utils.download_models([modelo])
+        except Exception:
+            openwakeword.utils.download_models()  # baixa todos, se o nome exato falhar
 
-    # Porcupine dita o tamanho do quadro e a taxa. Abrimos UM stream com esse
-    # tamanho e usamos ele tanto pra ouvir a palavra quanto pra gravar depois.
+    oww = Model(wakeword_models=[modelo])
+    nome_palavra = os.path.basename(modelo).split(".")[0]
+
+    # 1280 amostras = 80 ms a 16 kHz — o tamanho que o openWakeWord espera por
+    # passo. O mesmo stream serve pra ouvir a palavra e gravar o comando depois.
+    QUADRO_OWW = 1280
     stream = audio.open(
-        format=FORMATO, channels=CANAIS, rate=porcupine.sample_rate,
-        input=True, frames_per_buffer=porcupine.frame_length,
+        format=FORMATO, channels=CANAIS, rate=TAXA,
+        input=True, frames_per_buffer=QUADRO_OWW,
     )
     log("pronto", f'diga "{nome_palavra}" e fale o comando')
 
-    import struct
     try:
         while True:
-            quadro = stream.read(porcupine.frame_length, exception_on_overflow=False)
-            pcm = struct.unpack_from("h" * porcupine.frame_length, quadro)
-            if porcupine.process(pcm) >= 0:
+            dados = stream.read(QUADRO_OWW, exception_on_overflow=False)
+            amostras = np.frombuffer(dados, dtype=np.int16)
+            scores = oww.predict(amostras)
+            if any(v >= limiar for v in scores.values()):
+                oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
                 log("acordou", "fale agora")
                 wav = _gravar_quadros(stream)  # mesmo stream, sem cortar a 1a palavra
                 atender(wav, token)
@@ -484,7 +499,6 @@ def laco_escuta(audio, token):
     finally:
         stream.stop_stream()
         stream.close()
-        porcupine.delete()
 
 
 # ── Laco principal ──────────────────────────────────────────────────────────
