@@ -488,10 +488,20 @@ def laco_escuta(audio, token):
         try:
             openwakeword.utils.download_models([modelo])
         except Exception:
-            openwakeword.utils.download_models()  # baixa todos, se o nome exato falhar
+            try:
+                openwakeword.utils.download_models()  # baixa todos, se o nome exato falhar
+            except Exception as e:
+                log("aviso", f"nao consegui baixar modelos: {e}")
 
-    oww = Model(wakeword_models=[modelo])
+    # onnx explicito: no Windows nao ha tflite, e sem dizer o framework ele so
+    # avisa e as vezes nao carrega modelo nenhum (dai nada e detectado).
+    oww = Model(wakeword_models=[modelo], inference_framework="onnx")
     nome_palavra = os.path.basename(modelo).split(".")[0]
+
+    # Diz quais modelos carregaram — se vier vazio, o nome/caminho esta errado
+    # e nada vai ser detectado nunca. E o primeiro lugar pra olhar.
+    log("wake", f'modelos carregados: {list(oww.models.keys()) or "NENHUM (nome errado?)"}')
+    depurar = bool(os.environ.get("WAKE_DEBUG"))
 
     # 1280 amostras = 80 ms a 16 kHz — o tamanho que o openWakeWord espera por
     # passo. O mesmo stream serve pra ouvir a palavra e gravar o comando depois.
@@ -500,13 +510,23 @@ def laco_escuta(audio, token):
         format=FORMATO, channels=CANAIS, rate=TAXA,
         input=True, frames_per_buffer=QUADRO_OWW,
     )
-    log("pronto", f'diga "{nome_palavra}" e fale o comando')
+    log("pronto", f'diga "{nome_palavra}" e fale o comando  (WAKE_DEBUG=1 mostra nivel e pontuacao)')
 
+    ultimo_debug = 0.0
     try:
         while True:
             dados = stream.read(QUADRO_OWW, exception_on_overflow=False)
             amostras = np.frombuffer(dados, dtype=np.int16)
             scores = oww.predict(amostras)
+
+            # Diagnostico: a cada ~1.5s mostra o nivel do microfone e a maior
+            # pontuacao. Assim da pra ver se o mic capta (nivel > 0 ao falar) e
+            # se o modelo reage (pontuacao sobe quando voce diz a palavra).
+            if depurar and time.time() - ultimo_debug > 1.5:
+                ultimo_debug = time.time()
+                maior = max(scores.values()) if scores else 0
+                log("wake", f"nivel do mic: {_rms(dados)}   pontuacao: {maior:.2f}  (dispara em {limiar})")
+
             if any(v >= limiar for v in scores.values()):
                 oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
                 log("acordou", "fale agora")
