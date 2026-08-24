@@ -418,19 +418,30 @@ def falar(dados):
 def _tocar_windows(caminho, e_mp3):
     """
     Toca no Windows sem instalar nada. WAV vai pelo winsound (built-in); MP3
-    (voz do ElevenLabs) vai pelo MediaPlayer do PowerShell, que espera a
-    duracao do arquivo pra nao cortar a fala no meio.
+    (voz do ElevenLabs) vai pelo MediaPlayer do PowerShell.
+
+    O pulo do gato: ESPERAR o arquivo ABRIR (NaturalDuration ficar pronto)
+    ANTES de tocar, e entao esperar a duracao EXATA em milissegundos. Antes eu
+    tocava cedo demais e a duracao ainda nao existia — o script fechava e cortava
+    a fala no meio (o "fala so metade"). O `mciSendString` (winmm) seria outra
+    via, mas o MediaPlayer com a espera certa resolve sem ctypes.
     """
     if not e_mp3:
         import winsound
         winsound.PlaySound(caminho, winsound.SND_FILENAME)
         return
-    ps = ("Add-Type -AssemblyName presentationCore;"
-          "$p=New-Object System.Windows.Media.MediaPlayer;"
-          f"$p.Open([uri]'{caminho}');"
-          "Start-Sleep -Milliseconds 400; $p.Play();"
-          "$s=0; while($p.NaturalDuration.HasTimeSpan -eq $false -and $s -lt 30){Start-Sleep -Milliseconds 100; $s++};"
-          "if($p.NaturalDuration.HasTimeSpan){Start-Sleep -Seconds ([int]$p.NaturalDuration.TimeSpan.TotalSeconds + 1)}")
+    ps = (
+        "Add-Type -AssemblyName presentationCore;"
+        "$p=New-Object System.Windows.Media.MediaPlayer;"
+        f"$p.Open([uri]'{caminho}');"
+        # Espera ABRIR (ate 5s) antes de tocar — sem isto a duracao nao existe.
+        "$t=0; while(-not $p.NaturalDuration.HasTimeSpan -and $t -lt 50){Start-Sleep -Milliseconds 100; $t++};"
+        "$p.Play();"
+        # Duracao exata em ms + folga; 15s de reserva se nao detectar (nao corta).
+        "$ms=if($p.NaturalDuration.HasTimeSpan){$p.NaturalDuration.TimeSpan.TotalMilliseconds}else{15000};"
+        "Start-Sleep -Milliseconds ([int]$ms + 700);"
+        "$p.Stop(); $p.Close()"
+    )
     subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True)
 
 

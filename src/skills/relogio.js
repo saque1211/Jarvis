@@ -29,12 +29,20 @@ export default {
         'sabe a hora de verdade.',
       input_schema: { type: 'object', properties: {} },
       handler: async () => {
-        const hora = new Date().toLocaleTimeString('pt-BR', {
-          timeZone: FUSO,
-          hour: '2-digit',
-          minute: '2-digit',
+        // Falado, nao escrito: "20:40" a voz le "vinte dois pontos quarenta" ou
+        // "vinte e quarenta", que soa errado. Em portugues se diz "oito e
+        // quarenta da noite" — 12 horas + periodo do dia. Numeros como digitos
+        // ("8 e 40") a voz ja pronuncia certo ("oito e quarenta").
+        const fmt = new Intl.DateTimeFormat('pt-BR', {
+          timeZone: FUSO, hour: '2-digit', minute: '2-digit', hour12: false,
         });
-        return `Agora são ${hora}.`;
+        const [hh, mm] = fmt.format(new Date()).split(':').map(Number);
+        const periodo =
+          hh < 5 ? 'da madrugada' : hh < 12 ? 'da manhã' : hh < 18 ? 'da tarde' : 'da noite';
+        const h12 = hh % 12 || 12;
+        if (mm === 0) return `Agora são ${h12} em ponto ${periodo}.`;
+        if (mm === 30) return `Agora são ${h12} e meia ${periodo}.`;
+        return `Agora são ${h12} e ${mm} ${periodo}.`;
       },
     },
     {
