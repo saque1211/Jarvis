@@ -10,7 +10,7 @@
  * fosse a de hoje e pior que um erro de rede: o erro voce ve, a lista velha
  * voce acredita.
  */
-const CASCA = 'vexis-casca-v1';
+const CASCA = 'vexis-casca-v2';
 const ARQUIVOS = ['/app', '/app/manifest.json', '/app/icone.png'];
 
 self.addEventListener('install', (e) => {

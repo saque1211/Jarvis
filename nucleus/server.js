@@ -74,20 +74,26 @@ app.use(async (req, res, next) => {
   const url = new URL(req.url, 'http://x');
   const p = url.pathname;
 
+  // As paginas HTML vao com 'no-cache' pra o navegador SEMPRE revalidar — sem
+  // isto, uma versao velha do app fica presa no cache do navegador e a pessoa
+  // precisa de aba anonima pra ver a nova. ('no-cache' nao e "nao guarde"; e
+  // "guarde, mas confirme com o servidor antes de usar".)
+  const semCache = 'no-cache';
+
   // Portal de conta e pareamento (login + parear dispositivo).
   if (p === '/conta' || p === '/conta/') {
-    return servirArquivo(res, path.join(__dirname, 'public', 'index.html'), 'text/html');
+    return servirArquivo(res, path.join(__dirname, 'public', 'index.html'), 'text/html', semCache);
   }
 
   // O app das 5 abas — na raiz e em /app (onde o service worker espera achar).
   if (p === '/' || p === '/app' || p === '/app/') {
-    return servirArquivo(res, path.join(APP_DIR, 'index.html'), 'text/html');
+    return servirArquivo(res, path.join(APP_DIR, 'index.html'), 'text/html', semCache);
   }
 
   // O HUD — o painel de parede (relogio, tempo, fotos, avisos). Mesma casca
   // aberta; o proprio HUD manda pro /app se nao houver login.
   if (p === '/hud' || p === '/hud/' || p === '/painel') {
-    return servirArquivo(res, path.join(__dirname, '..', 'src', 'hud', 'index.html'), 'text/html');
+    return servirArquivo(res, path.join(__dirname, '..', 'src', 'hud', 'index.html'), 'text/html', semCache);
   }
 
   const asset = /^\/app\/(manifest\.json|sw\.js|icone(?:-mascara)?\.png)$/.exec(p);
