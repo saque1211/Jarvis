@@ -221,25 +221,6 @@ nav button:active svg { transform: scale(.9); }
 #login input { margin-bottom: 14px; }
 #login .erro { color: var(--perigo); font-size: 14px; margin-top: 12px; text-align: center; min-height: 20px; }
 
-/* ---- botão de microfone (fala com o Vexis) ---- */
-#mic {
-  position: fixed; right: 18px; bottom: calc(90px + var(--seguro-base)); z-index: 35;
-  width: 62px; height: 62px; border-radius: 50%; border: none; cursor: pointer;
-  background: radial-gradient(circle at 50% 40%, var(--acento-forte), #044f66); color: #fff;
-  box-shadow: 0 14px 34px -12px var(--acento), inset 0 2px 5px rgba(255,255,255,.25);
-  display: grid; place-items: center; user-select: none; -webkit-user-select: none;
-  transition: transform .12s;
-}
-#mic svg { width: 28px; height: 28px; }
-#mic.gravando { background: radial-gradient(circle at 50% 40%, var(--perigo), #7a0040); animation: micbate 1.2s ease-out infinite; }
-@keyframes micbate { 0% { box-shadow: 0 0 0 0 rgba(214,0,108,.5); } 100% { box-shadow: 0 0 0 26px rgba(214,0,108,0); } }
-#mic-legenda {
-  position: fixed; right: 18px; bottom: calc(158px + var(--seguro-base)); z-index: 35;
-  background: rgba(12,17,20,.96); border: 1px solid var(--borda); border-radius: 10px;
-  padding: 8px 12px; font-size: 13px; max-width: 240px; text-align: right;
-  opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none;
-}
-#mic-legenda.on { opacity: 1; transform: none; }
 </style>
 </head>
 <body>
@@ -264,11 +245,6 @@ nav button:active svg { transform: scale(.9); }
   <h1>VEXIS</h1>
   <span class="onde"><span class="bolinha" id="pulso"></span><span id="dispositivo">—</span></span>
 </header>
-
-<button id="mic" title="Segurar pra falar">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
-</button>
-<div id="mic-legenda"></div>
 
 <main>
   <!-- ═══ CASA ═══ -->
@@ -301,8 +277,8 @@ nav button:active svg { transform: scale(.9); }
     <h2>Fundo de tela</h2>
     <p class="ajuda">As fotos que aparecem no painel. Toque no + para enviar do celular.</p>
     <div class="grade" id="grade-fotos"></div>
-    <input type="file" id="arquivo" accept="image/jpeg,image/png,image/webp" hidden>
-    <button class="botao largo" id="enviar-foto" style="margin-top:12px">+ Enviar foto</button>
+    <input type="file" id="arquivo" accept="image/jpeg,image/png,image/webp" multiple hidden>
+    <button class="botao largo" id="enviar-foto" style="margin-top:12px">+ Enviar fotos</button>
 
     <h2>Aparência</h2>
     <div class="carta">
@@ -567,24 +543,37 @@ async function carregarFotos() {
 
 $('enviar-foto').onclick = () => $('arquivo').click();
 $('arquivo').onchange = async (e) => {
-  const arq = e.target.files[0];
-  if (!arq) return;
-  torrada('Enviando…');
-  try {
-    // fetch direto (arquivo binário, não JSON) — mas ainda precisa do login,
-    // senão o servidor recusa com "faça login".
-    const r = await fetch('/fotos', {
-      method: 'POST',
-      headers: { 'content-type': arq.type, 'authorization': 'Bearer ' + JWT },
-      body: arq,
-    });
-    if (r.status === 401) { mostrarLogin(); return; }
-    const j = await r.json();
-    torrada(j.ok ? 'Foto no painel.' : (j.erro || 'Não deu.'));
-    carregarFotos();
-  } catch {
-    torrada('Falhou o envio.');
+  const arqs = [...e.target.files];
+  if (!arqs.length) return;
+
+  // Sobe uma por uma (o servidor recebe um arquivo por requisicao) e mostra o
+  // progresso. Falha em uma nao derruba as outras — a pessoa nao quer perder as
+  // 9 boas porque a 3a era um formato torto.
+  let ok = 0, falhas = 0;
+  for (let i = 0; i < arqs.length; i++) {
+    const arq = arqs[i];
+    torrada(arqs.length > 1 ? `Enviando ${i + 1} de ${arqs.length}…` : 'Enviando…');
+    try {
+      const r = await fetch('/fotos', {
+        method: 'POST',
+        // fetch direto (binário, não JSON) — mas ainda precisa do login.
+        headers: { 'content-type': arq.type, 'authorization': 'Bearer ' + JWT },
+        body: arq,
+      });
+      if (r.status === 401) { mostrarLogin(); return; }
+      const j = await r.json();
+      if (j.ok) ok++; else falhas++;
+    } catch {
+      falhas++;
+    }
   }
+
+  torrada(
+    falhas === 0
+      ? (ok === 1 ? 'Foto no painel.' : `${ok} fotos no painel.`)
+      : `${ok} enviada(s), ${falhas} falhou/falharam.`
+  );
+  carregarFotos();
   e.target.value = '';
 };
 
@@ -857,65 +846,6 @@ async function entrar() {
 }
 $('log-enviar').onclick = entrar;
 $('log-senha').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
-
-/* ── microfone (fala com o Vexis pela nuvem) ───────────────────────────── */
-let rec = null, pedacosMic = [], gravandoMic = false;
-function dicaMic(txt, ligar = true) {
-  $('mic-legenda').textContent = txt;
-  $('mic-legenda').classList.toggle('on', ligar && !!txt);
-  if (ligar && txt) { clearTimeout(dicaMic._t); dicaMic._t = setTimeout(() => $('mic-legenda').classList.remove('on'), 3200); }
-}
-async function micComecar() {
-  if (gravandoMic) return;
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { dicaMic('Preciso da permissão do microfone.'); return; }
-  pedacosMic = [];
-  rec = new MediaRecorder(stream);
-  rec.ondataavailable = (e) => { if (e.data.size) pedacosMic.push(e.data); };
-  rec.onstop = () => { stream.getTracks().forEach((t) => t.stop()); micEnviar(); };
-  rec.start();
-  gravandoMic = true;
-  $('mic').classList.add('gravando');
-  dicaMic('Ouvindo… solte pra enviar', false); $('mic-legenda').classList.add('on');
-}
-function micParar() {
-  if (!gravandoMic) return;
-  gravandoMic = false;
-  $('mic').classList.remove('gravando');
-  dicaMic('Pensando…', false); $('mic-legenda').classList.add('on');
-  try { rec.stop(); } catch {}
-}
-async function micEnviar() {
-  const blob = new Blob(pedacosMic, { type: rec.mimeType || 'audio/webm' });
-  if (!blob.size) { dicaMic(''); return; }
-  try {
-    const r = await fetch('/voz', {
-      method: 'POST',
-      headers: { 'authorization': 'Bearer ' + JWT, 'content-type': blob.type },
-      body: blob,
-    });
-    if (r.status === 401) { mostrarLogin(); return; }
-    const j = await r.json();
-    if (j.resposta) dicaMic(j.resposta);
-    else if (j.erro) dicaMic(j.erro);
-    if (j.audio) {
-      const bin = atob(j.audio);
-      const bytes = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const mp3 = bin.slice(0, 3) === 'ID3' || bin.charCodeAt(0) === 0xff;
-      const som = new Audio(URL.createObjectURL(new Blob([bytes], { type: mp3 ? 'audio/mpeg' : 'audio/wav' })));
-      som.play().catch(() => {});
-    }
-  } catch (err) {
-    dicaMic('Falhou: ' + err.message);
-  }
-}
-$('mic').addEventListener('mousedown', micComecar);
-$('mic').addEventListener('mouseup', micParar);
-$('mic').addEventListener('mouseleave', micParar);
-$('mic').addEventListener('touchstart', (e) => { e.preventDefault(); micComecar(); }, { passive: false });
-$('mic').addEventListener('touchend', (e) => { e.preventDefault(); micParar(); }, { passive: false });
 
 /* ── início ────────────────────────────────────────────────────────────── */
 function iniciarApp() {
