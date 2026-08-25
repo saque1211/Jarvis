@@ -1,4 +1,10 @@
-import { lerSettings, gravarSettings, dentroDaJanela, minutosDoDia } from './settings.js';
+import {
+  lerSettings,
+  gravarSettings,
+  dentroDaJanela,
+  minutosDoDia,
+  relogioLocal,
+} from './settings.js';
 
 /**
  * Avisos recorrentes: "quinta-feira tirar o lixo, das 8h as 21h".
@@ -37,10 +43,10 @@ export function nomeDoDia(indice) {
   return DIAS[indice] || '?';
 }
 
+// Data de hoje NO FUSO do usuario (nao no do servidor). Marcar "feito hoje"
+// pela data UTC faria o card sumir/voltar na virada errada do dia.
 function hojeISO(quando = new Date()) {
-  const d = new Date(quando);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 10);
+  return relogioLocal(quando).iso;
 }
 
 export function listar() {
@@ -101,7 +107,7 @@ export function concluir(id, quando = new Date()) {
  */
 export function pendentes(quando = new Date()) {
   const hoje = hojeISO(quando);
-  const diaAtual = quando.getDay();
+  const diaAtual = relogioLocal(quando).diaSemana;
 
   return listar()
     .filter((a) => a.ativo !== false)
@@ -121,7 +127,7 @@ export function pendentes(quando = new Date()) {
 
 function restanteDaJanela(ate, quando) {
   const fim = minutosDoDia(ate);
-  const agora = quando.getHours() * 60 + quando.getMinutes();
+  const agora = relogioLocal(quando).minutos;
   const bruto = fim - agora;
   // Janela que cruza a meia-noite: o fim e amanha, entao soma o dia inteiro.
   return bruto >= 0 ? bruto : bruto + 24 * 60;

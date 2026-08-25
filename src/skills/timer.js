@@ -291,9 +291,12 @@ export async function checkDueTimers() {
 
 export default {
   name: 'timer',
-  // Controla a maquina local: so faz sentido onde ela esta. O servidor na
-  // nuvem carrega o registro sem estas, e o agente do PC carrega so estas.
-  platform: 'win32',
+  // '*' de proposito: iniciar/cancelar/consultar timer e cronometro so mexe no
+  // vault (load/save) — roda igual na nuvem e no PC, e e o que faz a contagem
+  // aparecer no HUD. O que e de Windows (tocar o alarme quando vence) mora em
+  // checkDueTimers/tocarAlarme, chamado so pelo daemon do PC; na nuvem esse
+  // caminho nunca roda, entao carregar a skill aqui e seguro.
+  platform: '*',
   description: 'Timers de contagem regressiva, cronometros e pomodoro.',
   tools: [
     {
@@ -546,31 +549,8 @@ export default {
         return `Nao achei "${target}".`;
       },
     },
-    {
-      name: 'current_time',
-      speaks: true,
-      description:
-        'Diz a hora e a data atual. Use pra "que horas sao", "que dia e hoje", ' +
-        '"quanto tempo falta pro fim do dia".',
-      input_schema: {
-        type: 'object',
-        properties: {
-          timezone: { type: 'string', description: 'IANA. Ex: "America/Sao_Paulo", "UTC".' },
-        },
-      },
-      handler: async ({ timezone }) => {
-        const now = new Date();
-        const options = { timeZone: timezone || undefined };
-
-        const time = now.toLocaleTimeString('pt-BR', { ...options, hour: '2-digit', minute: '2-digit' });
-        const date = now.toLocaleDateString('pt-BR', {
-          ...options,
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-        });
-        return `${time}, ${date}${timezone ? ` (${timezone})` : ''}.`;
-      },
-    },
+    // Hora e data saem da skill `relogio` (fala "oito e quarenta da noite" em
+    // vez de "20:40", que a voz le torto). Nao dupliquei aqui de proposito:
+    // duas tools de hora fazem o modelo pequeno escolher a de formato pior.
   ],
 };

@@ -137,6 +137,42 @@ export function padroesDeSettings() {
   return fundir(PADRAO, {});
 }
 
+// Fuso do usuario. No PC e no Pi o relogio da maquina JA e o do Brasil; na
+// nuvem a maquina roda em UTC. Mesma convencao da skill `relogio`.
+const FUSO = process.env.JARVIS_TZ || 'America/Sao_Paulo';
+
+/**
+ * Hora "de parede" no fuso do usuario, nao no do servidor.
+ *
+ * Todo este arquivo raciocina em janelas de hora local ("das 8h as 21h"). No
+ * PC e no Pi o `getHours()` da maquina batia com o Brasil e ninguem percebia a
+ * suposicao. Na nuvem a maquina esta em UTC — 3h a frente — e um aviso das 8h
+ * as 21h sumia as 18h locais (21h UTC), o dia da semana virava antes da hora,
+ * e a data de "feito hoje" pulava a meia-noite errada. Aqui a gente le dia,
+ * data e minutos NO FUSO, via Intl, pra a regra valer onde a pessoa esta.
+ */
+export function relogioLocal(quando = new Date(), fuso = FUSO) {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: fuso,
+    weekday: 'short',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(quando);
+  const val = (t) => partes.find((p) => p.type === t)?.value;
+  const semana = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  let hora = Number(val('hour'));
+  if (hora === 24) hora = 0; // Intl as vezes devolve "24" pra meia-noite
+  return {
+    iso: `${val('year')}-${val('month')}-${val('day')}`,
+    diaSemana: semana[val('weekday')],
+    minutos: hora * 60 + Number(val('minute')),
+  };
+}
+
 /** "08:30" → 510. Devolve null pro que nao for hora. */
 export function minutosDoDia(hhmm) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || '').trim());
@@ -159,7 +195,7 @@ export function dentroDaJanela(de, ate, quando = new Date()) {
   const fim = minutosDoDia(ate);
   if (inicio === null || fim === null) return false;
 
-  const agora = quando.getHours() * 60 + quando.getMinutes();
+  const agora = relogioLocal(quando).minutos;
   if (inicio === fim) return true; // 24h
   if (inicio < fim) return agora >= inicio && agora < fim;
   return agora >= inicio || agora < fim; // cruza a meia-noite
