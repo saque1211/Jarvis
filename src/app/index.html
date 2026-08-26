@@ -311,9 +311,10 @@ nav button:active svg { transform: scale(.9); }
     <p class="ajuda">A mesma lista que você dita em casa. "Vexis, põe leite na lista."</p>
     <div class="duplo" style="margin-bottom:14px">
       <input type="text" id="novo-item" placeholder="leite, pão…" autocomplete="off" enterkeyhint="done">
-      <button class="botao" id="add-item" style="flex:0 0 auto">Pôr</button>
+      <button class="botao" id="add-item" style="flex:0 0 auto">Adicionar</button>
     </div>
     <div class="carta" id="lista-compras"></div>
+    <button class="botao perigo largo" id="excluir-sel" style="display:none;margin-top:14px">Excluir selecionados</button>
   </section>
 
   <!-- ═══ AVISOS ═══ -->
@@ -601,6 +602,13 @@ async function carregarCompras() {
       carregarCompras();
     };
   }
+
+  // "Excluir selecionados" so aparece quando ha item marcado — sem seleçao ele
+  // nao teria o que fazer, e um botao que nao faz nada só confunde.
+  const selecionados = itens.filter((i) => i.feito).length;
+  const btn = $('excluir-sel');
+  btn.style.display = selecionados ? 'block' : 'none';
+  btn.textContent = `Excluir selecionados (${selecionados})`;
 }
 
 async function porItem() {
@@ -614,6 +622,12 @@ async function porItem() {
 }
 $('add-item').onclick = porItem;
 $('novo-item').onkeydown = (e) => { if (e.key === 'Enter') porItem(); };
+
+$('excluir-sel').onclick = async () => {
+  const r = await api('/compras/feitos', 'DELETE');
+  if (r.ok) torrada(r.removidos ? `${r.removidos} item(s) excluído(s).` : 'Nada selecionado.');
+  carregarCompras();
+};
 
 /* ── avisos ────────────────────────────────────────────────────────────── */
 const DIAS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];

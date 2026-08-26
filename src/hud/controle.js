@@ -10,7 +10,7 @@ import {
   remover as removerAviso,
   pendentes as pendentesDeAviso,
 } from '../core/avisos.js';
-import { listarCompras, adicionar, marcar, remover as removerCompra } from '../skills/compras.js';
+import { listarCompras, adicionar, marcar, remover as removerCompra, limparFeitos } from '../skills/compras.js';
 import { descartarTimer } from '../skills/timer.js';
 import * as plataforma from '../platform/index.js';
 
@@ -362,6 +362,14 @@ export async function atenderControle(req, res, url) {
     const { item } = await lerJson(req);
     const r = removerCompra(item);
     responder(res, 200, { ok: Boolean(r), itens: listarCompras() });
+    return true;
+  }
+
+  // Excluir os selecionados de uma vez — os que estao marcados (feito). O mesmo
+  // limparFeitos que a voz usa ("tira os riscados"), agora pelo botao do app.
+  if (rota === '/compras/feitos' && req.method === 'DELETE') {
+    const removidos = limparFeitos();
+    responder(res, 200, { ok: true, removidos, itens: listarCompras() });
     return true;
   }
 
