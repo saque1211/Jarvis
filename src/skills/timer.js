@@ -156,6 +156,42 @@ export function formatDuration(ms) {
   return `${seconds}s`;
 }
 
+/**
+ * Duracao por extenso, pra ser FALADA. formatDuration ("10s", "5m 00s") e pra
+ * ler na tela; se a voz le "10s" ela pronuncia a letra ("dez esse"), que foi o
+ * "timer de 10 ds rodando" que apareceu. Aqui sai "10 segundos", "5 minutos",
+ * "1 hora e 30 minutos" — numeros e palavras que a TTS pronuncia certo.
+ */
+export function formatDurationFalado(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const partes = [];
+  if (h) partes.push(`${h} ${h === 1 ? 'hora' : 'horas'}`);
+  if (m) partes.push(`${m} ${m === 1 ? 'minuto' : 'minutos'}`);
+  if (s) partes.push(`${s} ${s === 1 ? 'segundo' : 'segundos'}`);
+  if (!partes.length) return '0 segundos';
+  if (partes.length === 1) return partes[0];
+  return `${partes.slice(0, -1).join(', ')} e ${partes.at(-1)}`;
+}
+
+/**
+ * Descarta um timer pelo id — o botao "Desligar" do alarme no HUD chama isto.
+ * Marca como disparado (nao apaga) pra o timerSnapshot parar de mostrar e o
+ * historico continuar. Devolve o timer, ou null se nao existir.
+ */
+export function descartarTimer(id) {
+  const state = load();
+  const alvo = state.timers.find((t) => t.id === Number(id) && !t.fired);
+  if (!alvo) return null;
+  alvo.fired = true;
+  alvo.firedAt = new Date().toISOString();
+  alvo.descartado = true;
+  save(state);
+  return alvo;
+}
+
 /** Formato de relogio pro HUD: HH:MM:SS ou MM:SS. */
 export function formatClock(ms) {
   const total = Math.max(0, Math.round(ms / 1000));
@@ -332,7 +368,7 @@ export default {
         state.timers.push(timer);
         save(state);
 
-        return `Timer de ${formatDuration(ms)}${label ? ` pra ${label}` : ''} rodando.`;
+        return `Timer de ${formatDurationFalado(ms)}${label ? ` pra ${label}` : ''} rodando.`;
       },
     },
     {

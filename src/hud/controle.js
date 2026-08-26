@@ -11,6 +11,7 @@ import {
   pendentes as pendentesDeAviso,
 } from '../core/avisos.js';
 import { listarCompras, adicionar, marcar, remover as removerCompra } from '../skills/compras.js';
+import { descartarTimer } from '../skills/timer.js';
 import * as plataforma from '../platform/index.js';
 
 /**
@@ -128,7 +129,7 @@ export async function atenderControle(req, res, url) {
   const rota = url.pathname;
   const mudaAlgo = req.method !== 'GET';
 
-  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras')) {
+  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras') || rota.startsWith('/timer')) {
     if (mudaAlgo && !autorizado(req)) {
       responder(res, 401, { erro: 'Token invalido ou ausente (cabecalho x-vexis-token).' });
       return true;
@@ -327,6 +328,15 @@ export async function atenderControle(req, res, url) {
   if (avisoFeito && req.method === 'POST') {
     const r = concluir(Number(avisoFeito[1]));
     responder(res, r ? 200 : 404, r ? { ok: true, aviso: r } : { erro: 'Aviso nao encontrado.' });
+    return true;
+  }
+
+  // Desligar o alarme de um timer que venceu, pelo botao do HUD. Marca como
+  // disparado; o timerSnapshot para de mostrar e o alarme para de tocar.
+  const timerParar = /^\/timer\/(\d+)\/parar$/.exec(rota);
+  if (timerParar && req.method === 'POST') {
+    const r = descartarTimer(Number(timerParar[1]));
+    responder(res, r ? 200 : 404, r ? { ok: true } : { erro: 'Timer nao encontrado.' });
     return true;
   }
 

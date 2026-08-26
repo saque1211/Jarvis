@@ -154,6 +154,45 @@ html, body {
 .aviso.urgente .ico { color: var(--perigo); }
 .aviso .resta { font-family: var(--mono); font-size: 15px; letter-spacing: .18em; color: rgba(255,255,255,.5); text-transform: uppercase; }
 
+/* ---- timers (canto superior esquerdo) ---- */
+#timers { position: absolute; left: 72px; top: 64px; z-index: 5; display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+.timer {
+  display: flex; align-items: center; gap: 22px;
+  padding: 24px 38px; border-radius: 22px;
+  background: rgba(18,22,26,.4);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255,255,255,.16);
+  box-shadow: 0 16px 40px rgba(0,0,0,.35);
+  text-shadow: 0 2px 12px rgba(0,0,0,.4);
+}
+.timer .ico { width: 40px; height: 40px; flex: none; color: var(--acento-claro); }
+.timer .tempo { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 48px; font-weight: 600; letter-spacing: .01em; line-height: 1; }
+.timer .rot { font-size: 21px; color: rgba(255,255,255,.8); margin-top: 4px; }
+/* Venceu: pisca em vermelho ate alguem desligar. */
+.timer.venceu { border-color: rgba(214,0,108,.6); box-shadow: 0 16px 44px rgba(214,0,108,.32); animation: pisca 1s ease-in-out infinite; }
+.timer.venceu .ico, .timer.venceu .tempo { color: var(--perigo); }
+@keyframes pisca { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ---- alarme (timer venceu) ---- */
+#alarme {
+  position: absolute; inset: 0; z-index: 82;
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: rgba(6,9,12,.82);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+#alarme.ativo { display: flex; }
+#alarme .sino { width: 128px; height: 128px; color: var(--perigo); transform-origin: 50% 12%; animation: chacoalha .7s ease-in-out infinite; }
+@keyframes chacoalha { 0%,100% { transform: rotate(-13deg); } 50% { transform: rotate(13deg); } }
+#alarme .titulo { font-family: var(--serif); font-size: 62px; font-weight: 600; margin: 26px 0 6px; }
+#alarme .sub { font-size: 27px; color: rgba(255,255,255,.72); margin-bottom: 48px; }
+#alarme button {
+  background: var(--perigo); border: none; border-radius: 18px; color: #fff;
+  padding: 26px 74px; font-size: 31px; font-weight: 700; cursor: pointer;
+  box-shadow: 0 20px 50px rgba(214,0,108,.42);
+}
+#alarme button:active { transform: scale(.97); }
+
 /* ---- tocando agora ---- */
 #tocando { position: absolute; right: 72px; bottom: 118px; z-index: 5; display: flex; align-items: center; gap: 18px; max-width: 440px; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
 #tocando.oculto { display: none; }
@@ -294,6 +333,8 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
     </div>
   </div>
 
+  <div id="timers"></div>
+
   <div id="avisos"></div>
 
   <div id="tocando" class="oculto">
@@ -318,6 +359,14 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
   <div id="alca"></div>
 
   <div id="torrada"></div>
+
+  <!-- alarme: aparece quando um timer vence, toca ate desligar -->
+  <div id="alarme">
+    <svg class="sino" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+    <div class="titulo" id="alarme-titulo">Tempo esgotado</div>
+    <div class="sub" id="alarme-sub"></div>
+    <button id="alarme-off">Desligar</button>
+  </div>
 
   <!-- primeiro boot: Wi-Fi antes da conta -->
   <div id="boot">
@@ -503,6 +552,7 @@ function desenhar() {
 
   desenharTempo();
   desenharAvisos();
+  desenharTimers();
   desenharTocando();
 
   if (!arrastando && !aberto) verificarBoot();
@@ -554,6 +604,111 @@ function desenharAvisos() {
     alvo.appendChild(card);
   }
 }
+
+/* ==========================================================================
+   Timers — a contagem regressiva e o alarme
+   ==========================================================================
+   O snapshot manda os timers com `endsAt`; o restante e calculado aqui a cada
+   desenho (1x/s), entao a contagem nunca dessincroniza. Quando um vence, o HUD
+   e que toca — o navegador tem a caixa de som do PC (e do Pi). Nao depende de
+   daemon nenhum no servidor, que na nuvem nao existe.
+   ========================================================================== */
+const ICONE_TIMER = '<circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9 2h6"/><path d="M12 5V2"/>';
+
+function fmtRelogio(ms) {
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const p = (n) => String(n).padStart(2, '0');
+  return h ? h + ':' + p(m) + ':' + p(s) : p(m) + ':' + p(s);
+}
+
+function desenharTimers() {
+  const lista = ESTADO.timers || [];
+  const alvo = $('timers');
+  const agora = Date.now();
+  let vencido = null; // o primeiro que passou de zero e ainda nao foi desligado
+
+  alvo.innerHTML = lista.map((t) => {
+    const restante = new Date(t.endsAt).getTime() - agora;
+    const venceu = restante <= 0;
+    if (venceu && !descartadosLocais.has(String(t.id)) && !vencido) vencido = t;
+    const rot = t.phase === 'work' ? 'foco' : t.phase === 'break' ? 'pausa' : (t.label || 'timer');
+    return '<div class="timer' + (venceu ? ' venceu' : '') + '">' +
+      '<span class="ico">' + svg(ICONE_TIMER) + '</span>' +
+      '<div><div class="tempo">' + fmtRelogio(restante) + '</div>' +
+      '<div class="rot">' + esc(rot) + '</div></div></div>';
+  }).join('');
+
+  if (vencido) iniciarAlarme(vencido.id, vencido.label);
+  // Todos os vencidos ja foram desligados (sumiram do snapshot): para o alarme.
+  else if (alarmeId !== null && !lista.some((t) => String(t.id) === String(alarmeId))) pararAlarme();
+}
+
+/* ── alarme sonoro (Web Audio, sem arquivo) ──────────────────────────────── */
+let audioCtx = null;
+function garantirAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch { /* navegador sem Web Audio: fica so o alarme visual */ }
+}
+// O navegador so deixa tocar som depois de uma interacao. Destrava no primeiro
+// toque/tecla e deixa pronto pra quando o timer vencer.
+for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
+  addEventListener(ev, garantirAudio, { passive: true });
+}
+
+function beep() {
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime;
+  for (const [quando, freq] of [[0, 880], [0.18, 1175]]) {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine';
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0001, t0 + quando);
+    g.gain.exponentialRampToValueAtTime(0.45, t0 + quando + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + quando + 0.16);
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start(t0 + quando); o.stop(t0 + quando + 0.18);
+  }
+}
+
+const descartadosLocais = new Set(); // ids ja desligados aqui, ate o snapshot sumir com eles
+let alarmeId = null, alarmeTimer = null, alarmeInicio = 0;
+const DUR_ALARME_MS = 120000; // toca por 2 minutos e para sozinho
+
+function iniciarAlarme(id, label) {
+  if (alarmeId === id) return; // ja tocando este
+  alarmeId = id;
+  alarmeInicio = Date.now();
+  garantirAudio();
+  $('alarme-sub').textContent = label ? String(label) : '';
+  $('alarme').classList.add('ativo');
+  clearInterval(alarmeTimer);
+  alarmeTimer = setInterval(() => {
+    if (Date.now() - alarmeInicio > DUR_ALARME_MS) { pararAlarme(); return; }
+    beep();
+  }, 850);
+  beep();
+}
+
+function pararAlarme() {
+  clearInterval(alarmeTimer);
+  alarmeTimer = null;
+  alarmeId = null;
+  $('alarme').classList.remove('ativo');
+}
+
+$('alarme-off').onclick = async () => {
+  const id = alarmeId;
+  pararAlarme();
+  if (id == null) return;
+  descartadosLocais.add(String(id));
+  try { await mandar('/timer/' + id + '/parar', 'POST'); } catch { /* segue: o alarme ja parou */ }
+};
 
 function desenharTocando() {
   const np = ESTADO.nowPlaying;
