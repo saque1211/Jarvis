@@ -662,17 +662,26 @@ for (const ev of ['pointerdown', 'keydown', 'touchstart']) {
 
 function beep() {
   if (!audioCtx) return;
+  // Volume configuravel (settings.volume.alarme, 0-100). 100 = corta tudo.
+  const vol = Math.max(0, Math.min(1, (PREFS?.volume?.alarme ?? 100) / 100));
+  if (vol <= 0) return;
   const t0 = audioCtx.currentTime;
-  for (const [quando, freq] of [[0, 880], [0.18, 1175]]) {
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.type = 'sine';
-    o.frequency.value = freq;
-    g.gain.setValueAtTime(0.0001, t0 + quando);
-    g.gain.exponentialRampToValueAtTime(0.45, t0 + quando + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.0001, t0 + quando + 0.16);
-    o.connect(g); g.connect(audioCtx.destination);
-    o.start(t0 + quando); o.stop(t0 + quando + 0.18);
+  // Duas notas agudas, cada uma com a oitava junto, em onda QUADRADA: os
+  // harmonicos dela cortam muito mais que a senoide de antes — soa bem mais
+  // alto no mesmo ganho, que e o que um alarme precisa.
+  for (const [quando, freq] of [[0, 880], [0.2, 1245]]) {
+    for (const mult of [1, 2]) {
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'square';
+      o.frequency.value = freq * mult;
+      const pico = (mult === 1 ? 0.55 : 0.22) * vol;
+      g.gain.setValueAtTime(0.0001, t0 + quando);
+      g.gain.exponentialRampToValueAtTime(pico, t0 + quando + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + quando + 0.19);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t0 + quando); o.stop(t0 + quando + 0.2);
+    }
   }
 }
 
@@ -867,6 +876,7 @@ const SETA = '<svg class="seta" viewBox="0 0 24 24" width="20" height="20" fill=
 const I_WIFI = '<path d="M2 8.5a17 17 0 0 1 20 0"/><path d="M5.5 12.5a11.5 11.5 0 0 1 13 0"/><path d="M9 16.3a6 6 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1.2" fill="currentColor" stroke="none"/>';
 const I_SOL = '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.3M12 19.2v2.3M4.4 4.4l1.6 1.6M18 18l1.6 1.6M2.5 12h2.3M19.2 12h2.3M4.4 19.6l1.6-1.6M18 6l1.6-1.6"/>';
 const I_SOM = '<path d="M4 9v6h4l5 5V4L8 9H4z"/><path d="M17 8.5a5.5 5.5 0 0 1 0 7"/>';
+const I_SINO = '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>';
 const I_AJUSTES = '<circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.6 7.6 0 0 0 0-3l2-1.5-2-3.4-2.3.9a7.6 7.6 0 0 0-2.6-1.5L14 2h-4l-.5 2.4a7.6 7.6 0 0 0-2.6 1.5l-2.3-.9-2 3.4 2 1.5a7.6 7.6 0 0 0 0 3l-2 1.5 2 3.4 2.3-.9a7.6 7.6 0 0 0 2.6 1.5L10 22h4l.5-2.4a7.6 7.6 0 0 0 2.6-1.5l2.3.9 2-3.4-2-1.5z"/>';
 const I_CADEADO = '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>';
 const I_CHECK = '<path d="M5 12.5l4.5 4.5L19 7"/>';
@@ -903,6 +913,12 @@ function renderCentral() {
       '<input type="range" min="0" max="100" value="' + (p.volume?.nivel ?? 60) + '" id="sl-volume"></div>';
   }
 
+  // Volume do alarme do timer. Sempre presente: e Web Audio no navegador do HUD,
+  // nao depende de a maquina expor controle de volume como o de cima.
+  html +=
+    '<div class="linha"><div class="bolha">' + svg(I_SINO, 'currentColor') + '</div>' +
+    '<input type="range" min="0" max="100" value="' + (p.volume?.alarme ?? 100) + '" id="sl-alarme"></div>';
+
   html +=
     '<div class="linha clicavel" id="ir-ajustes">' +
     '<div class="bolha">' + svg(I_AJUSTES, 'currentColor') + '</div>' +
@@ -928,6 +944,16 @@ function renderCentral() {
     const r = await mandar('/volume', 'POST', { nivel: +slV.value });
     if (!r.ok) torrada(r.erro || 'Não consegui mudar o volume.');
     else if (r.exato === false) torrada('Volume ajustado pelas teclas de mídia (o Windows não expõe o valor exato).');
+  };
+
+  const slA = $('sl-alarme');
+  if (slA) slA.onchange = async () => {
+    // Atualiza local na hora e toca uma amostra, pra voce ouvir o volume novo
+    // sem esperar um timer vencer. (A interacao no slider ja destravou o audio.)
+    if (PREFS?.volume) PREFS.volume.alarme = +slA.value;
+    beep();
+    const r = await mandar('/config', 'POST', { volume: { alarme: +slA.value } });
+    if (!r.ok) torrada(r.erro || 'Não consegui mudar o volume do alarme.');
   };
 }
 

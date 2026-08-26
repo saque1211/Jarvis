@@ -217,7 +217,7 @@ function preferenciasDoHud() {
     dispositivo: s.dispositivo.nome,
     aparencia: s.aparencia,
     brilho: { nivel: brilhoDoMomento(), auto: s.brilho.auto },
-    volume: { nivel: s.volume.nivel },
+    volume: { nivel: s.volume.nivel, alarme: s.volume.alarme },
     tempo: {
       ativo: s.tempo.ativo,
       configurado: s.tempo.local.lat != null,

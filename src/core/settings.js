@@ -50,6 +50,10 @@ const PADRAO = {
 
   volume: {
     nivel: 60,
+    // Volume do alarme do timer (0-100). Separado do `nivel` de proposito: o
+    // alarme toca no navegador do HUD por Web Audio, e voce quer que ele CORTE
+    // — mais alto que a musica ou a fala. Padrao no maximo.
+    alarme: 100,
     // Silencio noturno: avisos falados nao tocam dentro desta faixa.
     silencioDe: '23:00',
     silencioAte: '07:00',
