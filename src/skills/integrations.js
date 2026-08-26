@@ -1,4 +1,5 @@
 import { config } from '../core/config.js';
+import { chamarHA as homeAssistant } from '../core/casa.js';
 
 /**
  * Skill: integracoes externas que nao tem skill propria.
@@ -7,25 +8,10 @@ import { config } from '../core/config.js';
  * mensagem sem se passar por bot logado). Casa inteligente entra por Home
  * Assistant, que ja fala com quase todo hardware — assim eu integro um
  * protocolo em vez de quinze marcas.
+ *
+ * A ponte com o Home Assistant mora em core/casa.js: assim a voz e os botoes do
+ * app usam a MESMA config (a do app, com o .env de reserva) e o mesmo cliente.
  */
-
-async function homeAssistant(endpoint, options = {}) {
-  if (!config.homeAssistant.baseUrl || !config.homeAssistant.token) {
-    throw new Error('Falta HOME_ASSISTANT_URL e HOME_ASSISTANT_TOKEN no .env.');
-  }
-  const url = `${config.homeAssistant.baseUrl.replace(/\/$/, '')}/api${endpoint}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${config.homeAssistant.token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  if (!res.ok) throw new Error(`Home Assistant ${res.status}: ${(await res.text()).slice(0, 200)}`);
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
 
 export default {
   name: 'integrations',

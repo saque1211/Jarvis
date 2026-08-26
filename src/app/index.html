@@ -167,6 +167,28 @@ select {
 .nome { flex: 1; font-size: 16px; }
 .tirar { background: none; border: none; color: var(--fraco); font-size: 20px; cursor: pointer; padding: 4px 8px; }
 
+/* ---- casa inteligente ---- */
+input[type=password] {
+  background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 12px; padding: 13px 14px; width: 100%; min-height: 46px;
+}
+.casa-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.casa-botao {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  padding: 16px; border-radius: 16px; cursor: pointer; text-align: left;
+  background: var(--carta); border: 1px solid var(--borda); color: var(--texto);
+  transition: transform .12s, background .2s, border-color .2s, opacity .2s;
+}
+.casa-botao:active { transform: scale(.96); }
+.casa-botao.ligado { background: rgba(25,192,221,.16); border-color: var(--acento); }
+.casa-botao.off { opacity: .5; }
+.casa-botao.ocupado { opacity: .6; pointer-events: none; }
+.casa-ico { width: 26px; height: 26px; color: var(--acento-claro); }
+.casa-nome { font-size: 15px; font-weight: 600; line-height: 1.2; }
+.casa-estado { font-size: 12px; color: var(--fraco); }
+/* estrela de favorito na lista de dispositivos */
+.marca.sel { background: var(--acento-forte); border-color: var(--acento-forte); color: #fff; }
+
 /* ---- barra de abas ---- */
 nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
@@ -268,6 +290,9 @@ nav button:active svg { transform: scale(.9); }
     </div>
 
     <div id="cartao-tempo"></div>
+
+    <div id="casa-rapida"></div>
+
     <h2>Pendente agora</h2>
     <div id="pendentes"></div>
   </section>
@@ -728,16 +753,111 @@ async function carregarConfig() {
     };
   }
 
-  $('cartao-casa').innerHTML = c.casa.baseUrl
-    ? `<div class="linha"><div class="cresce">
-         <div class="rotulo">Home Assistant</div>
-         <div class="sub">${esc(c.casa.baseUrl)} · ${c.casa.token ? 'com token' : 'sem token'}</div>
-       </div></div>`
-    : `<div class="sub" style="line-height:1.6">
-         Xiaomi Home não tem API pública, e nem Tuya. O caminho que funciona é o
-         Home Assistant no meio: ele fala com todos e tem uma API de verdade.
-         <br><br>Ainda não configurado — é o próximo pedaço.
-       </div>`;
+  montarCartaoCasa(c.casa);
+}
+
+/* ── casa inteligente (Home Assistant) ─────────────────────────────────────
+   c.casa vem do /config: baseUrl e token — o token chega mascarado como
+   '(guardado)' quando existe, entao nunca aparece de verdade na tela. */
+function montarCartaoCasa(casa) {
+  casa = casa || {};
+  const conectada = Boolean(casa.baseUrl && casa.token);
+  $('cartao-casa').innerHTML =
+    `<div class="sub" style="line-height:1.6;margin-bottom:12px">` +
+      (conectada
+        ? 'Conectado ao Home Assistant em <b>' + esc(casa.baseUrl) + '</b>.'
+        : 'Xiaomi e Tuya não têm API pública. O caminho que funciona é o Home ' +
+          'Assistant no meio — ele fala com Xiaomi, Tuya e Zigbee, e tem uma API de verdade.') +
+    `</div>` +
+    `<input type="text" id="casa-url" placeholder="http://192.168.0.10:8123" value="${esc(casa.baseUrl || '')}">` +
+    `<input type="password" id="casa-token" autocomplete="off" style="margin-top:10px" placeholder="${conectada ? '•••••••• (guardado — deixe em branco pra manter)' : 'Token de acesso longo do Home Assistant'}">` +
+    `<button class="botao largo" id="casa-salvar" style="margin-top:12px">Testar e salvar</button>` +
+    (conectada
+      ? `<button class="botao fantasma largo" id="casa-escolher" style="margin-top:10px">Escolher favoritos</button><div id="casa-lista-disp" style="margin-top:12px"></div>`
+      : '');
+
+  $('casa-salvar').onclick = salvarCasa;
+  const bEsc = $('casa-escolher');
+  if (bEsc) bEsc.onclick = escolherFavoritos;
+}
+
+async function salvarCasa() {
+  const baseUrl = $('casa-url').value.trim();
+  if (!baseUrl) { torrada('Informe a URL do Home Assistant.'); return; }
+  const token = $('casa-token').value.trim();
+  const corpo = { baseUrl, testar: true };
+  if (token) corpo.token = token; // vazio = mantém o token guardado
+  torrada('Testando conexão…');
+  const r = await api('/casa/config', 'POST', corpo);
+  if (r.teste && r.teste.ok) torrada('Conectado a ' + (r.teste.nome || 'casa') + '.');
+  else if (r.teste) torrada('Salvo, mas não conectou: ' + (r.teste.erro || 'erro'));
+  else torrada('Salvo.');
+  carregarConfig();       // re-renderiza o cartão (agora "conectado")
+  carregarCasaRapida();   // e os botões da aba Casa
+}
+
+async function escolherFavoritos() {
+  const alvo = $('casa-lista-disp');
+  alvo.innerHTML = '<div class="sub">Carregando dispositivos…</div>';
+  const r = await api('/casa/dispositivos');
+  if (r.erro) { alvo.innerHTML = '<div class="sub">' + esc(r.erro) + '</div>'; return; }
+  if (!r.dispositivos.length) { alvo.innerHTML = '<div class="sub">Nenhum dispositivo controlável encontrado.</div>'; return; }
+  const favs = new Set(r.favoritos || []);
+  const desenha = () => {
+    alvo.innerHTML = r.dispositivos.map((d) =>
+      `<div class="item"><div class="marca ${favs.has(d.id) ? 'sel' : ''}" data-fav="${esc(d.id)}">${favs.has(d.id) ? '★' : ''}</div>` +
+      `<div class="nome">${esc(d.nome)}<div class="sub">${esc(d.dominio)} · ${esc(d.estado)}</div></div></div>`).join('');
+    for (const m of alvo.querySelectorAll('[data-fav]')) {
+      m.onclick = async () => {
+        const id = m.dataset.fav;
+        if (favs.has(id)) favs.delete(id); else favs.add(id);
+        desenha();
+        await api('/casa/config', 'POST', { favoritos: [...favs] });
+        carregarCasaRapida();
+      };
+    }
+  };
+  desenha();
+}
+
+const ICONES_CASA = {
+  light: '<circle cx="12" cy="10" r="5"/><path d="M9 20h6M10 22h4"/>',
+  switch: '<rect x="3" y="8" width="18" height="8" rx="4"/><circle cx="8" cy="12" r="2.5"/>',
+  fan: '<path d="M12 12c0-4 2-6 5-6s3 4 0 6M12 12c4 0 6 2 6 5s-4 3-6 0M12 12c0 4-2 6-5 6s-3-4 0-6M12 12c-4 0-6-2-6-5s4-3 6 0"/><circle cx="12" cy="12" r="1.5"/>',
+  climate: '<path d="M12 3v18"/><path d="M8 7l4-4 4 4M8 17l4 4 4-4"/>',
+  cover: '<rect x="4" y="4" width="16" height="16" rx="1"/><path d="M4 9h16M4 13h16"/>',
+  media_player: '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  scene: '<circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  script: '<path d="M8 4h9l3 3v13H8z"/><path d="M11 9h6M11 13h6M11 17h4"/>',
+  automation: '<path d="M12 2v4M12 18v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="4"/>',
+  default: '<circle cx="12" cy="12" r="9"/>',
+};
+function iconeCasa(dominio) {
+  const dentro = ICONES_CASA[dominio] || ICONES_CASA.default;
+  return '<svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">' + dentro + '</svg>';
+}
+
+// Botões rápidos da aba Casa. Carregados quando a aba abre e depois de cada
+// toque — cada leitura fala com o Home Assistant, então não fica em loop.
+async function carregarCasaRapida() {
+  const alvo = $('casa-rapida');
+  if (!alvo) return;
+  let r;
+  try { r = await api('/casa/estado'); } catch { return; }
+  if (!r || !r.configurada || !r.favoritos.length) { alvo.innerHTML = ''; return; }
+  alvo.innerHTML = '<h2>Casa</h2><div class="casa-grade">' + r.favoritos.map((d) =>
+    `<button class="casa-botao ${d.ligado ? 'ligado' : ''} ${d.disponivel ? '' : 'off'}" data-casa="${esc(d.id)}">` +
+    `<span class="casa-ico">${iconeCasa(d.dominio)}</span>` +
+    `<span class="casa-nome">${esc(d.nome)}</span>` +
+    `<span class="casa-estado">${d.disponivel ? (d.ligado ? 'ligado' : 'desligado') : 'indisponível'}</span></button>`).join('') + '</div>';
+  for (const b of alvo.querySelectorAll('[data-casa]')) {
+    b.onclick = async () => {
+      b.classList.add('ocupado');
+      const r2 = await api('/casa/acao', 'POST', { entity_id: b.dataset.casa, acao: 'toggle' });
+      if (r2 && !r2.ok) torrada(r2.erro || 'Não consegui.');
+      carregarCasaRapida(); // relê o estado real depois de alternar
+    };
+  }
 }
 
 const textoRotacao = () => {
@@ -782,7 +902,7 @@ $('resetar').onclick = async () => {
 };
 
 /* ── abas ──────────────────────────────────────────────────────────────── */
-const CARREGA = { fotos: carregarFotos, lista: carregarCompras, avisos: carregarAvisos, ajustes: carregarConfig };
+const CARREGA = { casa: carregarCasaRapida, fotos: carregarFotos, lista: carregarCompras, avisos: carregarAvisos, ajustes: carregarConfig };
 for (const b of document.querySelectorAll('nav button')) {
   b.onclick = () => {
     for (const o of document.querySelectorAll('nav button')) o.classList.toggle('on', o === b);
@@ -865,6 +985,7 @@ $('log-senha').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
 function iniciarApp() {
   conectar();
   carregarConfig();
+  carregarCasaRapida(); // a aba Casa já abre ativa; carrega os botões da casa
 }
 
 async function abrir() {

@@ -12,6 +12,14 @@ import {
 } from '../core/avisos.js';
 import { listarCompras, adicionar, marcar, remover as removerCompra, limparFeitos } from '../skills/compras.js';
 import { descartarTimer } from '../skills/timer.js';
+import {
+  casaConfig,
+  casaConfigurada,
+  testarCasa,
+  listarDispositivos,
+  acaoDispositivo,
+  estadoFavoritos,
+} from '../core/casa.js';
 import * as plataforma from '../platform/index.js';
 
 /**
@@ -129,7 +137,7 @@ export async function atenderControle(req, res, url) {
   const rota = url.pathname;
   const mudaAlgo = req.method !== 'GET';
 
-  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras') || rota.startsWith('/timer')) {
+  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras') || rota.startsWith('/timer') || rota.startsWith('/casa')) {
     if (mudaAlgo && !autorizado(req)) {
       responder(res, 401, { erro: 'Token invalido ou ausente (cabecalho x-vexis-token).' });
       return true;
@@ -337,6 +345,74 @@ export async function atenderControle(req, res, url) {
   if (timerParar && req.method === 'POST') {
     const r = descartarTimer(Number(timerParar[1]));
     responder(res, r ? 200 : 404, r ? { ok: true } : { erro: 'Timer nao encontrado.' });
+    return true;
+  }
+
+  // ---- CASA INTELIGENTE (Home Assistant) -----------------------------------
+
+  // Config atual — nunca devolve o token (so se ele existe). O app mostra a URL
+  // e um cadeado "guardado" no lugar da senha.
+  if (rota === '/casa/config' && req.method === 'GET') {
+    const c = casaConfig();
+    responder(res, 200, { baseUrl: c.baseUrl || '', temToken: Boolean(c.token), favoritos: c.favoritos });
+    return true;
+  }
+
+  if (rota === '/casa/config' && req.method === 'POST') {
+    const patch = await lerJson(req);
+    const casa = {};
+    if (typeof patch.baseUrl === 'string') casa.baseUrl = patch.baseUrl.trim() || null;
+    // "(guardado)" e o marcador que o GET manda no lugar do token — se voltar
+    // assim, a tela so devolveu o que recebeu; nao e uma troca de token.
+    if (typeof patch.token === 'string' && patch.token !== '(guardado)') {
+      casa.token = patch.token.trim() || null;
+    }
+    if (Array.isArray(patch.favoritos)) {
+      casa.favoritos = patch.favoritos.filter((x) => typeof x === 'string');
+    }
+    gravarSettings({ casa });
+
+    // "Testar e salvar": tenta falar com o HA e devolve o resultado, sem
+    // derrubar o salvamento se o teste falhar (a URL pode estar certa e o HA
+    // fora do ar no momento).
+    let teste = null;
+    if (patch.testar) {
+      try { teste = await testarCasa(); }
+      catch (err) { teste = { ok: false, erro: err.message }; }
+    }
+    responder(res, 200, { ok: true, teste });
+    return true;
+  }
+
+  // Estado ao vivo dos favoritos — os botoes rapidos do app.
+  if (rota === '/casa/estado' && req.method === 'GET') {
+    try {
+      responder(res, 200, { configurada: casaConfigurada(), favoritos: await estadoFavoritos() });
+    } catch (err) {
+      responder(res, 200, { configurada: casaConfigurada(), favoritos: [], erro: err.message });
+    }
+    return true;
+  }
+
+  // Todos os dispositivos controlaveis — pra escolher quais viram favoritos.
+  if (rota === '/casa/dispositivos' && req.method === 'GET') {
+    try {
+      responder(res, 200, { dispositivos: await listarDispositivos(), favoritos: casaConfig().favoritos });
+    } catch (err) {
+      responder(res, 200, { dispositivos: [], favoritos: casaConfig().favoritos, erro: err.message });
+    }
+    return true;
+  }
+
+  // Ligar/desligar/alternar um dispositivo pelo botao.
+  if (rota === '/casa/acao' && req.method === 'POST') {
+    const { entity_id, acao } = await lerJson(req);
+    try {
+      await acaoDispositivo(entity_id, acao);
+      responder(res, 200, { ok: true });
+    } catch (err) {
+      responder(res, 200, { ok: false, erro: err.message });
+    }
     return true;
   }
 
