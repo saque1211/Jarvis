@@ -17,8 +17,9 @@ Configuracao em /etc/jarvis.env ou variaveis de ambiente:
     JARVIS_CLOUD_URL=http://SEU_IP:8080      # voz (router); cai no nucleus se vazio
     JARVIS_TRIGGER=escuta                    # escuta | botao | enter
     JARVIS_BOTAO_GPIO=17                      # so se JARVIS_TRIGGER=botao
-    WAKE_MODELO=hey_jarvis                    # de fabrica (gratis), ou:
-    WAKE_MODELO=/caminho/vexis.onnx          # modelo treinado ("vexis")
+    WAKE_MODELO=hey_jarvis                    # de fabrica (gratis). Sem definir,
+                                              # usa pi/vexis.onnx se existir; senao
+                                              # cai no hey_jarvis. Ver TREINAR-VEXIS.md
     WAKE_LIMIAR=0.5                          # 0-1; menor = mais sensivel
 
 A palavra de ativacao e openWakeWord — open-source, gratis, sem cadastro (a
@@ -513,9 +514,17 @@ def laco_escuta(audio, token):
     except ImportError:
         sys.exit("Falta o openwakeword: pip install openwakeword  (ou use JARVIS_TRIGGER=botao)")
 
-    # "hey_jarvis" ja vem pronto no openWakeWord. Um caminho .onnx/.tflite
-    # aponta pra um modelo treinado (ex: "vexis" treinado por voce).
-    modelo = os.environ.get("WAKE_MODELO", "hey_jarvis")
+    # De onde vem o modelo, nesta ordem:
+    #   1. WAKE_MODELO no ambiente (caminho pra .onnx/.tflite, ou nome de fabrica)
+    #   2. um vexis.onnx ao lado deste script — o que voce treinou. Basta largar
+    #      o arquivo na pasta pi/ pra "vexis" virar a palavra, sem env var nenhuma
+    #   3. hey_jarvis de fabrica, como reserva pra testar sem treinar nada
+    # Ver pi/TREINAR-VEXIS.md pra treinar o vexis.onnx.
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    vexis_local = os.path.join(aqui, "vexis.onnx")
+    modelo = os.environ.get("WAKE_MODELO") or (
+        vexis_local if os.path.exists(vexis_local) else "hey_jarvis"
+    )
     limiar = float(os.environ.get("WAKE_LIMIAR", "0.5"))
 
     # Os modelos de fabrica sao baixados uma vez, no primeiro uso.
