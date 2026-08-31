@@ -95,10 +95,21 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`Abrindo o navegador para autorizar...\n${authUrl}\n`);
+  console.log(`\nAbra este link no navegador e autorize:\n\n${authUrl}\n`);
+  // Tenta abrir o navegador sozinho — mas num servidor sem interface grafica o
+  // xdg-open nao existe, e o 'error' desse spawn derrubava o processo INTEIRO,
+  // fechando o servidor de callback antes de voce clicar em Agree (o sintoma
+  // era "Connection refused" no tunel). O link ja foi impresso acima, entao
+  // aqui qualquer falha ao abrir o navegador e ignorada.
   const opener =
     process.platform === 'win32' ? ['cmd', ['/c', 'start', '', authUrl.toString()]]
     : process.platform === 'darwin' ? ['open', [authUrl.toString()]]
     : ['xdg-open', [authUrl.toString()]];
-  spawn(opener[0], opener[1], { detached: true, stdio: 'ignore' }).unref();
+  try {
+    const child = spawn(opener[0], opener[1], { detached: true, stdio: 'ignore' });
+    child.on('error', () => {}); // sem navegador (servidor headless): use o link acima
+    child.unref();
+  } catch {
+    /* idem — segue esperando o callback */
+  }
 });
