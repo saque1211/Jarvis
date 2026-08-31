@@ -108,16 +108,33 @@ def carregar_audio():
 
 # ── Configuracao ────────────────────────────────────────────────────────────
 def carregar_env(caminho="/etc/jarvis.env"):
-    """Le um arquivo CHAVE=valor. Existe pro systemd nao precisar de shell."""
-    if not os.path.exists(caminho):
-        return
-    with open(caminho) as f:
-        for linha in f:
-            linha = linha.strip()
-            if not linha or linha.startswith("#") or "=" not in linha:
-                continue
-            chave, valor = linha.split("=", 1)
-            os.environ.setdefault(chave.strip(), valor.strip())
+    """
+    Le arquivos CHAVE=valor pra nao precisar setar variavel no terminal toda vez.
+
+    Alem do /etc/jarvis.env (Linux/systemd), procura um `jarvis.env` ao lado do
+    script e na raiz do projeto. No Windows nao existe /etc, entao e ali que a
+    config mora — sem isso, a URL do servidor e o WAKE_LIMIAR se perdiam a cada
+    janela nova do PowerShell.
+
+    setdefault: o que ja veio do shell manda; depois vale o primeiro arquivo que
+    tiver a chave. Assim da pra sobrepor um valor na hora sem editar o arquivo.
+    """
+    aqui = os.path.dirname(os.path.abspath(__file__))
+    for c in [
+        os.environ.get("JARVIS_ENV_FILE"),
+        os.path.join(aqui, "jarvis.env"),            # pi/jarvis.env
+        os.path.join(aqui, "..", "jarvis.env"),      # raiz do projeto
+        caminho,                                      # /etc/jarvis.env
+    ]:
+        if not c or not os.path.exists(c):
+            continue
+        with open(c) as f:
+            for linha in f:
+                linha = linha.strip()
+                if not linha or linha.startswith("#") or "=" not in linha:
+                    continue
+                chave, valor = linha.split("=", 1)
+                os.environ.setdefault(chave.strip(), valor.strip())
 
 
 carregar_env()
