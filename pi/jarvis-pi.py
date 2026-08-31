@@ -567,16 +567,38 @@ def laco_escuta(audio, token):
     # 1280 amostras = 80 ms a 16 kHz — o tamanho que o openWakeWord espera por
     # passo. O mesmo stream serve pra ouvir a palavra e gravar o comando depois.
     QUADRO_OWW = 1280
-    stream = audio.open(
-        format=FORMATO, channels=CANAIS, rate=TAXA,
-        input=True, frames_per_buffer=QUADRO_OWW, input_device_index=MIC,
-    )
+
+    def abrir():
+        return audio.open(
+            format=FORMATO, channels=CANAIS, rate=TAXA,
+            input=True, frames_per_buffer=QUADRO_OWW, input_device_index=MIC,
+        )
+
+    def reabrir(stream, motivo):
+        # Um assistente fica ligado por horas; um tropeço do audio do Windows
+        # (ex: OSError -9999) nao pode derrubar tudo. Fecha o que sobrou e abre
+        # um microfone novo, limpo.
+        log("audio", f"{motivo}; reabrindo o microfone...")
+        try:
+            stream.close()
+        except Exception:
+            pass
+        time.sleep(0.3)
+        oww.reset()
+        return abrir()
+
+    stream = abrir()
     log("pronto", f'diga "{nome_palavra}" e fale o comando  (WAKE_DEBUG=1 mostra nivel e pontuacao)')
 
     ultimo_debug = 0.0
     try:
         while True:
-            dados = stream.read(QUADRO_OWW, exception_on_overflow=False)
+            try:
+                dados = stream.read(QUADRO_OWW, exception_on_overflow=False)
+            except OSError as e:
+                stream = reabrir(stream, f"microfone tropecou ({e})")
+                continue
+
             amostras = np.frombuffer(dados, dtype=np.int16)
             scores = oww.predict(amostras)
 
@@ -591,21 +613,30 @@ def laco_escuta(audio, token):
             if any(v >= limiar for v in scores.values()):
                 oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
                 log("acordou", "fale agora")
-                wav = _gravar_quadros(stream)  # mesmo stream, sem cortar a 1a palavra
+                try:
+                    wav = _gravar_quadros(stream)  # mesmo stream, sem cortar a 1a palavra
+                except OSError as e:
+                    stream = reabrir(stream, f"microfone tropecou ao gravar ({e})")
+                    continue
 
-                # Enquanto transcreve, pensa e FALA a resposta, para o microfone.
-                # Sem isto o stream acumula segundos de audio velho (inclusive a
-                # propria voz dele tocando na caixa); ao voltar, o detector
-                # processa esse monte de audio atrasado de uma vez e "trava" —
-                # o sintoma classico de sumir depois de 2-3 comandos.
-                stream.stop_stream()
+                # Enquanto transcreve, pensa e FALA a resposta, FECHA o microfone
+                # e reabre limpo depois. Assim ele nao acumula segundos de audio
+                # velho (nem ouve a propria voz na caixa) — o que fazia travar
+                # depois de 2-3 comandos. Reabrir e mais confiavel no Windows do
+                # que stop/start, que dava "Stream not open".
+                try:
+                    stream.close()
+                except Exception:
+                    pass
                 atender(wav, token)
+                stream = abrir()
                 oww.reset()
-                stream.start_stream()  # recomeca limpo, sem o audio acumulado
                 log("pronto", f'diga "{nome_palavra}" de novo')
     finally:
-        stream.stop_stream()
-        stream.close()
+        try:
+            stream.close()
+        except Exception:
+            pass
 
 
 # ── Laco principal ──────────────────────────────────────────────────────────
