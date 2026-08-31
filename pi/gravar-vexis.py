@@ -52,26 +52,29 @@ os.makedirs(DESTINO, exist_ok=True)
 ja = len([f for f in os.listdir(DESTINO) if f.endswith(".wav")])
 
 pa = pyaudio.PyAudio()
-print(f"\n=== Gravador de amostras 'vexis' ===")
+
+# Modo automatico: `python pi/gravar-vexis.py 20` grava 20 seguidas sozinho — voce
+# so repete "vexis" quando ele pedir, sem tocar no teclado. Sem numero, vai no ENTER.
+QUANT = next((int(a) for a in sys.argv[1:] if a.isdigit()), None)
+
+print("\n=== Gravador de amostras 'vexis' ===")
 print(f"Microfone: indice {MIC if MIC is not None else 'padrao do sistema'}")
 print(f"Salvando em: {DESTINO}   (ja tem {ja})")
-print("\nENTER = grava uma amostra.  Digite 'sair' + ENTER pra terminar.")
-print("Mire umas 40. VARIE tom, velocidade e distancia do microfone.\n")
+if QUANT:
+    print(f"\nMODO AUTOMATICO: {QUANT} gravacoes seguidas, sem apertar nada.")
+    print("So repita 'vexis' quando aparecer FALE. VARIE tom/velocidade/distancia.")
+    print("Ctrl+C pra parar antes. Comecando em 2s...\n")
+    time.sleep(2)
+else:
+    print("\nENTER = grava uma.  (Dica: `python pi/gravar-vexis.py 20` grava 20 sozinho.)")
+    print("'sair' + ENTER pra terminar.  VARIE tom, velocidade e distancia.\n")
 
-n = ja
-while True:
-    cmd = input(f"[{n}] ENTER pra gravar 'vexis'  (ou 'sair'): ").strip().lower()
-    if cmd in ("sair", "s", "q", "quit", "exit"):
-        break
-    try:
-        s = pa.open(format=FORMATO, channels=CANAIS, rate=TAXA, input=True,
-                    frames_per_buffer=QUADRO, input_device_index=MIC)
-    except Exception as e:
-        print("  Nao consegui abrir o microfone:", e)
-        print("  Rode `python pi/testar-mic.py` e ajuste JARVIS_MIC no jarvis.env.")
-        break
-    # Contagem 3-2-1 com o mic JA aberto (lendo e descartando, pra nao pegar o
-    # estalo da abertura). Voce fala so quando aparecer "FALE!". Sem pressa.
+
+def gravar_uma(indice):
+    s = pa.open(format=FORMATO, channels=CANAIS, rate=TAXA, input=True,
+                frames_per_buffer=QUADRO, input_device_index=MIC)
+    # Contagem 3-2-1 com o mic JA aberto (descartando o estalo de abertura). Voce
+    # fala so quando aparecer FALE — sem pressa.
     try:
         for c in ("3...", "2...", "1..."):
             print("   " + c, end="   ", flush=True)
@@ -85,7 +88,7 @@ while True:
             quadros.append(s.read(QUADRO, exception_on_overflow=False))
     finally:
         s.close()
-    caminho = os.path.join(DESTINO, f"vexis_{n:03d}.wav")
+    caminho = os.path.join(DESTINO, f"vexis_{indice:03d}.wav")
     w = wave.open(caminho, "wb")
     w.setnchannels(CANAIS)
     w.setsampwidth(pa.get_sample_size(FORMATO))
@@ -93,7 +96,28 @@ while True:
     w.writeframes(b"".join(quadros))
     w.close()
     print(f"  salvo: {os.path.basename(caminho)}\n")
-    n += 1
+
+
+n = ja
+try:
+    if QUANT:
+        for k in range(QUANT):
+            print(f"[{n}]  ({k + 1}/{QUANT})")
+            gravar_uma(n)
+            n += 1
+            time.sleep(0.7)  # respiro entre uma e outra
+    else:
+        while True:
+            cmd = input(f"[{n}] ENTER pra gravar 'vexis'  (ou 'sair'): ").strip().lower()
+            if cmd in ("sair", "s", "q", "quit", "exit"):
+                break
+            gravar_uma(n)
+            n += 1
+except KeyboardInterrupt:
+    print("\n(parado)")
+except Exception as e:
+    print("  Erro no microfone:", e)
+    print("  Rode `python pi/testar-mic.py` e ajuste JARVIS_MIC no jarvis.env.")
 
 pa.terminate()
 print(f"\nPronto! {n} amostras em {DESTINO}.")
