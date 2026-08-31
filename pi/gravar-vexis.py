@@ -26,8 +26,7 @@ TAXA = 16000          # 16 kHz mono int16 — o que o treino espera
 CANAIS = 1
 FORMATO = pyaudio.paInt16
 QUADRO = 1024
-DUR = 2.0             # segundos gravados por amostra (cabe "vexis" com folga)
-PREP = 0.5           # descarta o comeco (abertura do mic) e da tempo de reacao
+DUR = 2.5            # segundos gravados por amostra (bastante folga pra "vexis")
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,13 +70,15 @@ while True:
         print("  Nao consegui abrir o microfone:", e)
         print("  Rode `python pi/testar-mic.py` e ajuste JARVIS_MIC no jarvis.env.")
         break
-    # Descarta o comeco: a abertura do mic solta um estalo, e voce precisa de um
-    # tempinho pra reagir depois do ENTER. So depois disso comeca a valer.
-    print("  preparar...")
+    # Contagem 3-2-1 com o mic JA aberto (lendo e descartando, pra nao pegar o
+    # estalo da abertura). Voce fala so quando aparecer "FALE!". Sem pressa.
     try:
-        for _ in range(int(PREP * TAXA / QUADRO)):
-            s.read(QUADRO, exception_on_overflow=False)
-        print("  >>> FALE 'VEXIS' AGORA!")
+        for c in ("3...", "2...", "1..."):
+            print("   " + c, end="   ", flush=True)
+            t = time.time() + 0.7
+            while time.time() < t:
+                s.read(QUADRO, exception_on_overflow=False)
+        print("\n  >>>>>  FALE 'VEXIS'  <<<<<")
         quadros = []
         fim = time.time() + DUR
         while time.time() < fim:
