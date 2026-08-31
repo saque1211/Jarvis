@@ -591,6 +591,8 @@ def laco_escuta(audio, token):
     log("pronto", f'diga "{nome_palavra}" e fale o comando  (WAKE_DEBUG=1 mostra nivel e pontuacao)')
 
     ultimo_debug = 0.0
+    pico_score = 0.0
+    pico_nivel = 0
     try:
         while True:
             try:
@@ -602,13 +604,21 @@ def laco_escuta(audio, token):
             amostras = np.frombuffer(dados, dtype=np.int16)
             scores = oww.predict(amostras)
 
-            # Diagnostico: a cada ~1.5s mostra o nivel do microfone e a maior
-            # pontuacao. Assim da pra ver se o mic capta (nivel > 0 ao falar) e
-            # se o modelo reage (pontuacao sobe quando voce diz a palavra).
-            if depurar and time.time() - ultimo_debug > 1.5:
-                ultimo_debug = time.time()
-                maior = max(scores.values()) if scores else 0
-                log("wake", f"nivel do mic: {_rms(dados)}   pontuacao: {maior:.2f}  (dispara em {limiar})")
+            # Diagnostico: mostra o PICO do nivel e da pontuacao na ultima ~1s, e
+            # nao o valor no instante do print — senao perde o momento exato em
+            # que voce diz a palavra. 3 casas revelam pontuacao pequena (0.008).
+            if depurar:
+                m = max(scores.values()) if scores else 0
+                if m > pico_score:
+                    pico_score = m
+                n = _rms(dados)
+                if n > pico_nivel:
+                    pico_nivel = n
+                if time.time() - ultimo_debug > 1.0:
+                    ultimo_debug = time.time()
+                    log("wake", f"nivel(pico): {pico_nivel:6d}   pontuacao(pico): {pico_score:.3f}  (dispara em {limiar})")
+                    pico_score = 0.0
+                    pico_nivel = 0
 
             if any(v >= limiar for v in scores.values()):
                 oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
