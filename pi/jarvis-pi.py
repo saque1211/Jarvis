@@ -575,7 +575,16 @@ def laco_escuta(audio, token):
                 oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
                 log("acordou", "fale agora")
                 wav = _gravar_quadros(stream)  # mesmo stream, sem cortar a 1a palavra
+
+                # Enquanto transcreve, pensa e FALA a resposta, para o microfone.
+                # Sem isto o stream acumula segundos de audio velho (inclusive a
+                # propria voz dele tocando na caixa); ao voltar, o detector
+                # processa esse monte de audio atrasado de uma vez e "trava" —
+                # o sintoma classico de sumir depois de 2-3 comandos.
+                stream.stop_stream()
                 atender(wav, token)
+                oww.reset()
+                stream.start_stream()  # recomeca limpo, sem o audio acumulado
                 log("pronto", f'diga "{nome_palavra}" de novo')
     finally:
         stream.stop_stream()
