@@ -93,11 +93,41 @@ yaml.dump(config, open("/content/my_model.yaml","w"))
 print("config OK:", config["target_phrase"])
 ```
 
-## Célula 5 — treinar (gera, aumenta, treina)
+## Célula 5 — gerar os áudios sintéticos
 
 ```python
 %cd /content
 !$PY /content/openWakeWord/openwakeword/train.py --training_config /content/my_model.yaml --generate_clips
+```
+
+## Célula 6 (OPCIONAL, mas é o que deixa bom) — juntar a SUA voz
+
+O modelo só com voz sintética oscila (ele te ouve às vezes). Gravar a sua voz
+sobe MUITO o acerto. No PC, rode `python pi/gravar-vexis.py`, grave umas 40
+amostras, e **compacte a pasta `pi/minhas-amostras-vexis` num .zip**. Então:
+
+```python
+import glob, shutil, zipfile, random
+from google.colab import files
+
+up = files.upload()                          # escolha minhas-amostras-vexis.zip
+zname = list(up.keys())[0]
+with zipfile.ZipFile(zname) as z: z.extractall("/content/minhas_amostras")
+
+wavs = glob.glob("/content/minhas_amostras/**/*.wav", recursive=True)
+random.shuffle(wavs)
+ptrain = "/content/my_custom_model/vexis/positive_train"
+ptest  = "/content/my_custom_model/vexis/positive_test"
+corte = max(1, int(len(wavs) * 0.85))
+for w in wavs[:corte]: shutil.copy(w, ptrain)
+for w in wavs[corte:]: shutil.copy(w, ptest)
+print(f"adicionei {len(wavs)} amostras suas: {corte} treino / {len(wavs)-corte} teste")
+```
+
+## Célula 7 — aumentar e treinar
+
+```python
+%cd /content
 !$PY /content/openWakeWord/openwakeword/train.py --training_config /content/my_model.yaml --augment_clips
 !$PY /content/openWakeWord/openwakeword/train.py --training_config /content/my_model.yaml --train_model
 ```
@@ -105,7 +135,7 @@ print("config OK:", config["target_phrase"])
 No fim ele salva em `/content/my_custom_model/vexis.onnx` (o erro sobre `onnx_tf`
 no final é inofensivo — é só a conversão opcional pra .tflite, que não usamos).
 
-## Célula 6 — baixar
+## Célula 8 — baixar
 
 ```python
 from google.colab import files
