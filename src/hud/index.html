@@ -193,6 +193,74 @@ html, body {
 }
 #alarme button:active { transform: scale(.97); }
 
+/* ---- cena do tempo (so aparece quando pedem a previsao) ---- */
+#clima-cena {
+  position: absolute; inset: 0; z-index: 78;
+  display: none; align-items: center; justify-content: center;
+  background: radial-gradient(1400px 900px at 50% 38%, rgba(30,58,95,.6), rgba(6,9,12,.86));
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  font-family: 'Manrope', system-ui, sans-serif;
+  opacity: 0; transition: opacity .5s ease;
+}
+#clima-cena.on { display: flex; opacity: 1; }
+.cl-cartao {
+  width: 760px; padding: 52px 64px 48px; border-radius: 40px; text-align: center;
+  background: linear-gradient(180deg, rgba(40,70,110,.42), rgba(11,18,32,.66));
+  border: 1px solid rgba(255,255,255,.12);
+  box-shadow: 0 40px 120px rgba(0,0,0,.5);
+  animation: clSobe .6s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes clSobe { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
+.cl-palco { position: relative; width: 300px; height: 230px; margin: 0 auto 4px; }
+
+/* sol */
+.cl-sol { position: absolute; left: 50%; top: 48%; width: 128px; height: 128px; margin: -64px 0 0 -64px; animation: clSolSobe 1s cubic-bezier(.22,1,.36,1) both; }
+.cl-sol .disco {
+  position: absolute; inset: 30px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #ffe0a3, #f59e0b);
+  box-shadow: 0 0 50px rgba(245,158,11,.75); animation: clRespira 3s ease-in-out infinite;
+}
+.cl-sol .raios { position: absolute; inset: 0; animation: clGira 24s linear infinite; }
+.cl-sol .raios i {
+  position: absolute; left: 50%; top: 50%; width: 6px; height: 22px; margin: -64px 0 0 -3px;
+  border-radius: 3px; background: #f9b73a; transform-origin: 3px 64px; animation: clRaio 3s ease-in-out infinite;
+}
+@keyframes clGira { to { transform: rotate(360deg); } }
+@keyframes clRespira { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
+@keyframes clRaio { 0%,100% { opacity: .4; height: 18px; } 50% { opacity: 1; height: 28px; } }
+@keyframes clSolSobe { from { transform: translateY(22px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* nuvem */
+.cl-nuvem {
+  position: absolute; width: 132px; height: 42px; border-radius: 100px;
+  background: linear-gradient(180deg,#f4f7fb,#c9d5e6); box-shadow: 0 12px 28px rgba(0,0,0,.28);
+  animation: clFlutua 6s ease-in-out infinite;
+}
+.cl-nuvem::before, .cl-nuvem::after { content: ''; position: absolute; background: inherit; border-radius: 50%; }
+.cl-nuvem::before { width: 56px; height: 56px; left: 16px; top: -26px; }
+.cl-nuvem::after { width: 42px; height: 42px; right: 18px; top: -18px; }
+@keyframes clFlutua { 0%,100% { transform: translateX(-7px); } 50% { transform: translateX(7px); } }
+
+/* chuva / neve */
+.cl-gota { position: absolute; width: 3px; height: 16px; border-radius: 3px; background: #7dd3fc; opacity: .8; animation: clCai .9s linear infinite; }
+.cl-floco { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #e8f2ff; opacity: .9; animation: clNeve 2.4s linear infinite; }
+@keyframes clCai { 0% { transform: translateY(-8px); opacity: 0; } 20% { opacity: .85; } 100% { transform: translateY(74px); opacity: 0; } }
+@keyframes clNeve { 0% { transform: translateY(-8px) translateX(0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translateY(80px) translateX(12px); opacity: 0; } }
+
+/* raio (tempestade) */
+.cl-raio {
+  position: absolute; left: 50%; top: 58%; width: 34px; height: 52px; margin-left: -17px; background: #fde047;
+  clip-path: polygon(58% 0, 18% 55%, 46% 55%, 28% 100%, 82% 38%, 52% 38%);
+  filter: drop-shadow(0 0 12px #fde047); opacity: 0; animation: clFlash 3.4s ease-in-out infinite;
+}
+@keyframes clFlash { 0%,86%,100% { opacity: 0; } 88%,93% { opacity: 1; } 90% { opacity: .25; } }
+
+/* textos */
+.cl-temp { font-size: 96px; font-weight: 800; line-height: 1; color: #fff; letter-spacing: -.02em; }
+.cl-cond { font-size: 27px; font-weight: 600; color: var(--acento-claro); margin-top: 6px; }
+.cl-minmax { font-size: 25px; color: rgba(255,255,255,.88); margin-top: 14px; font-weight: 700; }
+.cl-linha { font-size: 20px; color: rgba(255,255,255,.6); margin-top: 8px; }
+
 /* ---- tocando agora ---- */
 #tocando { position: absolute; right: 72px; bottom: 118px; z-index: 5; display: flex; align-items: center; gap: 18px; max-width: 440px; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
 #tocando.oculto { display: none; }
@@ -367,6 +435,9 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
     <div class="sub" id="alarme-sub"></div>
     <button id="alarme-off">Desligar</button>
   </div>
+
+  <!-- cena do tempo: aparece so quando a pessoa pede a previsao -->
+  <div id="clima-cena"><div class="cl-cartao"></div></div>
 
   <!-- primeiro boot: Wi-Fi antes da conta -->
   <div id="boot">
@@ -553,6 +624,7 @@ function desenhar() {
   desenharTempo();
   desenharAvisos();
   desenharTimers();
+  desenharClima();
   desenharTocando();
 
   if (!arrastando && !aberto) verificarBoot();
@@ -718,6 +790,62 @@ $('alarme-off').onclick = async () => {
   descartadosLocais.add(String(id));
   try { await mandar('/timer/' + id + '/parar', 'POST'); } catch { /* segue: o alarme ja parou */ }
 };
+
+/* ==========================================================================
+   Cena do tempo — aparece SO quando a pessoa pede a previsao
+   ==========================================================================
+   A skill weather grava ESTADO.clima com a hora do pedido. Quando esse pedido
+   e recente, o painel monta a cena animada (sol/chuva/tempestade/neve) com a
+   temperatura e a data, e some sozinha depois de alguns segundos.
+   ========================================================================== */
+const CLIMA_DUR = 16000; // quanto tempo a cena fica na tela
+let climaMostradoEm = 0;
+let climaTimer = null;
+
+function desenharClima() {
+  const c = ESTADO.clima;
+  const el = $('clima-cena');
+  if (!c || !c.at) return;
+  const idade = Date.now() - c.at;
+  if (idade > CLIMA_DUR) { el.classList.remove('on'); return; }
+  if (c.at === climaMostradoEm) return; // este pedido ja esta na tela
+  climaMostradoEm = c.at;
+  montarClima(c);
+  el.classList.add('on');
+  clearTimeout(climaTimer);
+  climaTimer = setTimeout(() => el.classList.remove('on'), Math.max(1000, CLIMA_DUR - idade));
+}
+
+function montarClima(c) {
+  const cond = c.condicao || 'Sol';
+  const temSol = cond === 'Sol' || cond === 'Parcialmente nublado';
+  const temNuvem = cond !== 'Sol';
+  const temChuva = cond === 'Chuva' || cond === 'Tempestade';
+  const temRaio = cond === 'Tempestade';
+  const temNeve = cond === 'Neve';
+
+  let palco = '';
+  if (temSol) {
+    let raios = '';
+    for (let i = 0; i < 12; i++) raios += `<i style="transform:rotate(${i * 30}deg);animation-delay:${(i % 4) * 0.2}s"></i>`;
+    palco += `<div class="cl-sol" style="${temNuvem ? 'left:40%;top:40%' : ''}"><div class="raios">${raios}</div><div class="disco"></div></div>`;
+  }
+  if (temNuvem) {
+    palco += '<div class="cl-nuvem" style="left:92px;top:118px"></div>';
+    if (cond === 'Nublado' || temChuva || temNeve) palco += '<div class="cl-nuvem" style="left:56px;top:92px;transform:scale(.78)"></div>';
+  }
+  if (temChuva) for (let i = 0; i < 7; i++) palco += `<div class="cl-gota" style="left:${74 + i * 22}px;top:150px;animation-delay:${(i * 0.13).toFixed(2)}s"></div>`;
+  if (temNeve) for (let i = 0; i < 7; i++) palco += `<div class="cl-floco" style="left:${74 + i * 22}px;top:150px;animation-delay:${(i * 0.3).toFixed(2)}s"></div>`;
+  if (temRaio) palco += '<div class="cl-raio"></div>';
+
+  const data = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('clima-cena').querySelector('.cl-cartao').innerHTML =
+    `<div class="cl-palco">${palco}</div>` +
+    `<div class="cl-temp">${c.temp}°</div>` +
+    `<div class="cl-cond">${esc(cond)}</div>` +
+    `<div class="cl-minmax">mín ${c.min}° · máx ${c.max}°${c.vaiChover ? ' · 🌂' : ''}</div>` +
+    `<div class="cl-linha">${esc(c.local || '')} · ${data.charAt(0).toUpperCase() + data.slice(1)}</div>`;
+}
 
 function desenharTocando() {
   const np = ESTADO.nowPlaying;

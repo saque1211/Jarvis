@@ -190,6 +190,10 @@ export function snapshot() {
     // Painel NOW PLAYING — preenchido pelo HUD via skill media, cadencia lenta.
     nowPlaying: runtime.nowPlaying || null,
 
+    // Cena animada do tempo — so aparece quando a pessoa PEDE a previsao (a
+    // skill weather grava isto com a hora). O HUD desenha por alguns segundos.
+    clima: runtime.climaPedido || null,
+
     // Painel AVISO — o card de cima do HUD. So o que esta pendente AGORA:
     // dia certo, dentro da janela, e ainda nao marcado como feito hoje.
     avisos: pendentes(),

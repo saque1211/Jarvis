@@ -1,4 +1,5 @@
 import { lerSettings, gravarSettings, dentroDaJanela } from '../core/settings.js';
+import { writeRuntime } from '../core/state.js';
 
 /**
  * Previsao do tempo pelo Open-Meteo.
@@ -175,7 +176,27 @@ export default {
       input_schema: { type: 'object', properties: {} },
       handler: async () => {
         try {
-          return emPalavras(await previsao());
+          const dados = await previsao();
+          // Avisa o HUD que a previsao FOI PEDIDA agora, com os dados — o painel
+          // desenha a cena animada do tempo por alguns segundos. So quando pedem;
+          // fora disso o painel nao mostra essa cena.
+          try {
+            writeRuntime({
+              climaPedido: {
+                at: Date.now(),
+                condicao: dados.condicao,
+                temp: dados.temperatura,
+                min: dados.minima,
+                max: dados.maxima,
+                dia: dados.dia,
+                local: dados.local,
+                vaiChover: dados.chuva?.vaiChover || false,
+              },
+            });
+          } catch {
+            /* sem HUD/vault ele ainda fala a previsao normalmente */
+          }
+          return emPalavras(dados);
         } catch (err) {
           return `Nao consegui a previsao: ${err.message}`;
         }
