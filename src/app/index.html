@@ -410,6 +410,7 @@ nav button:active svg { transform: scale(.9); }
         <button class="botao largo" id="parear-btn">Parear</button>
       </div>
       <div class="sub" id="parear-msg" style="margin-top:8px"></div>
+      <div id="lista-aparelhos" style="margin-top:12px"></div>
     </div>
 
     <h2>Dispositivo</h2>
@@ -764,6 +765,28 @@ async function carregarConfig() {
   }
 
   montarCartaoCasa(c.casa);
+  carregarAparelhos();
+}
+
+/* Lista os painéis já pareados a esta conta. Sem token de aparelho na tela — só
+   o nome e desde quando. */
+async function carregarAparelhos() {
+  const alvo = $('lista-aparelhos');
+  if (!alvo) return;
+  try {
+    const r = await api('/devices/meus');
+    const aps = r.aparelhos || [];
+    if (!aps.length) { alvo.innerHTML = '<div class="sub">Nenhum painel pareado ainda.</div>'; return; }
+    alvo.innerHTML = aps.map((a) => {
+      const desde = a.criadoEm ? new Date(a.criadoEm).toLocaleDateString('pt-BR') : '';
+      return '<div class="linha"><div class="cresce">' +
+        '<div class="rotulo">' + esc(a.nome || 'Painel') + '</div>' +
+        '<div class="sub">pareado' + (desde ? ' em ' + esc(desde) : '') + '</div>' +
+        '</div><div class="sub" style="color:var(--acento)">✓ ligado</div></div>';
+    }).join('');
+  } catch {
+    alvo.innerHTML = '';
+  }
 }
 
 /* ── casa inteligente (Home Assistant) ─────────────────────────────────────
@@ -906,6 +929,7 @@ $('parear-btn').onclick = async () => {
     if (r.nome) {
       msg.textContent = '✓ "' + r.nome + '" pareado. O painel já vai abrir sozinho.';
       $('parear-codigo').value = '';
+      carregarAparelhos();
     } else {
       msg.textContent = r.erro || 'Código inválido ou expirado.';
     }
