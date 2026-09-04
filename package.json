@@ -11,6 +11,7 @@
     "jarvis": "node src/index.js",
     "listen": "node src/voice/daemon.js",
     "hud": "node scripts/hud.js",
+    "nucleus": "node scripts/nucleus.js",
     "cloud": "node scripts/cloud.js",
     "doctor": "node scripts/doctor.js",
     "env:check": "node scripts/env-check.js",
