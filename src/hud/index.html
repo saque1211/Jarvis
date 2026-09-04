@@ -196,70 +196,87 @@ html, body {
 /* ---- cena do tempo (so aparece quando pedem a previsao) ---- */
 #clima-cena {
   position: absolute; inset: 0; z-index: 78;
-  display: none; align-items: center; justify-content: center;
-  background: radial-gradient(1400px 900px at 50% 38%, rgba(30,58,95,.6), rgba(6,9,12,.86));
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  display: none; flex-direction: column; align-items: center; justify-content: center;
+  background:
+    radial-gradient(1300px 900px at 50% 30%, rgba(60,110,170,.55), rgba(0,0,0,0) 66%),
+    linear-gradient(180deg, #1e3a5f 0%, #16304f 42%, #0c1a2e 78%, #0b1220 100%);
   font-family: 'Manrope', system-ui, sans-serif;
-  opacity: 0; transition: opacity .5s ease;
+  opacity: 0; transition: opacity .6s ease; overflow: hidden;
 }
 #clima-cena.on { display: flex; opacity: 1; }
-.cl-cartao {
-  width: 760px; padding: 52px 64px 48px; border-radius: 40px; text-align: center;
-  background: linear-gradient(180deg, rgba(40,70,110,.42), rgba(11,18,32,.66));
-  border: 1px solid rgba(255,255,255,.12);
-  box-shadow: 0 40px 120px rgba(0,0,0,.5);
-  animation: clSobe .6s cubic-bezier(.22,1,.36,1) both;
+/* estrelinhas discretas ao fundo, so pra dar profundidade */
+#clima-cena::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image:
+    radial-gradient(2px 2px at 18% 22%, rgba(255,255,255,.5), transparent),
+    radial-gradient(2px 2px at 74% 16%, rgba(255,255,255,.4), transparent),
+    radial-gradient(1.5px 1.5px at 40% 12%, rgba(255,255,255,.4), transparent),
+    radial-gradient(1.5px 1.5px at 88% 30%, rgba(255,255,255,.35), transparent);
 }
-@keyframes clSobe { from { transform: translateY(28px); opacity: 0; } to { transform: none; opacity: 1; } }
-.cl-palco { position: relative; width: 300px; height: 230px; margin: 0 auto 4px; }
+/* respiro: o conjunto inteiro faz um leve zoom continuo */
+.cl-cartao {
+  position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center;
+  animation: clZoom 7s ease-in-out infinite;
+}
+@keyframes clZoom { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+.cl-palco { position: relative; width: 640px; height: 420px; margin-bottom: 8px; }
 
 /* sol */
-.cl-sol { position: absolute; left: 50%; top: 48%; width: 128px; height: 128px; margin: -64px 0 0 -64px; animation: clSolSobe 1s cubic-bezier(.22,1,.36,1) both; }
+.cl-sol { position: absolute; left: 50%; top: 50%; width: 300px; height: 300px; margin: -150px 0 0 -150px; animation: clSolSobe 1.1s cubic-bezier(.22,1,.36,1) both; }
 .cl-sol .disco {
-  position: absolute; inset: 30px; border-radius: 50%;
-  background: radial-gradient(circle at 38% 34%, #ffe0a3, #f59e0b);
-  box-shadow: 0 0 50px rgba(245,158,11,.75); animation: clRespira 3s ease-in-out infinite;
+  position: absolute; inset: 70px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 34%, #ffe9bf, #f7b733 62%, #f59e0b);
+  box-shadow: 0 0 90px rgba(245,158,11,.8), 0 0 40px rgba(255,224,150,.6);
+  animation: clRespira 3s ease-in-out infinite;
 }
-.cl-sol .raios { position: absolute; inset: 0; animation: clGira 24s linear infinite; }
+.cl-sol .raios { position: absolute; inset: 0; animation: clGira 26s linear infinite; }
 .cl-sol .raios i {
-  position: absolute; left: 50%; top: 50%; width: 6px; height: 22px; margin: -64px 0 0 -3px;
-  border-radius: 3px; background: #f9b73a; transform-origin: 3px 64px; animation: clRaio 3s ease-in-out infinite;
+  position: absolute; left: 50%; top: 50%; width: 12px; height: 46px; margin: -150px 0 0 -6px;
+  border-radius: 6px; background: linear-gradient(180deg,#ffd472,#f9b73a); transform-origin: 6px 150px;
+  animation: clRaio 3s ease-in-out infinite;
 }
 @keyframes clGira { to { transform: rotate(360deg); } }
-@keyframes clRespira { 0%,100% { transform: scale(1); } 50% { transform: scale(1.07); } }
-@keyframes clRaio { 0%,100% { opacity: .4; height: 18px; } 50% { opacity: 1; height: 28px; } }
-@keyframes clSolSobe { from { transform: translateY(22px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes clRespira { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+@keyframes clRaio { 0%,100% { opacity: .38; height: 38px; } 50% { opacity: 1; height: 56px; } }
+@keyframes clSolSobe { from { transform: translateY(90px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* nuvem */
 .cl-nuvem {
-  position: absolute; width: 132px; height: 42px; border-radius: 100px;
-  background: linear-gradient(180deg,#f4f7fb,#c9d5e6); box-shadow: 0 12px 28px rgba(0,0,0,.28);
-  animation: clFlutua 6s ease-in-out infinite;
+  position: absolute; width: 300px; height: 96px; border-radius: 100px;
+  background: linear-gradient(180deg,#f6f9fd,#c3d2e6); box-shadow: 0 22px 50px rgba(0,0,0,.32);
 }
 .cl-nuvem::before, .cl-nuvem::after { content: ''; position: absolute; background: inherit; border-radius: 50%; }
-.cl-nuvem::before { width: 56px; height: 56px; left: 16px; top: -26px; }
-.cl-nuvem::after { width: 42px; height: 42px; right: 18px; top: -18px; }
-@keyframes clFlutua { 0%,100% { transform: translateX(-7px); } 50% { transform: translateX(7px); } }
+.cl-nuvem::before { width: 128px; height: 128px; left: 38px; top: -58px; }
+.cl-nuvem::after { width: 96px; height: 96px; right: 40px; top: -40px; }
+.cl-nuvem.flutua { animation: clFlutua 6s ease-in-out infinite; }
+/* entram deslizando pelos lados na abertura */
+.cl-nuvem.esq { animation: clEntraEsq 1.1s cubic-bezier(.22,1,.36,1) both, clFlutua 6s ease-in-out 1.1s infinite; }
+.cl-nuvem.dir { animation: clEntraDir 1.1s cubic-bezier(.22,1,.36,1) both, clFlutua 7s ease-in-out 1.1s infinite; }
+@keyframes clFlutua { 0%,100% { transform: translateX(-10px); } 50% { transform: translateX(10px); } }
+@keyframes clEntraEsq { from { transform: translateX(-520px); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes clEntraDir { from { transform: translateX(520px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* chuva / neve */
-.cl-gota { position: absolute; width: 3px; height: 16px; border-radius: 3px; background: #7dd3fc; opacity: .8; animation: clCai .9s linear infinite; }
-.cl-floco { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: #e8f2ff; opacity: .9; animation: clNeve 2.4s linear infinite; }
-@keyframes clCai { 0% { transform: translateY(-8px); opacity: 0; } 20% { opacity: .85; } 100% { transform: translateY(74px); opacity: 0; } }
-@keyframes clNeve { 0% { transform: translateY(-8px) translateX(0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translateY(80px) translateX(12px); opacity: 0; } }
+.cl-gota { position: absolute; width: 5px; height: 30px; border-radius: 4px; background: linear-gradient(180deg,#a6e3ff,#5cbdf0); opacity: .8; animation: clCai 1s linear infinite; }
+.cl-floco { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #eaf4ff; box-shadow: 0 0 10px rgba(255,255,255,.6); opacity: .9; animation: clNeve 2.6s linear infinite; }
+@keyframes clCai { 0% { transform: translateY(-10px); opacity: 0; } 20% { opacity: .85; } 100% { transform: translateY(150px); opacity: 0; } }
+@keyframes clNeve { 0% { transform: translateY(-10px) translateX(0); opacity: 0; } 20% { opacity: .9; } 100% { transform: translateY(170px) translateX(22px); opacity: 0; } }
 
 /* raio (tempestade) */
 .cl-raio {
-  position: absolute; left: 50%; top: 58%; width: 34px; height: 52px; margin-left: -17px; background: #fde047;
+  position: absolute; left: 50%; top: 56%; width: 70px; height: 110px; margin-left: -35px; background: #fde047;
   clip-path: polygon(58% 0, 18% 55%, 46% 55%, 28% 100%, 82% 38%, 52% 38%);
-  filter: drop-shadow(0 0 12px #fde047); opacity: 0; animation: clFlash 3.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 26px #fde047); opacity: 0; animation: clFlash 3.4s ease-in-out infinite;
 }
 @keyframes clFlash { 0%,86%,100% { opacity: 0; } 88%,93% { opacity: 1; } 90% { opacity: .25; } }
 
 /* textos */
-.cl-temp { font-size: 96px; font-weight: 800; line-height: 1; color: #fff; letter-spacing: -.02em; }
-.cl-cond { font-size: 27px; font-weight: 600; color: var(--acento-claro); margin-top: 6px; }
-.cl-minmax { font-size: 25px; color: rgba(255,255,255,.88); margin-top: 14px; font-weight: 700; }
-.cl-linha { font-size: 20px; color: rgba(255,255,255,.6); margin-top: 8px; }
+.cl-data { font-size: 30px; font-weight: 600; color: rgba(255,255,255,.62); letter-spacing: .01em; margin-bottom: 6px; animation: clSobeTxt .7s .15s cubic-bezier(.22,1,.36,1) both; }
+.cl-temp { font-size: 216px; font-weight: 800; line-height: .92; color: #fff; letter-spacing: -.03em; text-shadow: 0 8px 60px rgba(0,0,0,.4); animation: clSobeTxt .7s .2s cubic-bezier(.22,1,.36,1) both; }
+.cl-cond { font-size: 44px; font-weight: 700; color: var(--acento-claro); margin-top: 8px; animation: clSobeTxt .7s .3s cubic-bezier(.22,1,.36,1) both; }
+.cl-minmax { font-size: 34px; color: rgba(255,255,255,.9); margin-top: 22px; font-weight: 700; animation: clSobeTxt .7s .4s cubic-bezier(.22,1,.36,1) both; }
+.cl-linha { font-size: 26px; color: rgba(255,255,255,.58); margin-top: 12px; animation: clSobeTxt .7s .5s cubic-bezier(.22,1,.36,1) both; }
+@keyframes clSobeTxt { from { transform: translateY(34px); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* ---- tocando agora ---- */
 #tocando { position: absolute; right: 72px; bottom: 118px; z-index: 5; display: flex; align-items: center; gap: 18px; max-width: 440px; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
@@ -819,32 +836,36 @@ function desenharClima() {
 function montarClima(c) {
   const cond = c.condicao || 'Sol';
   const temSol = cond === 'Sol' || cond === 'Parcialmente nublado';
+  const soSol = cond === 'Sol';
   const temNuvem = cond !== 'Sol';
   const temChuva = cond === 'Chuva' || cond === 'Tempestade';
   const temRaio = cond === 'Tempestade';
   const temNeve = cond === 'Neve';
+  const duas = cond === 'Nublado' || temChuva || temNeve;
 
   let palco = '';
   if (temSol) {
     let raios = '';
     for (let i = 0; i < 12; i++) raios += `<i style="transform:rotate(${i * 30}deg);animation-delay:${(i % 4) * 0.2}s"></i>`;
-    palco += `<div class="cl-sol" style="${temNuvem ? 'left:40%;top:40%' : ''}"><div class="raios">${raios}</div><div class="disco"></div></div>`;
+    const pos = soSol ? '' : 'left:44%;top:38%';
+    palco += `<div class="cl-sol" style="${pos}"><div class="raios">${raios}</div><div class="disco"></div></div>`;
   }
   if (temNuvem) {
-    palco += '<div class="cl-nuvem" style="left:92px;top:118px"></div>';
-    if (cond === 'Nublado' || temChuva || temNeve) palco += '<div class="cl-nuvem" style="left:56px;top:92px;transform:scale(.78)"></div>';
+    palco += '<div class="cl-nuvem dir" style="left:190px;top:230px"></div>';
+    if (duas) palco += '<div class="cl-nuvem esq" style="left:150px;top:175px;transform:scale(.82)"></div>';
   }
-  if (temChuva) for (let i = 0; i < 7; i++) palco += `<div class="cl-gota" style="left:${74 + i * 22}px;top:150px;animation-delay:${(i * 0.13).toFixed(2)}s"></div>`;
-  if (temNeve) for (let i = 0; i < 7; i++) palco += `<div class="cl-floco" style="left:${74 + i * 22}px;top:150px;animation-delay:${(i * 0.3).toFixed(2)}s"></div>`;
+  if (temChuva) for (let i = 0; i < 8; i++) palco += `<div class="cl-gota" style="left:${210 + i * 32}px;top:320px;animation-delay:${(i * 0.11).toFixed(2)}s"></div>`;
+  if (temNeve) for (let i = 0; i < 8; i++) palco += `<div class="cl-floco" style="left:${210 + i * 32}px;top:320px;animation-delay:${(i * 0.28).toFixed(2)}s"></div>`;
   if (temRaio) palco += '<div class="cl-raio"></div>';
 
   const data = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  const dataCap = data.charAt(0).toUpperCase() + data.slice(1);
   $('clima-cena').querySelector('.cl-cartao').innerHTML =
     `<div class="cl-palco">${palco}</div>` +
     `<div class="cl-temp">${c.temp}°</div>` +
     `<div class="cl-cond">${esc(cond)}</div>` +
     `<div class="cl-minmax">mín ${c.min}° · máx ${c.max}°${c.vaiChover ? ' · 🌂' : ''}</div>` +
-    `<div class="cl-linha">${esc(c.local || '')} · ${data.charAt(0).toUpperCase() + data.slice(1)}</div>`;
+    `<div class="cl-linha">${esc(c.local || '')} · ${dataCap}</div>`;
 }
 
 function desenharTocando() {
