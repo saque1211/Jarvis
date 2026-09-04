@@ -15,6 +15,7 @@ import {
   aprovarCodigo,
   conferirCodigo,
   aparelhoValido,
+  aparelhoDoToken,
   aparelhosDe,
 } from './contas.js';
 
@@ -81,6 +82,21 @@ function tokenDaReq(req, url) {
 
 function quemE(req, url) {
   return usuarioDoToken(tokenDaReq(req, url));
+}
+
+/**
+ * Quem esta agindo: uma pessoa (JWT) ou um aparelho pareado (token de aparelho,
+ * no x-device-token ou ?device=). Um painel de parede age sem senha em nome de
+ * quem o aprovou; email e senha ficam so pro app, onde ha teclado.
+ */
+function ator(req, url) {
+  const bearer = tokenDaReq(req, url);
+  const pessoa = usuarioDoToken(bearer);
+  if (pessoa) return { tipo: 'pessoa', user: pessoa };
+  const dt = req.headers['x-device-token'] || url.searchParams.get('device') || bearer;
+  const aparelho = aparelhoDoToken(dt);
+  if (aparelho) return { tipo: 'aparelho', device: aparelho };
+  return null;
 }
 
 export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
@@ -154,20 +170,25 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       return aparelhoValido(t) ? json(res, 200, { ok: true }) : json(res, 401, { erro: 'aparelho nao pareado' });
     }
 
-    // ── Daqui pra baixo, tudo exige uma pessoa logada. ──────────────────────
-    const usuario = quemE(req, url);
-    if (!usuario) return json(res, 401, { erro: 'faca login' });
+    // ── Daqui pra baixo, tudo exige um ator: pessoa OU aparelho pareado. ────
+    const quem = ator(req, url);
+    if (!quem) return json(res, 401, { erro: 'faca login' });
 
-    // A pessoa logada aprova o codigo que o aparelho mostra.
+    // Aprovar codigo e listar aparelhos so uma PESSOA faz (no app, com senha).
+    // Um painel nao pode aprovar a si mesmo nem ver a frota da conta.
     if (p === '/devices/aprovar' && req.method === 'POST') {
+      if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa aprova aparelho' });
       try {
         const { codigo } = JSON.parse((await lerCorpo(req)).toString() || '{}');
-        return json(res, 200, aprovarCodigo(codigo, usuario));
+        return json(res, 200, aprovarCodigo(codigo, quem.user));
       } catch (err) {
         return json(res, 400, { erro: err.message });
       }
     }
-    if (p === '/devices/meus') return json(res, 200, { aparelhos: aparelhosDe(usuario) });
+    if (p === '/devices/meus') {
+      if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa lista aparelhos' });
+      return json(res, 200, { aparelhos: aparelhosDe(quem.user) });
+    }
 
     // Estado ao vivo (SSE). O token veio no ?token= — ja validado acima.
     if (p === '/estado') {

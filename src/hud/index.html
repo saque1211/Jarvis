@@ -355,6 +355,13 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
 #boot .passos { display: flex; gap: 12px; margin-bottom: 40px; }
 #boot .passo { height: 4px; flex: 1; background: rgba(255,255,255,.14); border-radius: 2px; }
 #boot .passo.feito { background: var(--acento); }
+.cod-parear {
+  margin: 30px 0 10px; font-family: 'Manrope', var(--serif), system-ui, sans-serif;
+  font-size: 118px; font-weight: 800; letter-spacing: .12em;
+  color: var(--acento-claro); text-shadow: 0 6px 40px rgba(0,0,0,.4);
+}
+.cod-espera { font-size: 22px; color: rgba(255,255,255,.5); animation: piscaEspera 1.8s ease-in-out infinite; }
+@keyframes piscaEspera { 0%,100% { opacity: .45; } 50% { opacity: .9; } }
 .campo { display: flex; gap: 14px; margin-top: 26px; }
 .campo input {
   flex: 1; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.18);
@@ -501,7 +508,15 @@ let tentativas = 0;
 // PC ou celular onde voce ja entrou no app, o HUD abre logado. Numa tela nova
 // (um painel de parede), sem login, manda pro app pra entrar/parear.
 const JWT = localStorage.getItem('vexis_token') || '';
-const COMLOGIN = JWT ? { authorization: 'Bearer ' + JWT } : {};
+// Token de aparelho pareado. Um painel de parede nao tem senha: ele foi
+// aprovado uma vez pelo app e age em nome do dono. JWT (pessoa) tem prioridade
+// quando existe — no PC/celular onde alguem ja entrou.
+const DISP = localStorage.getItem('vexis_device') || '';
+const COMLOGIN = JWT
+  ? { authorization: 'Bearer ' + JWT }
+  : DISP ? { 'x-device-token': DISP } : {};
+// O que vai na URL do SSE (EventSource nao manda cabecalho).
+const CRED_URL = JWT ? '?token=' + encodeURIComponent(JWT) : DISP ? '?device=' + encodeURIComponent(DISP) : '';
 let CONTA = null; // {email} — de quem esta logado, pra Ajustes mostrar a conta
 
 async function carregarConta() {
@@ -513,8 +528,8 @@ async function carregarConta() {
 }
 
 function conectar() {
-  // Sem cabecalho no EventSource: o token vai na URL, como no app.
-  fonte = new EventSource('/estado' + (JWT ? '?token=' + encodeURIComponent(JWT) : ''));
+  // Sem cabecalho no EventSource: a credencial (pessoa ou aparelho) vai na URL.
+  fonte = new EventSource('/estado' + CRED_URL);
 
   fonte.onopen = () => {
     tentativas = 0;
@@ -1407,16 +1422,68 @@ if (botaoFalar) {
 }
 
 /* ========================================================================== */
-// Servido pela nuvem, o HUD exige login como o app. Sem token, vai pro app
-// pra entrar. (No PC/celular onde voce ja entrou, o localStorage e o mesmo e
-// isto nem dispara.) Localmente, sem nucleus, nao ha login e segue direto.
-if (location.port === '3000' && !JWT) {
-  location.href = '/app';
+// Servido pela nuvem (porta 3000), o HUD exige credencial. Um painel de parede
+// nao digita senha: se ainda nao foi pareado (nem JWT de pessoa, nem token de
+// aparelho), mostra o codigo de pareamento e espera a aprovacao no app. No
+// PC/celular onde alguem ja entrou, o localStorage tem o JWT e isto nem dispara.
+// Localmente (HUD na porta 8791, sem nucleus) nao ha login e segue direto.
+if (location.port === '3000' && !JWT && !DISP) {
+  mostrarPareamento();
 } else {
   conectar();
   carregarConta();
   setInterval(desenhar, 1000);
   aplicarPainel(0, false);
+}
+
+/* ── Pareamento do painel ───────────────────────────────────────────────────
+   O painel pede um codigo curto, mostra na tela, e faz polling ate a pessoa
+   aprovar no app. Aprovado, guarda o token do aparelho e recarrega — dali em
+   diante age como um aparelho pareado, sem nunca ter pedido senha. */
+async function mostrarPareamento() {
+  const b = $('boot');
+  b.classList.add('ativo');
+  $('passo1').classList.add('feito');
+  $('passo2').style.display = 'none';
+
+  async function pedir() {
+    $('boot-conteudo').innerHTML = '<h1>Pareando…</h1><p>Pedindo um código ao núcleo.</p>';
+    let dados;
+    try {
+      const r = await fetch('/devices/codigo', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ nome: 'Painel' }),
+      });
+      dados = await r.json();
+    } catch {
+      $('boot-conteudo').innerHTML = '<h1>Sem conexão</h1><p>Não alcancei o núcleo para parear. Tentando de novo…</p>';
+      setTimeout(pedir, 4000);
+      return;
+    }
+    const codigo = dados.codigo;
+    $('boot-conteudo').innerHTML =
+      '<h1>Parear este painel</h1>' +
+      '<p>Abra o app do VEXIS no celular, entre na sua conta e vá em ' +
+      '<b>Ajustes → Parear painel</b>. Digite o código:</p>' +
+      '<div class="cod-parear">' + esc(codigo) + '</div>' +
+      '<p class="cod-espera">Esperando aprovação…</p>';
+
+    const poll = setInterval(async () => {
+      let r;
+      try { r = await (await fetch('/devices/conferir?codigo=' + encodeURIComponent(codigo))).json(); }
+      catch { return; }
+      if (r.estado === 'aprovado') {
+        clearInterval(poll);
+        localStorage.setItem('vexis_device', r.token);
+        location.reload();
+      } else if (r.estado === 'expirado' || r.estado === 'inexistente') {
+        clearInterval(poll);
+        pedir(); // o codigo venceu; pega outro
+      }
+    }, 2500);
+  }
+  pedir();
 }
 </script>
 </body>

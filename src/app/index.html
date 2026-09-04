@@ -402,6 +402,16 @@ nav button:active svg { transform: scale(.9); }
     <h2>Casa inteligente</h2>
     <div class="carta" id="cartao-casa"></div>
 
+    <h2>Parear painel</h2>
+    <div class="carta">
+      <div class="sub" style="margin-bottom:10px">Um painel novo mostra um código de 6 dígitos na tela. Digite aqui para ligá-lo a esta conta.</div>
+      <div class="duplo">
+        <input type="tel" id="parear-codigo" inputmode="numeric" maxlength="6" placeholder="000000" style="letter-spacing:.28em;text-align:center;font-size:22px">
+        <button class="botao largo" id="parear-btn">Parear</button>
+      </div>
+      <div class="sub" id="parear-msg" style="margin-top:8px"></div>
+    </div>
+
     <h2>Dispositivo</h2>
     <div class="carta">
       <div class="linha">
@@ -883,6 +893,28 @@ $('volume').onchange = async () => {
   if (!r.ok) torrada(r.erro || 'Não consegui mudar o volume.');
 };
 $('nome-disp').onchange = () => gravar({ dispositivo: { nome: $('nome-disp').value.trim() } }, 'Nome salvo.');
+
+// Parear painel: a pessoa digita o código que o painel mostra na parede.
+$('parear-btn').onclick = async () => {
+  const codigo = $('parear-codigo').value.replace(/\D/g, '');
+  const msg = $('parear-msg');
+  if (codigo.length !== 6) { msg.textContent = 'O código tem 6 dígitos.'; return; }
+  $('parear-btn').disabled = true;
+  msg.textContent = 'Pareando…';
+  try {
+    const r = await api('/devices/aprovar', 'POST', { codigo });
+    if (r.nome) {
+      msg.textContent = '✓ "' + r.nome + '" pareado. O painel já vai abrir sozinho.';
+      $('parear-codigo').value = '';
+    } else {
+      msg.textContent = r.erro || 'Código inválido ou expirado.';
+    }
+  } catch (err) {
+    msg.textContent = 'Falhou: ' + err.message;
+  } finally {
+    $('parear-btn').disabled = false;
+  }
+};
 
 $('reiniciar').onclick = async () => {
   if (!confirm('Reiniciar o painel agora?')) return;

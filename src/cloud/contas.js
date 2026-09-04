@@ -225,6 +225,16 @@ export function aparelhoValido(token) {
   return lerDispositivos().aparelhos.some((a) => a.token === token);
 }
 
+/**
+ * Resolve o token num aparelho pareado. Um painel de parede nao tem senha —
+ * ele age em nome de quem o aprovou. Nunca devolve o token de volta.
+ */
+export function aparelhoDoToken(token) {
+  if (!token) return null;
+  const a = lerDispositivos().aparelhos.find((x) => x.token === token);
+  return a ? { id: a.id, nome: a.nome, dono: a.dono, donoEmail: a.donoEmail } : null;
+}
+
 /** Lista os aparelhos de uma pessoa, sem vazar o token. */
 export function aparelhosDe(usuario) {
   return lerDispositivos()
