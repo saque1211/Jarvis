@@ -520,10 +520,19 @@ const CRED_URL = JWT ? '?token=' + encodeURIComponent(JWT) : DISP ? '?device=' +
 let CONTA = null; // {email} — de quem esta logado, pra Ajustes mostrar a conta
 
 async function carregarConta() {
-  if (!JWT) return;
   try {
-    const r = await fetch('/auth/profile', { headers: COMLOGIN });
-    if (r.ok) { CONTA = (await r.json()).user || null; if (aberto) renderCentral(); }
+    if (JWT) {
+      // Logado como pessoa (PC/celular): a propria conta.
+      const r = await fetch('/auth/profile', { headers: COMLOGIN });
+      if (r.ok) CONTA = (await r.json()).user || null;
+    } else if (DISP) {
+      // Painel de parede: mostra o dono do pareamento, nao uma conta propria.
+      const r = await fetch('/devices/dono', { headers: COMLOGIN });
+      if (r.ok) CONTA = await r.json(); // { email, nome }
+    } else {
+      return;
+    }
+    if (CONTA && aberto) renderCentral();
   } catch { /* sem conta e so um rotulo; nao trava o painel */ }
 }
 

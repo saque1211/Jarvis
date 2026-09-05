@@ -183,6 +183,14 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     const quem = ator(req, url);
     if (!quem) return json(res, 401, { erro: 'faca login' });
 
+    // De quem e este acesso: um painel ve o dono do pareamento (pra mostrar a
+    // conta nos Ajustes), uma pessoa ve a propria conta.
+    if (p === '/devices/dono') {
+      return quem.tipo === 'aparelho'
+        ? json(res, 200, { email: quem.device.donoEmail, nome: quem.device.nome })
+        : json(res, 200, { email: quem.user.email });
+    }
+
     // Aprovar codigo e listar aparelhos so uma PESSOA faz (no app, com senha).
     // Um painel nao pode aprovar a si mesmo nem ver a frota da conta.
     if (p === '/devices/aprovar' && req.method === 'POST') {
