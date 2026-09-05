@@ -241,3 +241,13 @@ export function aparelhosDe(usuario) {
     .aparelhos.filter((a) => a.dono === usuario.id)
     .map((a) => ({ id: a.id, nome: a.nome, criadoEm: a.criadoEm }));
 }
+
+/** Remove um aparelho — so o dono. O painel desligado cai pro pareamento de novo. */
+export function removerAparelho(id, usuario) {
+  const dados = lerDispositivos();
+  const antes = dados.aparelhos.length;
+  dados.aparelhos = dados.aparelhos.filter((a) => !(a.id === id && a.dono === usuario.id));
+  if (dados.aparelhos.length === antes) throw new Error('Aparelho nao encontrado.');
+  gravarDispositivos(dados);
+  return { ok: true };
+}

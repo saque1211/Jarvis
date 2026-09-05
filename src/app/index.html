@@ -781,9 +781,17 @@ async function carregarAparelhos() {
       const desde = a.criadoEm ? new Date(a.criadoEm).toLocaleDateString('pt-BR') : '';
       return '<div class="linha"><div class="cresce">' +
         '<div class="rotulo">' + esc(a.nome || 'Painel') + '</div>' +
-        '<div class="sub">pareado' + (desde ? ' em ' + esc(desde) : '') + '</div>' +
-        '</div><div class="sub" style="color:var(--acento)">✓ ligado</div></div>';
+        '<div class="sub">pareado' + (desde ? ' em ' + esc(desde) : '') + ' · ✓ ligado</div>' +
+        '</div><button class="botao fantasma" data-remover="' + esc(a.id) + '" ' +
+        'style="min-height:38px;padding:6px 14px;color:var(--perigo);border-color:rgba(214,0,108,.4)">Remover</button></div>';
     }).join('');
+    for (const b of alvo.querySelectorAll('[data-remover]')) {
+      b.onclick = async () => {
+        if (!confirm('Remover este painel? Ele vai pedir pareamento de novo.')) return;
+        const r = await api('/devices/remover', 'POST', { id: b.dataset.remover });
+        if (r.ok) carregarAparelhos(); else torrada(r.erro || 'Não consegui remover.');
+      };
+    }
   } catch {
     alvo.innerHTML = '';
   }

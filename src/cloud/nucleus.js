@@ -17,6 +17,7 @@ import {
   aparelhoValido,
   aparelhoDoToken,
   aparelhosDe,
+  removerAparelho,
 } from './contas.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
@@ -188,6 +189,15 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     if (p === '/devices/meus') {
       if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa lista aparelhos' });
       return json(res, 200, { aparelhos: aparelhosDe(quem.user) });
+    }
+    if (p === '/devices/remover' && req.method === 'POST') {
+      if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa remove aparelho' });
+      try {
+        const { id } = JSON.parse((await lerCorpo(req)).toString() || '{}');
+        return json(res, 200, removerAparelho(id, quem.user));
+      } catch (err) {
+        return json(res, 400, { erro: err.message });
+      }
     }
 
     // Estado ao vivo (SSE). O token veio no ?token= — ja validado acima.
