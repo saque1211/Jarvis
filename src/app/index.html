@@ -572,10 +572,14 @@ function pintarAoVivo() {
 }
 
 /* ── fotos ─────────────────────────────────────────────────────────────── */
+// A credencial vai na URL da imagem: uma tag <img> não manda cabeçalho, e o
+// nucleus exige login até pra servir foto. Mesmo truque do /estado.
+const fotoUrl = (f) => '/fotos/' + encodeURIComponent(f) + (JWT ? '?token=' + encodeURIComponent(JWT) : '');
+
 async function carregarFotos() {
   const { fotos } = await api('/fotos');
   $('grade-fotos').innerHTML = fotos.length
-    ? fotos.map((f) => `<div class="foto"><img src="/fotos/${encodeURIComponent(f)}" alt="">
+    ? fotos.map((f) => `<div class="foto"><img src="${fotoUrl(f)}" alt="">
         <button class="x" data-apagar="${esc(f)}">×</button></div>`).join('')
     : '<div class="vazio" style="grid-column:1/-1">Nenhuma foto ainda.</div>';
 

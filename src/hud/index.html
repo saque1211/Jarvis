@@ -612,7 +612,9 @@ function trocarFoto() {
   fotoAtual = (fotoAtual + 1) % fotos.length;
 
   const img = document.createElement('img');
-  img.src = '/fotos/' + encodeURIComponent(fotos[fotoAtual]);
+  // A credencial (pessoa ou aparelho) vai na URL — <img> não manda cabeçalho, e
+  // pela nuvem o servir foto tambem exige login. No HUD local, CRED_URL e vazio.
+  img.src = '/fotos/' + encodeURIComponent(fotos[fotoAtual]) + CRED_URL;
   // So aparece depois de carregada: sem isso a troca pisca preto no meio.
   img.onload = () => {
     img.classList.add('visivel');
