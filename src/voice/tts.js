@@ -202,6 +202,21 @@ export async function playWav(file) {
     const fd = fs.openSync(file, 'r');
     fs.readSync(fd, cabecalho, 0, 4, 0);
     fs.closeSync(fd);
+    const ehWav = cabecalho.toString('ascii') === 'RIFF';
+
+    // Linux (VM e Raspberry): o PowerShell nao existe. WAV toca com aplay, MP3
+    // com mpg123 ou ffplay — o que estiver instalado. Sem player, a fala falha
+    // em silencio em vez de derrubar o daemon.
+    if (process.platform !== 'win32') {
+      const tentativas = ehWav
+        ? [['aplay', ['-q', file]], ['paplay', [file]], ['ffplay', ['-nodisp', '-autoexit', '-loglevel', 'quiet', file]]]
+        : [['mpg123', ['-q', file]], ['ffplay', ['-nodisp', '-autoexit', '-loglevel', 'quiet', file]], ['aplay', ['-q', file]]];
+      for (const [cmd, args] of tentativas) {
+        const r = await run(cmd, args, { timeoutMs: 60000 });
+        if (r.ok || r.code === 0) return;
+      }
+      return; // nenhum player achado — segue sem som
+    }
 
     const script =
       cabecalho.toString('ascii') === 'RIFF'
