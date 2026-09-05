@@ -68,6 +68,14 @@ header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display:
 .bolinha { width: 8px; height: 8px; border-radius: 50%; background: var(--fraco); flex: none; }
 .bolinha.viva { background: var(--acento); box-shadow: 0 0 10px var(--acento); }
 
+/* ---- meus painéis (topo da Casa) ---- */
+.painel-linha { display: flex; align-items: center; gap: 12px; }
+.painel-linha + .painel-linha { border-top: 1px solid var(--borda); margin-top: 10px; padding-top: 12px; }
+.painel-luz { width: 10px; height: 10px; border-radius: 50%; background: var(--fraco); flex: none; }
+.painel-luz.on { background: #2ecc71; box-shadow: 0 0 10px #2ecc71; }
+.painel-linha .estado { font-size: 13px; color: var(--fraco); }
+.painel-linha .estado.on { color: #2ecc71; }
+
 /* ---- páginas ---- */
 main { padding: 18px 16px 24px; }
 .pagina { display: none; }
@@ -278,6 +286,8 @@ nav button:active svg { transform: scale(.9); }
         <span class="relogio" id="relogio">—</span>
       </div>
     </div>
+
+    <div id="meus-paineis"></div>
 
     <div class="carta cartao-voz" id="cartao-voz">
       <div class="linha">
@@ -1050,6 +1060,27 @@ function iniciarApp() {
   conectar();
   carregarConfig();
   carregarCasaRapida(); // a aba Casa já abre ativa; carrega os botões da casa
+  carregarPaineis();
+  // Presença muda quando um painel liga ou desliga; relê de tempos em tempos.
+  clearInterval(iniciarApp._t);
+  iniciarApp._t = setInterval(carregarPaineis, 15000);
+}
+
+/* Card "Meus painéis" no topo da Casa: os aparelhos pareados e se estão ligados
+   agora (presença de verdade — o painel ligado mantém o estado aberto). */
+async function carregarPaineis() {
+  const alvo = $('meus-paineis');
+  if (!alvo) return;
+  let r;
+  try { r = await api('/devices/meus'); } catch { return; }
+  const aps = (r && r.aparelhos) || [];
+  if (!aps.length) { alvo.innerHTML = ''; return; }
+  alvo.innerHTML = '<h2>Meus painéis</h2><div class="carta">' + aps.map((a) =>
+    '<div class="painel-linha">' +
+    '<span class="painel-luz' + (a.online ? ' on' : '') + '"></span>' +
+    '<div class="cresce"><div class="rotulo">' + esc(a.nome || 'Painel') + '</div></div>' +
+    '<span class="estado' + (a.online ? ' on' : '') + '">' + (a.online ? 'ligado' : 'desligado') + '</span>' +
+    '</div>').join('') + '</div>';
 }
 
 async function abrir() {

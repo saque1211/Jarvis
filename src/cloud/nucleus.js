@@ -102,6 +102,14 @@ function ator(req, url) {
 
 export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   const clientes = new Set();
+  // Presenca dos paineis: id do aparelho -> quantas conexoes de estado abertas.
+  // Um painel ligado mantem o SSE aberto; caiu a zero, esta desligado. E o que
+  // deixa a Casa do app dizer "ligado" sem inventar.
+  const presenca = new Map();
+  const marcarPresenca = (id, delta) => {
+    const n = (presenca.get(id) || 0) + delta;
+    if (n > 0) presenca.set(id, n); else presenca.delete(id);
+  };
   let vitais = null;
   let tempo = null;
   let caps = null;
@@ -188,7 +196,8 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     }
     if (p === '/devices/meus') {
       if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa lista aparelhos' });
-      return json(res, 200, { aparelhos: aparelhosDe(quem.user) });
+      const lista = aparelhosDe(quem.user).map((a) => ({ ...a, online: (presenca.get(a.id) || 0) > 0 }));
+      return json(res, 200, { aparelhos: lista });
     }
     if (p === '/devices/remover' && req.method === 'POST') {
       if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa remove aparelho' });
@@ -216,7 +225,13 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       });
       res.write(`data: ${primeiro}\n\n`);
       clientes.add(res);
-      req.on('close', () => clientes.delete(res));
+      // Se quem abriu foi um painel, ele passa a contar como "ligado".
+      const idPainel = quem.tipo === 'aparelho' ? quem.device.id : null;
+      if (idPainel) marcarPresenca(idPainel, +1);
+      req.on('close', () => {
+        clientes.delete(res);
+        if (idPainel) marcarPresenca(idPainel, -1);
+      });
       return;
     }
 
