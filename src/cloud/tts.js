@@ -18,15 +18,45 @@ import { sintetizarBytes, isConfigured as elevenConfigured } from '../integratio
 const BINARIO = process.env.PIPER_BIN || 'piper';
 const VOZ = process.env.PIPER_VOICE || '/opt/piper/pt_BR-faber-medium.onnx';
 
+// espeak-ng: o ultimo recurso. Voz robotica, mas ja vem no Raspberry Pi OS e
+// nao pede chave nem download — melhor um assistente que fala feio que um mudo
+// esperando o Piper/ElevenLabs serem configurados.
+const ESPEAK = ['/usr/bin/espeak-ng', '/usr/bin/espeak', '/usr/local/bin/espeak-ng'].find((p) => {
+  try { return fs.existsSync(p); } catch { return false; }
+});
+
 export function ttsConfigurado() {
-  return elevenConfigured() || fs.existsSync(VOZ);
+  return elevenConfigured() || fs.existsSync(VOZ) || Boolean(ESPEAK);
 }
 
 /** Qual voz o servidor vai usar, pro banner nao mentir. */
 export function motorDeVoz() {
   if (elevenConfigured()) return 'ElevenLabs';
   if (fs.existsSync(VOZ)) return 'Piper';
+  if (ESPEAK) return 'espeak-ng';
   return null;
+}
+
+/** Fallback: espeak-ng gera o WAV. Devolve bytes ou null. */
+function sintetizarEspeak(texto) {
+  if (!ESPEAK) return Promise.resolve(null);
+  const saida = path.join(os.tmpdir(), `vexis-espeak-${Date.now()}.wav`);
+  return new Promise((resolve) => {
+    const p = spawn(ESPEAK, ['-v', 'pt-br', '-s', '165', '-w', saida], { stdio: ['pipe', 'ignore', 'ignore'] });
+    p.on('error', () => resolve(null));
+    p.on('close', () => {
+      try {
+        const wav = fs.readFileSync(saida);
+        resolve(wav.length ? wav : null);
+      } catch {
+        resolve(null);
+      } finally {
+        fs.rmSync(saida, { force: true });
+      }
+    });
+    p.stdin.write(texto);
+    p.stdin.end();
+  });
 }
 
 /**
@@ -48,7 +78,8 @@ export async function sintetizar(texto) {
     }
   }
 
-  if (!fs.existsSync(VOZ)) return null;
+  // Sem Piper instalado: cai no espeak-ng, que ja vem no sistema.
+  if (!fs.existsSync(VOZ)) return sintetizarEspeak(texto);
 
   const saida = path.join(os.tmpdir(), `vexis-${Date.now()}.wav`);
 
