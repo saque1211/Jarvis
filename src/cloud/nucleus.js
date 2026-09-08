@@ -14,6 +14,7 @@ import {
   pedirCodigo,
   aprovarCodigo,
   conferirCodigo,
+  conferirPorSegredo,
   aparelhoValido,
   aparelhoDoToken,
   aparelhosDe,
@@ -172,6 +173,27 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     }
     if (p === '/devices/conferir') {
       return json(res, 200, conferirCodigo(url.searchParams.get('codigo')));
+    }
+    // Protocolo do cliente do Pi: registra (codigo publico + segredo de polling)
+    // e faz polling pelo segredo, que nunca aparece na tela nem no ar.
+    if (p === '/devices/register' && req.method === 'POST') {
+      try {
+        const { deviceName } = JSON.parse((await lerCorpo(req)).toString() || '{}');
+        const { codigo, pollSecret } = pedirCodigo(deviceName || 'Aparelho');
+        return json(res, 200, { device: { pairingCode: codigo, pollSecret } });
+      } catch (err) {
+        return json(res, 400, { erro: err.message });
+      }
+    }
+    if (p === '/devices/poll' && req.method === 'POST') {
+      try {
+        const { pollSecret } = JSON.parse((await lerCorpo(req)).toString() || '{}');
+        const r = conferirPorSegredo(pollSecret);
+        if (!r.encontrado) return json(res, 404, { erro: 'segredo desconhecido' });
+        return json(res, 200, { approved: Boolean(r.approved), deviceToken: r.deviceToken || null, device: r.device || null });
+      } catch (err) {
+        return json(res, 400, { erro: err.message });
+      }
     }
     // O cerebro de voz valida o token do aparelho aqui.
     if (p === '/devices/ping') {

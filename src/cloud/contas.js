@@ -182,9 +182,12 @@ export function pedirCodigo(nome) {
   const agora = Date.now();
   dados.codigos = dados.codigos.filter((c) => c.expira > agora && !c.token); // limpa vencidos/usados
   const codigo = String(Math.floor(100000 + Math.random() * 900000));
-  dados.codigos.push({ codigo, nome: String(nome || 'Aparelho'), criadoEm: agora, expira: agora + VALIDADE_CODIGO, token: null });
+  // Segredo de polling: separado do codigo publico. O aparelho fala o codigo em
+  // voz alta, mas faz polling com ISTO — quem ouvir o codigo nao rouba o token.
+  const pollSecret = crypto.randomBytes(24).toString('hex');
+  dados.codigos.push({ codigo, pollSecret, nome: String(nome || 'Aparelho'), criadoEm: agora, expira: agora + VALIDADE_CODIGO, token: null, deviceId: null });
   gravarDispositivos(dados);
-  return { codigo, expira_em: VALIDADE_CODIGO };
+  return { codigo, pollSecret, expira_em: VALIDADE_CODIGO };
 }
 
 /** A pessoa logada aprova o codigo mostrado no aparelho. */
@@ -205,11 +208,12 @@ export function aprovarCodigo(codigo, usuario) {
   };
   dados.aparelhos.push(aparelho);
   pedido.token = token; // o aparelho, fazendo polling, encontra e guarda
+  pedido.deviceId = aparelho.id;
   gravarDispositivos(dados);
   return { nome: aparelho.nome };
 }
 
-/** O aparelho faz polling neste ate o codigo ser aprovado. */
+/** O aparelho faz polling neste ate o codigo ser aprovado (por codigo). */
 export function conferirCodigo(codigo) {
   const dados = lerDispositivos();
   const pedido = dados.codigos.find((c) => c.codigo === String(codigo));
@@ -217,6 +221,16 @@ export function conferirCodigo(codigo) {
   if (pedido.token) return { estado: 'aprovado', token: pedido.token };
   if (pedido.expira <= Date.now()) return { estado: 'expirado' };
   return { estado: 'aguardando' };
+}
+
+/** Polling por segredo (o cliente do Pi): nao expoe o token pelo codigo publico. */
+export function conferirPorSegredo(pollSecret) {
+  const dados = lerDispositivos();
+  const pedido = dados.codigos.find((c) => c.pollSecret === pollSecret);
+  if (!pedido) return { encontrado: false };
+  if (pedido.token) return { encontrado: true, approved: true, deviceToken: pedido.token, device: { id: pedido.deviceId, name: pedido.nome } };
+  if (pedido.expira <= Date.now()) return { encontrado: true, approved: false, expirado: true };
+  return { encontrado: true, approved: false };
 }
 
 /** Valida o token de um aparelho (usado pelo /devices/ping do cerebro). */
