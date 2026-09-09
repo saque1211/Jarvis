@@ -11,8 +11,9 @@ import { loadSkills } from './core/registry.js';
  * funciona falado, e testar por texto e muito mais rapido.
  */
 
+const NOME = (config.nome || 'VEXIS').toUpperCase();
 const BANNER = `
-${pc.bold(pc.cyan('  JARVIS'))}
+${pc.bold(pc.cyan(`  ${NOME}`))}
 ${pc.dim('  SPEAK. ROUTE. REMEMBER. REPEAT.')}
 `;
 
@@ -23,7 +24,7 @@ async function runOnce(command, { spoken }) {
     onStep: ({ tool }) => console.log(pc.dim(`  → ${tool}`)),
   });
 
-  console.log(`\n${pc.magenta('JARVIS:')} ${reply}\n`);
+  console.log(`\n${pc.magenta(`${NOME}:`)} ${reply}\n`);
 
   if (timings) {
     const s = (ms) => `${(ms / 1000).toFixed(1)}s`;
