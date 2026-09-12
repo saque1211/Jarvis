@@ -90,11 +90,12 @@ export default {
       name: 'home_control',
       description:
         'Liga, desliga ou ajusta um dispositivo da casa pelo Home Assistant. ' +
-        'Use home_list_entities antes se nao souber o entity_id exato.',
+        'Aceita o NOME do aparelho ("Ar do Isaque", "luz da sala") OU o entity_id — ' +
+        'resolve o nome sozinho, entao nao precisa adivinhar o entity_id exato.',
       input_schema: {
         type: 'object',
         properties: {
-          entity_id: { type: 'string', description: 'Ex: "light.sala", "switch.ventilador".' },
+          entity_id: { type: 'string', description: 'Nome ("Ar do Isaque") ou entity_id ("light.sala").' },
           action: { type: 'string', enum: ['turn_on', 'turn_off', 'toggle'] },
           brightness: { type: 'number', description: 'Brilho 0-255, so pra luzes.' },
           temperature: { type: 'number', description: 'Temperatura alvo, so pra climate.' },
@@ -102,18 +103,49 @@ export default {
         required: ['entity_id', 'action'],
       },
       handler: async ({ entity_id, action, brightness, temperature }) => {
-        const domain = entity_id.split('.')[0];
-        const body = { entity_id };
-        if (brightness != null) body.brightness = brightness;
-        if (temperature != null) body.temperature = temperature;
-
+        // O modelo costuma CHUTAR um entity_id a partir do nome amigavel
+        // ("climate.ar_do_isaque"), mas o HA usa ids cripticos
+        // ("climate.150633..._climate"). O HA aceita a chamada num id que nao
+        // existe e nao faz nada — e ai o assistente diz "liguei" sem ter ligado.
+        // Por isso: resolvemos o alvo de verdade contra os estados reais.
+        const CONTROLAVEIS = ['light', 'switch', 'climate', 'fan', 'media_player', 'cover', 'input_boolean'];
         try {
+          const states = await homeAssistant('/states');
+          const bruto = String(entity_id || '').trim();
+          const q = bruto.toLowerCase().replace(/^[a-z_]+\./, ''); // tira o dominio, se veio
+
+          let alvo = states.find((e) => e.entity_id.toLowerCase() === bruto.toLowerCase());
+          if (!alvo && q) {
+            const candidatos = states.filter((e) => {
+              const nome = (e.attributes?.friendly_name || '').toLowerCase();
+              return nome.includes(q) || e.entity_id.toLowerCase().includes(q);
+            });
+            alvo = candidatos.find((e) => CONTROLAVEIS.includes(e.entity_id.split('.')[0])) || candidatos[0];
+          }
+          if (!alvo) return `Nao achei um aparelho chamado "${entity_id}" na casa.`;
+
+          const realId = alvo.entity_id;
+          const domain = realId.split('.')[0];
+          const body = { entity_id: realId };
+          if (brightness != null) body.brightness = brightness;
+          if (temperature != null) body.temperature = temperature;
           const service = temperature != null ? 'set_temperature' : action;
+
           await homeAssistant(`/services/${domain}/${service}`, {
             method: 'POST',
             body: JSON.stringify(body),
           });
-          return `${entity_id}: ${action}.`;
+
+          // Confere o estado real depois — nao anuncia o que nao aconteceu.
+          const nome = alvo.attributes?.friendly_name || realId;
+          try {
+            await new Promise((r) => setTimeout(r, 800));
+            const novo = await homeAssistant(`/states/${realId}`);
+            const verbo = action === 'turn_off' ? 'Desliguei' : action === 'turn_on' ? 'Liguei' : 'Alternei';
+            return `${verbo} ${nome} (agora: ${novo?.state}).`;
+          } catch {
+            return `${nome}: ${action}.`;
+          }
         } catch (err) {
           return err.message;
         }
