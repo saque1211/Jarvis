@@ -7,6 +7,7 @@ import { route } from '../core/router.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
 import { capacidades } from '../platform/index.js';
 import { atenderControle } from '../hud/controle.js';
+import { acompanharSpotify } from '../integrations/spotify-agora.js';
 import {
   registrar,
   entrar,
@@ -348,6 +349,9 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     }
   }, 25000);
 
+  // "Tocando agora" ao vivo, igual no HUD local — mesmo runtime, mesma tela.
+  const musica = acompanharSpotify();
+
   servidor.on('error', (err) => console.error(`[nucleus] erro no servidor: ${err.message}`));
   servidor.listen(port, host);
   return {
@@ -356,6 +360,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       clearInterval(tickEstado);
       clearInterval(tickTempo);
       clearInterval(batida);
+      musica.stop();
       for (const c of clientes) c.end();
       servidor.close();
     },

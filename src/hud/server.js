@@ -7,6 +7,7 @@ import { route } from '../core/router.js';
 import { atenderControle } from './controle.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
 import { capacidades } from '../platform/index.js';
+import { acompanharSpotify } from '../integrations/spotify-agora.js';
 
 /**
  * Servidor do HUD.
@@ -228,6 +229,10 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
     console.error(`[hud] promessa rejeitada sem tratamento: ${err?.message || err}`)
   );
 
+  // "Tocando agora": pergunta ao Spotify em cadencia propria e escreve no
+  // runtime que o snapshot ja expoe.
+  const musica = acompanharSpotify();
+
   servidor.listen(port, host);
 
   return {
@@ -236,6 +241,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       clearInterval(tickEstado);
       clearInterval(tickVitais);
       clearInterval(tickTempo);
+      musica.stop();
       for (const c of clientes) c.end();
       servidor.close();
     },
