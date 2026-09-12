@@ -7,6 +7,7 @@ import { route } from '../core/router.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
 import { capacidades } from '../platform/index.js';
 import { atenderControle } from '../hud/controle.js';
+import { atenderCapa } from '../hud/capa.js';
 import { acompanharSpotify } from '../integrations/spotify-agora.js';
 import {
   registrar,
@@ -307,6 +308,10 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
         return json(res, 200, { erro: err.message, resposta: 'Nao alcancei o cerebro de voz.', audio: null });
       }
     }
+
+    // Capa do album, repassada pela nossa origem pra o canvas conseguir ler
+    // as cores (imagem de outra origem bloqueia getImageData).
+    if (await atenderCapa(req, res, url)) return;
 
     // Fotos e central de controle (Wi-Fi, ajustes, compras…): mesmas do HUD.
     if (await atenderControle(req, res, url)) return;

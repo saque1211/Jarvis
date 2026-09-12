@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { snapshot } from '../core/state.js';
 import { route } from '../core/router.js';
 import { atenderControle } from './controle.js';
+import { atenderCapa } from './capa.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
 import { capacidades } from '../platform/index.js';
 import { acompanharSpotify } from '../integrations/spotify-agora.js';
@@ -138,6 +139,10 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       res.end(fs.readFileSync(arquivo));
       return;
     }
+
+    // Capa do album, repassada pela nossa origem pra o canvas conseguir ler
+    // as cores (imagem de outra origem bloqueia getImageData).
+    if (await atenderCapa(req, res, url)) return;
 
     // Fotos e central de controle. Devolve true quando atendeu.
     if (await atenderControle(req, res, url)) return;

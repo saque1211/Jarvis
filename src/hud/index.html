@@ -278,6 +278,81 @@ html, body {
 .cl-linha { font-size: 26px; color: rgba(255,255,255,.58); margin-top: 12px; animation: clSobeTxt .7s .5s cubic-bezier(.22,1,.36,1) both; }
 @keyframes clSobeTxt { from { transform: translateY(34px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* ---- cena do player (tocando agora, em tela cheia) ----
+   A paleta inteira vem da CAPA: o JS tira a cor dominante do disco e preenche
+   estas variaveis. Sem capa legivel, cai num azul neutro em vez de sumir. */
+#player-cena {
+  position: absolute; inset: 0; z-index: 77;
+  display: none; align-items: center; justify-content: center;
+  background: var(--pl-bg, #14100d);
+  font-family: 'Manrope', system-ui, sans-serif;
+  opacity: 0; transition: opacity .55s ease;
+}
+#player-cena.on { display: flex; opacity: 1; }
+.pl-caixa {
+  width: 1600px; height: 820px; display: flex; overflow: hidden;
+  border-radius: 26px; background: var(--pl-bg, #14100d);
+  box-shadow: 0 40px 100px -30px rgba(0,0,0,.75);
+  animation: plEntra .6s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes plEntra { from { transform: translateY(30px) scale(.985); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* lado da capa: gradiente tirado do disco, com a capa flutuando por cima */
+.pl-arte {
+  width: 620px; flex: none; position: relative;
+  background: linear-gradient(150deg, var(--pl-g1, #e0654a), var(--pl-g2, #8a2c1c) 55%, var(--pl-g3, #3a1611));
+}
+.pl-arte i {
+  position: absolute; inset: 56px; border-radius: 22px; display: block;
+  background-size: cover; background-position: center;
+  box-shadow: 0 34px 70px -18px rgba(0,0,0,.65);
+  animation: plCapa .7s .1s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes plCapa { from { transform: scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* lado do texto */
+.pl-lado { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 76px 84px 78px; }
+.pl-rotulo {
+  font-size: 21px; font-weight: 600; letter-spacing: .24em; text-transform: uppercase;
+  color: var(--pl-label, #e08a6e);
+}
+.pl-titulo {
+  font-size: 86px; font-weight: 800; line-height: 1.02; letter-spacing: -.015em;
+  color: #fbf3f5; margin: 26px 0 16px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.pl-titulo.longo { font-size: 62px; }
+.pl-artista { font-size: 40px; font-weight: 500; line-height: 1.3; color: var(--pl-artist, #d19a86); }
+.pl-meta { font-size: 26px; color: rgba(255,255,255,.45); margin-top: 22px; }
+.pl-empurra { flex: 1; }
+
+/* barra de progresso */
+.pl-trilha { position: relative; height: 10px; border-radius: 999px; background: rgba(255,255,255,.16); }
+.pl-trilha .cheio {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px;
+  background: var(--pl-accent, #e0654a); width: 0%;
+}
+.pl-trilha .bolinha {
+  position: absolute; top: 50%; width: 24px; height: 24px; border-radius: 50%; left: 0;
+  transform: translate(-50%, -50%); background: #fff; box-shadow: 0 3px 12px rgba(0,0,0,.5);
+}
+.pl-tempos {
+  display: flex; justify-content: space-between; margin-top: 16px;
+  font-family: var(--mono); font-size: 25px; font-weight: 500; color: rgba(255,255,255,.55);
+}
+
+/* controles */
+.pl-controles { display: flex; align-items: center; gap: 56px; margin-top: 38px; color: #fbf3f5; }
+.pl-bt { border: none; background: none; padding: 0; cursor: pointer; display: grid; place-items: center; transition: transform .12s ease; }
+.pl-bt:active { transform: scale(.94); }
+.pl-bt svg { width: 44px; height: 44px; fill: currentColor; display: block; }
+.pl-play {
+  width: 110px; height: 110px; border-radius: 50%;
+  background: var(--pl-accent, #e0654a); color: var(--pl-botao-texto, #2a1019);
+  box-shadow: 0 14px 34px -8px rgba(0,0,0,.5);
+}
+.pl-play svg { width: 48px; height: 48px; }
+
 /* ---- tocando agora ---- */
 #tocando { position: absolute; right: 72px; bottom: 118px; z-index: 5; display: flex; align-items: center; gap: 18px; max-width: 440px; text-shadow: 0 2px 18px rgba(0,0,0,.5); }
 #tocando.oculto { display: none; }
@@ -462,6 +537,9 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
 
   <!-- cena do tempo: aparece so quando a pessoa pede a previsao -->
   <div id="clima-cena"><div class="cl-cartao"></div></div>
+
+  <!-- cena do player: aparece quando a musica troca -->
+  <div id="player-cena"><div class="pl-caixa"></div></div>
 
   <!-- primeiro boot: Wi-Fi antes da conta -->
   <div id="boot">
@@ -669,6 +747,7 @@ function desenhar() {
   desenharTimers();
   desenharClima();
   desenharTocando();
+  desenharPlayer();
 
   if (!arrastando && !aberto) verificarBoot();
 }
@@ -892,6 +971,170 @@ function montarClima(c) {
     `<div class="cl-cond">${esc(cond)}</div>` +
     `<div class="cl-minmax">mín ${c.min}° · máx ${c.max}°${c.vaiChover ? ' · 🌂' : ''}</div>` +
     `<div class="cl-linha">${esc(c.local || '')} · ${dataCap}</div>`;
+}
+
+/* ==========================================================================
+   Cena do player — "tocando agora" em tela cheia
+   ==========================================================================
+   A paleta sai da CAPA: o disco manda na cor da tela. A capa vem pela nossa
+   rota /capa (proxy) porque imagem de outra origem suja o canvas e impede ler
+   os pixels.
+
+   Aparece na TROCA de faixa e sai sozinha depois de alguns segundos. Ficar pra
+   sempre esconderia o resto do painel — e musica toca por horas.
+   ========================================================================== */
+const PLAYER_DUR = 20000;
+let playerAssinatura = null;
+let playerTimer = null;
+let playerAtual = null; // dados da faixa em cena, pro progresso continuar correndo
+
+function rgbParaHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  const l = (mx + mn) / 2;
+  if (mx === mn) return [0, 0, l];
+  const d = mx - mn;
+  const s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+  let h;
+  if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+  else if (mx === g) h = ((b - r) / d + 2) / 6;
+  else h = ((r - g) / d + 4) / 6;
+  return [h, s, l];
+}
+
+/**
+ * A cor que manda na capa. Agrupa por matiz e escolhe o grupo com melhor
+ * combinação de populacao e viveza — a media crua puxaria tudo pra um cinza.
+ */
+function corDaCapa(img) {
+  const N = 36;
+  const c = document.createElement('canvas');
+  c.width = N; c.height = N;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, N, N);
+  let dados;
+  try {
+    dados = g.getImageData(0, 0, N, N).data;
+  } catch {
+    return null; // canvas sujo (origem diferente) — segue na paleta neutra
+  }
+  const baldes = new Map();
+  for (let i = 0; i < dados.length; i += 4) {
+    if (dados[i + 3] < 128) continue;
+    const [h, sat, luz] = rgbParaHsl(dados[i], dados[i + 1], dados[i + 2]);
+    if (luz < 0.12 || luz > 0.92) continue; // quase preto/branco nao vira paleta
+    const chave = Math.round(h * 24);
+    const b = baldes.get(chave) || { n: 0, h: 0, s: 0, l: 0 };
+    b.n++; b.h += h; b.s += sat; b.l += luz;
+    baldes.set(chave, b);
+  }
+  let melhor = null, nota = -1;
+  for (const b of baldes.values()) {
+    const sat = b.s / b.n, luz = b.l / b.n;
+    const pontos = b.n * (0.35 + sat) * (1 - Math.abs(luz - 0.5));
+    if (pontos > nota) { nota = pontos; melhor = { h: b.h / b.n, s: sat }; }
+  }
+  return melhor;
+}
+
+/** Uma matiz vira a tela inteira: mesma cor em degraus de luz, como no mockup. */
+function aplicarPaleta(base) {
+  const h = Math.round((base ? base.h : 0.58) * 360);
+  const s = base ? Math.min(0.75, Math.max(0.35, base.s)) : 0.28;
+  const cor = (sat, luz) => `hsl(${h} ${Math.round(sat * 100)}% ${Math.round(luz * 100)}%)`;
+  const e = $('player-cena').style;
+  e.setProperty('--pl-accent', cor(s, 0.58));
+  e.setProperty('--pl-g1', cor(s, 0.58));
+  e.setProperty('--pl-g2', cor(s * 0.92, 0.33));
+  e.setProperty('--pl-g3', cor(s * 0.76, 0.15));
+  e.setProperty('--pl-bg', cor(s * 0.5, 0.08));
+  e.setProperty('--pl-label', cor(s * 0.9, 0.66));
+  e.setProperty('--pl-artist', cor(s * 0.62, 0.67));
+  e.setProperty('--pl-botao-texto', cor(s * 0.5, 0.10));
+}
+
+const relogioFaixa = (ms) => {
+  const t = Math.max(0, Math.round(ms / 1000));
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+};
+
+function montarPlayer(np) {
+  const capa = np.art ? '/capa?u=' + encodeURIComponent(np.art) : '';
+  const meta = [np.album, np.isPlaying ? null : 'pausado'].filter(Boolean).join(' · ');
+  const longo = (np.title || '').length > 28 ? ' longo' : '';
+
+  $('player-cena').querySelector('.pl-caixa').innerHTML =
+    `<div class="pl-arte"><i style="${capa ? `background-image:url('${capa}')` : ''}"></i></div>` +
+    '<div class="pl-lado">' +
+      '<div class="pl-rotulo">Tocando agora</div>' +
+      `<div class="pl-titulo${longo}">${esc(np.title)}</div>` +
+      `<div class="pl-artista">${esc(np.artist || '')}</div>` +
+      `<div class="pl-meta">${esc(meta)}</div>` +
+      '<div class="pl-empurra"></div>' +
+      '<div class="pl-trilha"><div class="cheio"></div><div class="bolinha"></div></div>' +
+      '<div class="pl-tempos"><span class="agora">0:00</span><span class="total">0:00</span></div>' +
+      '<div class="pl-controles">' +
+        '<button class="pl-bt" data-toca="anterior"><svg viewBox="0 0 24 24"><path d="M6 6v12h2V6zm12 0l-9 6 9 6z"/></svg></button>' +
+        `<button class="pl-bt pl-play" data-toca="${np.isPlaying ? 'pausa' : 'retoma'}"><svg viewBox="0 0 24 24">` +
+          (np.isPlaying ? '<path d="M7 5h4v14H7zm6 0h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>') +
+        '</svg></button>' +
+        '<button class="pl-bt" data-toca="proxima"><svg viewBox="0 0 24 24"><path d="M16 6v12h2V6zM6 6v12l9-6z"/></svg></button>' +
+      '</div>' +
+    '</div>';
+
+  // A paleta so pode sair depois que a imagem existe de fato.
+  aplicarPaleta(null);
+  if (capa) {
+    const img = new Image();
+    img.onload = () => aplicarPaleta(corDaCapa(img));
+    img.src = capa;
+  }
+
+  for (const b of $('player-cena').querySelectorAll('[data-toca]')) {
+    b.onclick = () => {
+      mandar('/comando', 'POST', { texto: b.dataset.toca + ' a musica' });
+      torrada(b.dataset.toca);
+    };
+  }
+}
+
+/** O progresso corre sozinho: o servidor so manda a posicao a cada leitura. */
+function correrProgresso() {
+  const np = playerAtual;
+  const cena = $('player-cena');
+  if (!np || !cena.classList.contains('on') || !np.durationMs) return;
+  const andou = np.isPlaying ? Date.now() - (np.at || Date.now()) : 0;
+  const pos = Math.min(np.durationMs, (np.progressMs || 0) + andou);
+  const pct = (pos / np.durationMs) * 100;
+  const cheio = cena.querySelector('.cheio');
+  const bolinha = cena.querySelector('.bolinha');
+  if (cheio) cheio.style.width = pct + '%';
+  if (bolinha) bolinha.style.left = pct + '%';
+  const agora = cena.querySelector('.agora');
+  const total = cena.querySelector('.total');
+  if (agora) agora.textContent = relogioFaixa(pos);
+  if (total) total.textContent = relogioFaixa(np.durationMs);
+}
+
+function desenharPlayer() {
+  const np = ESTADO.nowPlaying;
+  const cena = $('player-cena');
+  if (!np || !np.title) {
+    cena.classList.remove('on');
+    playerAssinatura = null;
+    playerAtual = null;
+    return;
+  }
+  playerAtual = np;
+  const assinatura = `${np.title}|${np.artist}|${np.isPlaying}`;
+  if (assinatura !== playerAssinatura) {
+    playerAssinatura = assinatura;
+    montarPlayer(np);
+    cena.classList.add('on');
+    clearTimeout(playerTimer);
+    playerTimer = setTimeout(() => cena.classList.remove('on'), PLAYER_DUR);
+  }
+  correrProgresso();
 }
 
 function desenharTocando() {
