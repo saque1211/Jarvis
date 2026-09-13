@@ -983,10 +983,13 @@ function montarClima(c) {
    Aparece na TROCA de faixa e sai sozinha depois de alguns segundos. Ficar pra
    sempre esconderia o resto do painel — e musica toca por horas.
    ========================================================================== */
-const PLAYER_DUR = 20000;
+// Fica na tela ENQUANTO toca. Pausou, espera isto antes de sumir: uma pausa
+// curta nao pode arrancar o painel da frente de quem esta olhando.
+const PLAYER_ESPERA_PAUSA = 45000;
 let playerAssinatura = null;
 let playerTimer = null;
-let playerAtual = null; // dados da faixa em cena, pro progresso continuar correndo
+let playerTocando = null; // ultimo isPlaying desenhado, pra so mexer no botao quando muda
+let playerAtual = null;   // dados da faixa em cena, pro progresso continuar correndo
 
 function rgbParaHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
@@ -1060,7 +1063,7 @@ const relogioFaixa = (ms) => {
 
 function montarPlayer(np) {
   const capa = np.art ? '/capa?u=' + encodeURIComponent(np.art) : '';
-  const meta = [np.album, np.isPlaying ? null : 'pausado'].filter(Boolean).join(' · ');
+  const meta = np.album || '';
   const longo = (np.title || '').length > 28 ? ' longo' : '';
 
   $('player-cena').querySelector('.pl-caixa').innerHTML =
@@ -1098,6 +1101,15 @@ function montarPlayer(np) {
   }
 }
 
+/** Play/pausa muda so o botao — remontar reiniciaria a animacao de entrada. */
+function atualizarBotao(np) {
+  const b = $('player-cena').querySelector('.pl-play');
+  if (!b) return;
+  b.dataset.toca = np.isPlaying ? 'pausa' : 'retoma';
+  b.innerHTML = '<svg viewBox="0 0 24 24">' +
+    (np.isPlaying ? '<path d="M7 5h4v14H7zm6 0h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>') + '</svg>';
+}
+
 /** O progresso corre sozinho: o servidor so manda a posicao a cada leitura. */
 function correrProgresso() {
   const np = playerAtual;
@@ -1122,18 +1134,33 @@ function desenharPlayer() {
   if (!np || !np.title) {
     cena.classList.remove('on');
     playerAssinatura = null;
+    playerTocando = null;
     playerAtual = null;
     return;
   }
   playerAtual = np;
-  const assinatura = `${np.title}|${np.artist}|${np.isPlaying}`;
-  if (assinatura !== playerAssinatura) {
+
+  // Remonta so na troca de FAIXA: e quando a capa muda, e a paleta com ela.
+  const assinatura = `${np.title}|${np.artist}`;
+  const trocouFaixa = assinatura !== playerAssinatura;
+  if (trocouFaixa) {
     playerAssinatura = assinatura;
     montarPlayer(np);
-    cena.classList.add('on');
-    clearTimeout(playerTimer);
-    playerTimer = setTimeout(() => cena.classList.remove('on'), PLAYER_DUR);
   }
+  const mudouEstado = np.isPlaying !== playerTocando;
+  if (trocouFaixa || mudouEstado) atualizarBotao(np);
+
+  if (np.isPlaying) {
+    clearTimeout(playerTimer);
+    cena.classList.add('on');
+  } else if (mudouEstado) {
+    // Armado uma vez, na transicao pra pausado — armar a cada desenho reiniciaria
+    // a contagem pra sempre e a cena nunca sairia.
+    clearTimeout(playerTimer);
+    playerTimer = setTimeout(() => cena.classList.remove('on'), PLAYER_ESPERA_PAUSA);
+  }
+  playerTocando = np.isPlaying;
+
   correrProgresso();
 }
 
