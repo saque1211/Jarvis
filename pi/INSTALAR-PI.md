@@ -332,6 +332,9 @@ rode o **nucleus e o cérebro num VPS** e deixe no Pi só o HUD, o kiosk e a voz
 - **openWakeWord 0.6.0 pede tflite (sem wheel ARM)** → `pip install --no-deps` +
   instale as deps na mão (passo 7).
 - **Mic USB só entrega 44.1/48kHz** → `~/.asoundrc` com `plughw` (resample).
+- **Trocar de tela no kiosk demora 90s** se o serviço não tiver
+  `TimeoutStopSec` — o `startx` ignora o SIGTERM e o painel fica no console
+  esperando. O `pi/kiosk.sh` já resolve; serviço escrito à mão, não.
 - **raspotify ignora o `credentials.json`** por causa do
   `LIBRESPOT_DISABLE_CREDENTIAL_CACHE=` que vem ligado → comente a linha.
 - **OAuth do librespot precisa de túnel na 5588**, senão a autorização volta

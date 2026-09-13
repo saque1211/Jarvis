@@ -108,6 +108,12 @@ Environment=XDG_RUNTIME_DIR=/run/user/%U
 ExecStart=/usr/bin/startx -- -nocursor
 Restart=always
 RestartSec=5
+# O startx nao morre no SIGTERM. Sem isto o systemd espera os 90s padrao antes
+# de matar a forca — e durante esse minuto e meio a tela volta pro console,
+# acumulando mensagem de kernel. Quem esta olhando o painel ve o VEXIS sumir e
+# aparecer texto de terminal, e conclui que travou.
+TimeoutStopSec=10
+KillMode=mixed
 
 [Install]
 WantedBy=multi-user.target
