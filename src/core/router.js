@@ -5,6 +5,7 @@ import { pickSkills, estimateTokens } from './preselect.js';
 import { todayContext, appendDaily } from './vault.js';
 import { setLastReply } from '../skills/voice.js';
 import { recordActivity, recordCommand, writeRuntime } from './state.js';
+import { lembrar, guardar } from './conversa.js';
 
 const SYSTEM = `Voce e o ${config.nome}, assistente pessoal do usuario, rodando na maquina dele (Windows 11).
 
@@ -90,7 +91,10 @@ export async function route(userInput, options = {}) {
     }
   }
 
-  const messages = [{ role: 'user', content: userInput }];
+  // As ultimas trocas entram antes do pedido de agora. E o que faz "25"
+  // continuar sendo resposta de "em quanto quer deixar o volume?" mesmo tendo
+  // chegado num processo novo. Vazio quando nao ha nada recente.
+  const messages = [...lembrar(ctx.source), { role: 'user', content: userInput }];
   const steps = [];
 
   for (let turn = 0; turn < config.maxTurns; turn++) {
@@ -112,6 +116,7 @@ export async function route(userInput, options = {}) {
       setLastReply(reply);
       writeRuntime({ lastTranscript: userInput, lastReply: reply });
       recordCommand(userInput, reply, usage);
+      guardar(ctx.source, userInput, reply);
       appendDaily('Comando', `**Voce:** ${userInput}\n\n**${config.nome}:** ${reply}`);
       return { reply, steps, timings, usage };
     }
@@ -189,6 +194,7 @@ export async function route(userInput, options = {}) {
         setLastReply(reply);
         writeRuntime({ lastTranscript: userInput, lastReply: reply });
         recordCommand(userInput, reply, usage);
+        guardar(ctx.source, userInput, reply);
         appendDaily('Comando', `**Voce:** ${userInput}\n\n**${config.nome}:** ${reply}`);
         return { reply, steps, timings, usage };
       }

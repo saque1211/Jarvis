@@ -26,6 +26,10 @@ voz/texto → router (tool-use loop) → skills → platform/win32 → máquina
 - **`src/platform/win32.js`** — **toda** chamada de sistema passa aqui.
   Nunca use `spawn`/`exec` direto numa skill.
 - **`src/core/vault.js`** — memória em markdown. Sem banco.
+- **`src/core/conversa.js`** — memória *curta*, das últimas trocas. É o que faz
+  "25" continuar sendo resposta de "em quanto quer o volume?". Só texto (nunca
+  tool_use), vence em 5 min e é separada por origem — a voz da sala e o app do
+  celular são conversas diferentes.
 
 ## Regras ao mexer no código
 
