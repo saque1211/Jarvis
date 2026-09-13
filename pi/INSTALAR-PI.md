@@ -242,6 +242,19 @@ Aí ele mostra o código de 6 dígitos → aprova no app → HUD na telinha.
 **Não use `--incognito`**: ele apaga o pareamento a cada boot, e o painel volta
 pedindo código toda vez que falta luz.
 
+### Numa TV grande o desenho parece pequeno
+
+É esperado: o palco de 1920x1080 foi pensado pra uma tela de 7" a um metro. Na
+TV a proporção está certa, mas quem passa longe acha tudo miúdo. `?zoom=` amplia:
+
+```bash
+bash ~/jarvis/pi/kiosk.sh 'http://localhost:8791/?zoom=1.4'
+sudo systemctl restart vexis-kiosk
+```
+
+Aceita de `0.5` a `3`. Acima de `1` o que passar da borda é cortado — e o que
+sobra na borda é justamente o vazio que o painel tem de propósito.
+
 ### Folga de memória (1 GB)
 
 Chromium num Pi 3 com três serviços Node do lado fica no limite. Dobrar a
