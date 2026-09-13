@@ -22,9 +22,9 @@ function tokenize(command) {
 /**
  * Sintese de voz.
  *
- * Padrao: SAPI, a voz nativa do Windows. Nao e a mais bonita, mas ja esta
- * instalada e fala pt-BR (voz Maria) — o JARVIS responde no primeiro boot,
- * sem baixar nada.
+ * Padrao: a voz que a maquina ja tem. No Windows, SAPI (voz Maria, pt-BR); no
+ * Linux, espeak-ng. Nenhuma das duas e bonita, mas as duas ja estao instaladas
+ * — o assistente responde no primeiro boot, sem baixar nada.
  *
  * Upgrade: Piper, local e bem melhor. Configure TTS_COMMAND no .env com
  * {text} e {out} como placeholders.
@@ -36,6 +36,33 @@ let speaking = false;
  * A voz nativa do Windows. Zero dependencia.
  * Com `outFile`, grava em vez de tocar — e assim que a fala vai pro celular.
  */
+// espeak-ng: o ultimo recurso fora do Windows. Voz robotica, mas ja vem no
+// Raspberry Pi OS e nao pede chave nem download. Sem ele, num Pi a fala caia no
+// SAPI — que e PowerShell — e o assistente ficava mudo dizendo que so roda no
+// Windows, mesmo com tudo o mais funcionando.
+const ESPEAK = ['/usr/bin/espeak-ng', '/usr/bin/espeak', '/usr/local/bin/espeak-ng'].find((p) => {
+  try { return fs.existsSync(p); } catch { return false; }
+});
+
+async function speakEspeak(text, outFile = null) {
+  const args = ['-v', 'pt-br', '-s', '165'];
+  if (outFile) args.push('-w', outFile);
+  return run(ESPEAK, args, { timeoutMs: 60000, stdin: text });
+}
+
+/** Quem fala quando nenhuma voz de nuvem esta configurada ou todas falharam. */
+function motorLocal() {
+  if (config.voice.ttsCommand) return 'TTS_COMMAND';
+  if (process.platform !== 'win32' && ESPEAK) return 'espeak-ng';
+  return 'SAPI';
+}
+
+/** Sintese local, no motor que esta maquina realmente tem. */
+async function falaLocal(text, outFile = null) {
+  if (process.platform !== 'win32' && ESPEAK) return speakEspeak(text, outFile);
+  return speakSapi(text, outFile);
+}
+
 async function speakSapi(text, outFile = null) {
   const wanted = config.voice.voiceName;
 
@@ -73,8 +100,8 @@ async function synthesizeLocal(text) {
     return out;
   }
 
-  await speakSapi(text, out);
-  if (!fs.existsSync(out)) throw new Error('SAPI nao gerou o arquivo de audio.');
+  await falaLocal(text, out);
+  if (!fs.existsSync(out)) throw new Error(`${motorLocal()} nao gerou o arquivo de audio.`);
   return out;
 }
 
@@ -173,9 +200,9 @@ export async function speak(text) {
     // Nos locais a sintese e a reproducao sao a mesma chamada: nao da pra
     // separar, entao entra tudo como sintese em vez de inventar uma divisao.
     const t = Date.now();
-    medida.provedor = config.voice.ttsCommand ? 'TTS_COMMAND' : 'SAPI';
+    medida.provedor = motorLocal();
     if (config.voice.ttsCommand) await speakCommand(clean);
-    else await speakSapi(clean);
+    else await falaLocal(clean);
     medida.sinteseMs = Date.now() - t;
   } catch (err) {
     console.error(`[tts] ${err.message}`);

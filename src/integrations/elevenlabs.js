@@ -65,6 +65,14 @@ export async function sintetizarBytes(texto) {
 
   if (!apiKey) throw new Error('Falta ELEVENLABS_API_KEY no .env.');
   if (!voiceId) throw new Error('Falta ELEVENLABS_VOICE_ID no .env — veja: npm run voices:eleven');
+  // ID de voz e uma palavra so. Espaco quer dizer que o comentario de exemplo
+  // veio colado no valor ("abc123   (veja: npm run voices:eleven)") — a
+  // ElevenLabs devolve um 400 generico e ninguem descobre o que aconteceu.
+  if (/\s/.test(voiceId)) {
+    throw new Error(
+      `ELEVENLABS_VOICE_ID tem espaco: "${voiceId}". Deixe so o ID, sem comentario nem aspas.`
+    );
+  }
 
   const url = `${BASE}/text-to-speech/${encodeURIComponent(voiceId)}?output_format=${formato}`;
 
