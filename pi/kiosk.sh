@@ -49,6 +49,11 @@ echo "-- navegador: $NAVEGADOR"
 # As flags nao sao enfeite: cada uma tira uma coisa que aparece na tela de
 # parede e nao deveria (barra de "restaurar paginas", dialogo de erro, aviso de
 # atualizacao) ou economiza memoria num aparelho de 1 GB.
+#
+# `Translate` alem de `TranslateUI`: sem os dois o Chromium abre a faixa
+# "Portuguese / English" por cima do painel — a pagina e em portugues, mas o
+# idioma do sistema esta em ingles e ele oferece traduzir. `--lang=pt-BR`
+# resolve a causa; a flag resolve o sintoma. Vao os dois.
 cat > "$CASA/.xinitrc" <<EOF
 #!/bin/sh
 # Painel de parede nao dorme.
@@ -64,7 +69,8 @@ exec $NAVEGADOR \\
   --noerrdialogs \\
   --disable-infobars \\
   --disable-session-crashed-bubble \\
-  --disable-features=TranslateUI \\
+  --disable-features=Translate,TranslateUI \\
+  --lang=pt-BR \\
   --no-first-run \\
   --check-for-update-interval=31536000 \\
   --autoplay-policy=no-user-gesture-required \\
