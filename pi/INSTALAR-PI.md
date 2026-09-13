@@ -145,6 +145,11 @@ sudo systemctl start raspotify
 ```
 (precisa Spotify **Premium**)
 
+Com o raspotify de pé, o painel é um aparelho Spotify permanente — e o VEXIS
+passa a assumir ele sozinho quando ninguém está tocando nada. O
+`SPOTIFY_DEVICE` no `.env` escolhe qual aparelho ele prefere (padrão: o que
+tiver "vexis" no nome).
+
 ## 7. Voz: openWakeWord ("vexis")
 
 ```bash

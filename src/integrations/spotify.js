@@ -72,7 +72,36 @@ export function isConfigured() {
   return Boolean(config.spotify.clientId && readTokens()?.refresh_token);
 }
 
-async function request(method, endpoint, { body, query } = {}) {
+/**
+ * Escolhe um aparelho e assume a reproducao nele. Devolve o nome, ou null se
+ * nao houver nenhum visivel.
+ *
+ * A ordem da preferencia e o ponto: o aparelho DESTA casa vem primeiro. Pedir
+ * "toca musica" pro painel da sala e ver o som sair no celular de alguem que
+ * esta na rua e pior que nao tocar.
+ */
+async function escolherAparelho() {
+  const data = await request('GET', '/me/player/devices', { _semResgate: true });
+  const aparelhos = data?.devices || [];
+  if (!aparelhos.length) return null;
+
+  const preferido = (process.env.SPOTIFY_DEVICE || 'vexis').toLowerCase();
+  const alvo =
+    aparelhos.find((d) => d.name.toLowerCase().includes(preferido)) ||
+    aparelhos.find((d) => d.is_active) ||
+    aparelhos[0];
+
+  await request('PUT', '/me/player', {
+    body: { device_ids: [alvo.id], play: false },
+    _semResgate: true,
+  });
+  // O Spotify leva um instante pra registrar a troca; sem essa pausa o pedido
+  // que vem logo atras ainda pega o 404.
+  await new Promise((r) => setTimeout(r, 700));
+  return alvo.name;
+}
+
+async function request(method, endpoint, { body, query, _semResgate } = {}) {
   const token = await accessToken();
   const url = new URL(API + endpoint);
   if (query) for (const [k, v] of Object.entries(query)) if (v != null) url.searchParams.set(k, v);
@@ -88,7 +117,25 @@ async function request(method, endpoint, { body, query } = {}) {
 
   // 204 = sucesso sem corpo (play/pause/next respondem assim).
   if (res.status === 204) return null;
-  if (res.status === 404) throw new Error('Nenhum dispositivo Spotify ativo. Abra o Spotify e toque algo uma vez.');
+
+  if (res.status === 404) {
+    // 404 aqui quer dizer "nenhum aparelho ativo" — nao "rota inexistente". O
+    // Spotify esquece o aparelho depois de um tempo parado, entao mandar o
+    // usuario "abrir o app e tocar algo uma vez" e um conselho que vence: dez
+    // minutos depois ele precisa fazer de novo. Se ha aparelho VISIVEL (o
+    // raspotify do proprio painel, por exemplo), assumimos ele e repetimos.
+    if (!_semResgate) {
+      let nome = null;
+      try {
+        nome = await escolherAparelho();
+      } catch {
+        // Resgate e melhoria, nao obrigacao: falhando, cai no erro de sempre.
+      }
+      if (nome) return request(method, endpoint, { body, query, _semResgate: true });
+    }
+    throw new Error('Nenhum dispositivo Spotify ativo. Abra o Spotify e toque algo uma vez.');
+  }
+
   if (!res.ok) throw new Error(`Spotify ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const text = await res.text();
   return text ? JSON.parse(text) : null;
