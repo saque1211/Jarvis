@@ -213,33 +213,48 @@ No **app → Ajustes → Casa inteligente**: cola o endereço do Home Assistant 
 porta que ele usa; nem sempre é 8123) e o token → "Testar e salvar". Depois:
 "vexis, desliga o ar do quarto".
 
-## 9. Quando a tela de 7" chegar: o HUD em kiosk
+## 9. O HUD na tela do próprio Pi (kiosk)
+
+O `npm run hud` **serve** a página, mas o Raspberry Pi OS Lite não tem desktop
+nem navegador — por isso o log diz *"Nenhum Chrome/Edge/Brave encontrado"*. O
+servidor está certo; falta quem olhe. Um script resolve:
 
 ```bash
-sudo apt install -y --no-install-recommends xserver-xorg xinit openbox chromium x11-xserver-utils
-# autologin no tty1
-sudo mkdir -p /etc/systemd/system/getty@tty1.service.d
-sudo tee /etc/systemd/system/getty@tty1.service.d/autologin.conf > /dev/null <<'EOF'
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin vexis --noclear %I $TERM
-EOF
-cat > ~/.bash_profile <<'EOF'
-if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then exec startx; fi
-EOF
-cat > ~/.xinitrc <<'EOF'
-#!/bin/sh
-xset -dpms; xset s off; xset s noblank
-openbox-session &
-exec chromium --kiosk --noerrdialogs --disable-infobars \
-  --disable-gpu --disable-dev-shm-usage \
-  --check-for-update-interval=31536000 http://localhost:3000/
-EOF
-chmod +x ~/.xinitrc
-sudo reboot
+bash ~/jarvis/pi/kiosk.sh
 ```
-Liga → mostra o código de pareamento → aprova no app → HUD na telinha.
-(NÃO use `--incognito`: ele apaga o pareamento a cada boot.)
+
+Instala o mínimo (X + Chromium, sem desktop nem barra de tarefas — num Pi de
+1 GB cada peça dessas é memória que falta depois), escreve o `.xinitrc` e cria
+o serviço `vexis-kiosk`, que sobe no boot.
+
+Com a tela ligada no HDMI:
+```bash
+sudo systemctl start vexis-kiosk
+```
+
+Por padrão abre o HUD aberto (`http://localhost:8791`). Pra abrir a versão com
+conta e pareamento, passa o endereço:
+```bash
+bash ~/jarvis/pi/kiosk.sh http://localhost:3000/
+```
+Aí ele mostra o código de 6 dígitos → aprova no app → HUD na telinha.
+
+**Não use `--incognito`**: ele apaga o pareamento a cada boot, e o painel volta
+pedindo código toda vez que falta luz.
+
+### Folga de memória (1 GB)
+
+Chromium num Pi 3 com três serviços Node do lado fica no limite. Dobrar a
+memória virtual evita que o navegador seja morto no meio do dia:
+
+```bash
+sudo dphys-swapfile swapoff
+sudo sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile
+sudo dphys-swapfile setup && sudo dphys-swapfile swapon
+```
+
+Se ainda ficar apertado, o caminho é tirar peso em vez de otimizar o navegador:
+rode o **nucleus e o cérebro num VPS** e deixe no Pi só o HUD, o kiosk e a voz.
 
 ---
 
@@ -253,5 +268,7 @@ Liga → mostra o código de pareamento → aprova no app → HUD na telinha.
 - **openWakeWord 0.6.0 pede tflite (sem wheel ARM)** → `pip install --no-deps` +
   instale as deps na mão (passo 7).
 - **Mic USB só entrega 44.1/48kHz** → `~/.asoundrc` com `plughw` (resample).
+- **Pi OS Lite não tem navegador** → o HUD serve a página mas nada aparece na
+  tela do Pi até rodar o `pi/kiosk.sh` (passo 9).
 - **entity_id do Home Assistant é críptico** (ex: `climate.150633..._climate`),
   não o nome amigável → a skill lista antes; se errar, confira o ID real no HA.

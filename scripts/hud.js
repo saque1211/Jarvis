@@ -59,6 +59,11 @@ async function main() {
       console.log(pc.dim(`  janela: ${navegador.split('/').pop()}`));
     } else {
       console.log(pc.yellow('  Nenhum Chrome/Edge/Brave encontrado — abra o endereco acima no navegador.'));
+      // No Raspberry Pi OS Lite isso e o normal, nao um defeito: nao existe
+      // desktop nem navegador na imagem. A pagina esta servida; falta quem olhe.
+      if (process.platform === 'linux') {
+        console.log(pc.dim('  Pra desenhar na tela do proprio aparelho: bash pi/kiosk.sh'));
+      }
     }
   }
 
