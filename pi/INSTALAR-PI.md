@@ -133,22 +133,68 @@ curl -s http://localhost:8080/saude; echo
 
 ```bash
 curl -sSL https://dtcooper.github.io/raspotify/install.sh | sudo sh
-echo 'LIBRESPOT_NAME="Vexis"' | sudo tee -a /etc/raspotify/conf
-sudo systemctl restart raspotify
 ```
-Login persistente (uma vez, pra tocar sem app aberto):
+
+### O login persistente (é aqui que trava)
+
+Um librespot que só está *descobrível* aparece no seletor do app do celular,
+mas é **invisível pra API** — e é a API que o VEXIS usa. Então "tocar sem app
+aberto" depende de o Pi estar **logado**, não só anunciado.
+
+O login pede um navegador, e o Pi não tem. A saída é um túnel SSH pela porta do
+OAuth — **sem ele a autorização morre na volta**, porque o Spotify manda o
+navegador pra `127.0.0.1:5588`, que no PC é o PC:
+
+```powershell
+ssh -L 5588:localhost:5588 vexis@vexis.local
+```
+
+Aí, no Pi:
 ```bash
 sudo systemctl stop raspotify
 sudo librespot --name Vexis --backend alsa --system-cache /var/lib/raspotify --enable-oauth --oauth-port 5588
-# abre a URL que ele imprime, autoriza; Ctrl+C quando salvar credentials.json
-sudo systemctl start raspotify
 ```
-(precisa Spotify **Premium**)
+Abre o link impresso no navegador do PC e autoriza. Quando aparecer
+`Authenticated as '...'`, `Ctrl+C`. Deve existir
+`/var/lib/raspotify/credentials.json`.
+
+### Três linhas do `/etc/raspotify/conf` que decidem tudo
+
+O arquivo vem com flags **ligadas de fábrica**, e no formato dele
+*variável descomentada com valor vazio = flag ligada*. Duas atrapalham:
+
+```bash
+# 1. Esta faz o librespot IGNORAR o credentials.json que você acabou de criar.
+#    Sintoma: "Credentials are required if discovery and oauth login are
+#    disabled" em loop, com o arquivo existindo ali do lado.
+sudo sed -i 's/^LIBRESPOT_DISABLE_CREDENTIAL_CACHE=/#&/' /etc/raspotify/conf
+
+# 2. Saída de áudio: o raspotify roda como root e não herda o seu ~/.asoundrc.
+#    Com a TV no HDMI, o som vai pra TV. `aplay -l` mostra os cards;
+#    card 0 costuma ser o P2 (Headphones) e card 1 o HDMI.
+echo 'LIBRESPOT_DEVICE="plughw:0,0"' | sudo tee -a /etc/raspotify/conf
+
+# 3. O librespot tem volume PRÓPRIO, separado do ALSA, e começa baixo.
+#    Sem isto o painel volta mudo a cada reboot e parece quebrado.
+echo 'LIBRESPOT_INITIAL_VOLUME="80"' | sudo tee -a /etc/raspotify/conf
+
+echo 'LIBRESPOT_NAME="Vexis"' | sudo tee -a /etc/raspotify/conf
+sudo systemctl restart raspotify
+```
+
+> `LIBRESPOT_QUIET=` também vem ligada: o serviço sobe **sem imprimir nada**,
+> nem o `Authenticated as`. Silêncio no log não quer dizer que falhou — o que
+> importa é não haver `Main process exited`.
+
+Confere:
+```bash
+cd ~/jarvis && npm run jarvis "quais aparelhos do spotify estão disponíveis"
+```
+Tem que listar **Vexis**. (precisa Spotify **Premium**)
 
 Com o raspotify de pé, o painel é um aparelho Spotify permanente — e o VEXIS
-passa a assumir ele sozinho quando ninguém está tocando nada. O
-`SPOTIFY_DEVICE` no `.env` escolhe qual aparelho ele prefere (padrão: o que
-tiver "vexis" no nome).
+assume ele sozinho quando ninguém está tocando nada. O `SPOTIFY_DEVICE` no
+`.env` escolhe qual aparelho ele prefere (padrão: o que tiver "vexis" no nome).
 
 ## 7. Voz: openWakeWord ("vexis")
 
@@ -286,6 +332,10 @@ rode o **nucleus e o cérebro num VPS** e deixe no Pi só o HUD, o kiosk e a voz
 - **openWakeWord 0.6.0 pede tflite (sem wheel ARM)** → `pip install --no-deps` +
   instale as deps na mão (passo 7).
 - **Mic USB só entrega 44.1/48kHz** → `~/.asoundrc` com `plughw` (resample).
+- **raspotify ignora o `credentials.json`** por causa do
+  `LIBRESPOT_DISABLE_CREDENTIAL_CACHE=` que vem ligado → comente a linha.
+- **OAuth do librespot precisa de túnel na 5588**, senão a autorização volta
+  pro seu PC e se perde.
 - **Pi OS Lite não tem navegador** → o HUD serve a página mas nada aparece na
   tela do Pi até rodar o `pi/kiosk.sh` (passo 9).
 - **entity_id do Home Assistant é críptico** (ex: `climate.150633..._climate`),
