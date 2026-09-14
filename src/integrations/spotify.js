@@ -95,9 +95,21 @@ async function escolherAparelho() {
     body: { device_ids: [alvo.id], play: false },
     _semResgate: true,
   });
-  // O Spotify leva um instante pra registrar a troca; sem essa pausa o pedido
-  // que vem logo atras ainda pega o 404.
-  await new Promise((r) => setTimeout(r, 700));
+
+  // A troca nao vale no instante em que e pedida. Esperar um tempo FIXO e o
+  // erro classico: curto demais e o pedido seguinte ainda leva 404 (a musica
+  // ate comeca, mas a resposta falada sai errada); longo demais e o assistente
+  // fica mudo a toa. Entao perguntamos ate o aparelho se declarar ativo.
+  const limite = Date.now() + 3000;
+  while (Date.now() < limite) {
+    await new Promise((r) => setTimeout(r, 250));
+    try {
+      const agora = await request('GET', '/me/player/devices', { _semResgate: true });
+      if ((agora?.devices || []).some((d) => d.id === alvo.id && d.is_active)) break;
+    } catch {
+      // Ainda trocando: tenta de novo ate o limite.
+    }
+  }
   return alvo.name;
 }
 

@@ -166,6 +166,11 @@ ARQ_DISPOSITIVO = os.environ.get(
 )
 NOME_DISPOSITIVO = os.environ.get("JARVIS_DEVICE_NAME", "Raspberry Pi")
 
+# Como ele se chama no log. O projeto nasceu JARVIS e virou VEXIS; deixar o
+# nome antigo cravado no codigo faz o aparelho se apresentar com um nome que
+# nao e mais o dele.
+NOME = os.environ.get("JARVIS_NOME", "vexis").lower()
+
 if not NUCLEUS:
     sys.exit("Configure JARVIS_NUCLEUS_URL (ex: http://SEU_IP:3000) em /etc/jarvis.env")
 
@@ -562,7 +567,7 @@ def atender(wav, token):
         return
     if r.get("transcricao"):
         log("voce", r["transcricao"])
-    log("jarvis", r.get("resposta", ""))
+    log(NOME, r.get("resposta", ""))
     _ = time.time() - inicio
     if r.get("audio"):
         falar(base64.b64decode(r["audio"]))
