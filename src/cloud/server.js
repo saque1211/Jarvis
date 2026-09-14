@@ -7,7 +7,7 @@ import { route } from '../core/router.js';
 import { snapshot, writeRuntime } from '../core/state.js';
 import { transcreverNaNuvem } from './stt.js';
 import { sintetizar, ttsConfigurado } from './tts.js';
-import { abafarEnquantoFala, duracaoAproximada } from './abafar.js';
+import { abafar, abafarEnquantoFala, duracaoAproximada } from './abafar.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -130,6 +130,18 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
     }
 
     if (!(await autorizado(req))) return json(res, 401, { erro: 'token invalido ou ausente' });
+
+    // ── Pi: "acordei, estou ouvindo" ─────────────────────────────────────
+    // Chega quando a palavra de ativacao dispara, antes de existir audio. Serve
+    // pra musica recuar ENQUANTO a pessoa fala: senao o microfone grava a caixa
+    // junto com o comando e a transcricao sai com letra de musica no meio.
+    if (url.pathname === '/v1/ouvindo' && req.method === 'POST') {
+      writeRuntime({ voiceState: 'listening' });
+      // Teto generoso: se o comando nao chegar (a pessoa desistiu, a rede caiu),
+      // o volume volta sozinho em vez de ficar baixo pra sempre.
+      abafar(Number(url.searchParams.get('ms')) || 12000);
+      return json(res, 200, { ok: true });
+    }
 
     // ── Pi: manda WAV, recebe resposta falada ────────────────────────────
     if (url.pathname === '/v1/audio' && req.method === 'POST') {

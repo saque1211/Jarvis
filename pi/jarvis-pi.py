@@ -37,6 +37,7 @@ import sys
 import json
 import time
 import wave
+import threading
 import array
 import base64
 import io
@@ -442,6 +443,28 @@ def gravar(audio):
 
 
 # ── Nuvem (voz) ──────────────────────────────────────────────────────────────
+def avisar_que_ouve(token):
+    """
+    Diz ao cerebro que a palavra de ativacao disparou, antes de existir audio.
+
+    Serve pra musica recuar ENQUANTO a pessoa fala. Com a caixa tocando alto no
+    mesmo comodo, o microfone grava a musica junto com o comando e a
+    transcricao sai com pedaco de letra no meio — o assistente responde entao
+    uma pergunta que ninguem fez.
+
+    Falha em silencio e com prazo curto: isto e conforto, e nao pode atrasar a
+    gravacao do comando, que ja comecou.
+    """
+    try:
+        requests.post(
+            f"{CLOUD}/v1/ouvindo",
+            headers={"x-device-token": token, "authorization": f"Bearer {token}"},
+            timeout=2,
+        )
+    except Exception:
+        pass
+
+
 def perguntar(wav, token):
     resposta = requests.post(
         f"{CLOUD}/v1/audio",
@@ -755,6 +778,11 @@ def laco_escuta(audio, token):
             if any(v >= limiar for v in scores.values()):
                 oww.reset()  # zera o buffer pra nao re-disparar na mesma fala
                 log("acordou", "fale agora")
+                # Antes de gravar: a musica precisa recuar agora, nao depois.
+                # Numa thread pra nao roubar nem um quadro da primeira palavra.
+                threading.Thread(
+                    target=avisar_que_ouve, args=(token,), daemon=True
+                ).start()
                 try:
                     wav = _gravar_quadros(stream)  # mesmo stream, sem cortar a 1a palavra
                 except OSError as e:
