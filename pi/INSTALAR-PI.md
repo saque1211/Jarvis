@@ -213,12 +213,24 @@ Acha o índice do mic:
 ```bash
 ~/vexis-venv/bin/python ~/jarvis/pi/jarvis-pi.py --mics
 ```
-> Se o mic USB não capturar direto (só entrega 44.1/48kHz), cria um
-> `~/.asoundrc` mandando o default pra ele via plug (troca o `1` pelo card do
-> `arecord -l`):
+> **Mic USB quase nunca aceita 16 kHz** (só entrega 44.1/48). O cliente já
+> resolve sozinho: tenta o dispositivo pedido, depois o `default` do ALSA, e
+> por último abre na taxa nativa e reamostra. Não precisa configurar nada.
+>
+> Se ainda assim quiser mandar o `default` do sistema pro mic — útil pra
+> `arecord` e outros programas — escreva `~/.asoundrc` **por nome, nunca por
+> número**: o card do USB troca de posição a cada boot, e um painel de parede
+> reinicia sozinho depois de queda de luz.
 > ```
-> pcm.!default { type asym capture.pcm "plughw:1,0" playback.pcm "plughw:0,0" }
+> pcm.!default {
+>   type asym
+>   playback.pcm "plughw:CARD=Headphones,DEV=0"
+>   capture.pcm  "plughw:CARD=Device,DEV=0"
+> }
+> ctl.!default { type hw card Headphones }
 > ```
+> Os nomes saem de `aplay -l` e `arecord -l`. E confira o dono do arquivo: um
+> `~/.asoundrc` criado com `sudo` fica do root e o programa nem consegue lê-lo.
 
 Roda o cliente (troca `<IDX>` pelo índice do mic; ou tira o `JARVIS_MIC` se usar
 o asoundrc):
@@ -332,6 +344,8 @@ rode o **nucleus e o cérebro num VPS** e deixe no Pi só o HUD, o kiosk e a voz
 - **openWakeWord 0.6.0 pede tflite (sem wheel ARM)** → `pip install --no-deps` +
   instale as deps na mão (passo 7).
 - **Mic USB só entrega 44.1/48kHz** → `~/.asoundrc` com `plughw` (resample).
+- **O card do mic USB muda de número entre boots** → no `~/.asoundrc` use
+  `CARD=<nome>`, não `hw:2,0`.
 - **Trocar de tela no kiosk demora 90s** se o serviço não tiver
   `TimeoutStopSec` — o `startx` ignora o SIGTERM e o painel fica no console
   esperando. O `pi/kiosk.sh` já resolve; serviço escrito à mão, não.

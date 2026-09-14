@@ -175,6 +175,61 @@ CANAIS = 1
 BLOCO = 1024
 FORMATO = 8  # pyaudio.paInt16, sem depender do import
 
+
+class Microfone:
+    """
+    Envelope do stream do PyAudio que entrega blocos de 16 kHz.
+
+    Quando o aparelho ja fala 16 kHz nao ha conversao nenhuma — so uma copia de
+    buffer. Quando nao fala, a reamostragem acontece aqui, e o resto do
+    programa nem fica sabendo.
+
+    A interpolacao e linear, sem filtro anti-aliasing. Para palavra de ativacao
+    isso basta: o que importa e a forma da fala entre 100 e 4000 Hz, bem abaixo
+    de onde o aliasing apareceria. Um filtro decente custaria scipy e CPU num
+    aparelho que ja esta no limite.
+    """
+
+    def __init__(self, stream, taxa):
+        self._stream = stream
+        self._taxa = taxa
+        self._buf = bytearray()
+
+    def _reamostrar(self, bruto):
+        import numpy as np
+
+        dados = np.frombuffer(bruto, dtype=np.int16)
+        if not len(dados):
+            return b""
+        n = int(round(len(dados) * TAXA / self._taxa))
+        if n <= 0:
+            return b""
+        pos = np.linspace(0, len(dados) - 1, n)
+        saida = np.interp(pos, np.arange(len(dados)), dados.astype(np.float32))
+        return saida.astype(np.int16).tobytes()
+
+    def read(self, quadros, exception_on_overflow=False):
+        alvo = quadros * 2  # int16
+        while len(self._buf) < alvo:
+            pedir = quadros if self._taxa == TAXA else int(round(quadros * self._taxa / TAXA))
+            bruto = self._stream.read(max(1, pedir), exception_on_overflow=exception_on_overflow)
+            self._buf.extend(bruto if self._taxa == TAXA else self._reamostrar(bruto))
+        saida = bytes(self._buf[:alvo])
+        del self._buf[:alvo]
+        return saida
+
+    def stop_stream(self):
+        try:
+            self._stream.stop_stream()
+        except Exception:
+            pass
+
+    def close(self):
+        try:
+            self._stream.close()
+        except Exception:
+            pass
+
 # Deteccao de fim de fala. Os mesmos numeros que funcionaram na versao Windows,
 # achados na marra: 1s de silencio encerra, mas so depois de 1,5s de gravacao —
 # sem esse piso, a pausa que todo mundo faz depois das duas primeiras palavras
@@ -568,10 +623,83 @@ def laco_escuta(audio, token):
     # passo. O mesmo stream serve pra ouvir a palavra e gravar o comando depois.
     QUADRO_OWW = 1280
 
+    def indice_por_nome(*chaves):
+        """Acha uma entrada do PyAudio cujo nome contenha uma das chaves."""
+        for i in range(audio.get_device_count()):
+            try:
+                d = audio.get_device_info_by_index(i)
+            except Exception:
+                continue
+            if d.get("maxInputChannels", 0) < 1:
+                continue
+            if any(c in str(d.get("name", "")).lower() for c in chaves):
+                return i
+        return None
+
+    def taxa_nativa(idx):
+        try:
+            info = (
+                audio.get_device_info_by_index(idx)
+                if idx is not None
+                else audio.get_default_input_device_info()
+            )
+            return int(info.get("defaultSampleRate") or 48000)
+        except Exception:
+            return 48000
+
     def abrir():
-        return audio.open(
-            format=FORMATO, channels=CANAIS, rate=TAXA,
-            input=True, frames_per_buffer=QUADRO_OWW, input_device_index=MIC,
+        """
+        Abre o microfone entregando SEMPRE 16 kHz, que e o que o openWakeWord
+        exige.
+
+        Mic USB barato quase nunca aceita 16 kHz no hardware: o ALSA responde
+        `Errno -9997 Invalid sample rate` e o assistente nem chega a escutar.
+        Tres caminhos, do mais barato pro mais garantido:
+
+          1. o dispositivo pedido, direto em 16 kHz;
+          2. o `default` do ALSA, que passa pelo plug do ~/.asoundrc e converte
+             a taxa dentro do driver, sem custo em Python;
+          3. a taxa nativa do proprio aparelho, reamostrada aqui.
+
+        O terceiro existe porque o segundo depende de um ~/.asoundrc que nem
+        toda maquina tem — e quem acabou de plugar um mic novo nao deveria
+        precisar escrever arquivo de configuracao pra o assistente funcionar.
+        """
+        tentativas = []
+        if MIC is not None:
+            tentativas.append((MIC, TAXA))
+        for chave in ("default", "sysdefault", "pulse"):
+            idx = indice_por_nome(chave)
+            if idx is not None:
+                tentativas.append((idx, TAXA))
+        if MIC is None:
+            tentativas.append((None, TAXA))
+        # Ultimo recurso: a taxa que o aparelho realmente fala.
+        alvo = MIC
+        tentativas.append((alvo, taxa_nativa(alvo)))
+
+        erro = None
+        vistos = set()
+        for idx, taxa in tentativas:
+            if (idx, taxa) in vistos:
+                continue
+            vistos.add((idx, taxa))
+            quadro = QUADRO_OWW if taxa == TAXA else int(round(QUADRO_OWW * taxa / TAXA))
+            try:
+                bruto = audio.open(
+                    format=FORMATO, channels=CANAIS, rate=taxa,
+                    input=True, frames_per_buffer=quadro, input_device_index=idx,
+                )
+            except Exception as e:
+                erro = e
+                continue
+            if taxa != TAXA:
+                log("audio", f"microfone em {taxa} Hz — reamostrando pra {TAXA}")
+            return Microfone(bruto, taxa)
+
+        raise OSError(
+            f"nenhum microfone aceitou abrir ({erro}). "
+            "Veja os indices com --mics e tente JARVIS_MIC=<n>."
         )
 
     def reabrir(stream, motivo):
