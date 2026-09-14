@@ -148,7 +148,13 @@ O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
 servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
 lista velha você acredita.
 
-**Falta:** contas e pareamento na nuvem, casa inteligente, calendário e e-mail.
+**Música recua quando ele fala** (`src/cloud/abafar.js`): resposta falada por
+cima do Spotify não se entende. O corte é no volume do *aparelho* pela API —
+no ALSA a fala e a música já estão misturadas, e abaixar uma abaixaria as duas.
+O volume original só é anotado quando não há abafamento em curso; senão duas
+respostas seguidas gravariam 20% como "o volume de antes".
+
+**Falta:** calendário e e-mail.
 
 ## Limites conhecidos, documentados de propósito
 

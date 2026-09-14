@@ -137,8 +137,20 @@ async function request(method, endpoint, { body, query, _semResgate } = {}) {
   }
 
   if (!res.ok) throw new Error(`Spotify ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
   const text = await res.text();
-  return text ? JSON.parse(text) : null;
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    // Um "Unexpected token" solto nao diz nada sobre onde o problema esta. Diga
+    // qual rota respondeu e com o que — e o que separa "a Spotify devolveu uma
+    // pagina de erro" de "o corpo veio cortado".
+    throw new Error(
+      `Spotify respondeu algo que nao e JSON em ${method} ${endpoint} ` +
+        `(${res.status}): ${text.slice(0, 80)}`
+    );
+  }
 }
 
 export const spotify = {

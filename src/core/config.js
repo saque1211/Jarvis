@@ -330,5 +330,12 @@ export function loadJson(file, fallback) {
 
 export function saveJson(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+  // Escrita atomica: grava ao lado e RENOMEIA. Varios processos leem os mesmos
+  // arquivos aqui (nucleus, cerebro e HUD compartilham o token do Spotify e o
+  // runtime), e writeFileSync direto tem um instante em que o arquivo existe
+  // pela metade. Quem ler nesse instante recebe JSON cortado no meio de um
+  // token — um erro que so aparece de vez em quando e nao diz de onde veio.
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(temp, file);
 }

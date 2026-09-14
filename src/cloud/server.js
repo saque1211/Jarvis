@@ -7,6 +7,7 @@ import { route } from '../core/router.js';
 import { snapshot, writeRuntime } from '../core/state.js';
 import { transcreverNaNuvem } from './stt.js';
 import { sintetizar, ttsConfigurado } from './tts.js';
+import { abafarEnquantoFala, duracaoAproximada } from './abafar.js';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 
@@ -153,6 +154,11 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
 
         const r = await route(transcricao, { source: 'pi' });
         const fala = await sintetizar(r.reply);
+
+        // Musica recua enquanto ele fala. Sem isto a resposta sai por cima do
+        // que esta tocando e nao se entende — e quem perguntou algo fica sem a
+        // resposta. Nao espera: a fala nao pode atrasar por causa do conforto.
+        if (fala) abafarEnquantoFala(duracaoAproximada(fala));
 
         // "Falando" enquanto o aparelho toca a resposta; volta pra "em espera"
         // uns segundos depois — tempo de a fala acabar. Sem esse reset, o painel
