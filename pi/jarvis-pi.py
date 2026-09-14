@@ -234,11 +234,15 @@ class Microfone:
 # achados na marra: 1s de silencio encerra, mas so depois de 1,5s de gravacao —
 # sem esse piso, a pausa que todo mundo faz depois das duas primeiras palavras
 # corta o comando no meio.
-SILENCIO_MS = 1000
-MINIMO_MS = 1500
-MAXIMO_MS = 15000
-PISO_RUIDO = 200      # RMS de sala silenciosa num mic USB comum
-FATOR_FALA = 2.5      # fala precisa ser 2,5x o chiado pra contar como fala
+#
+# Todos regulaveis por ambiente: o numero certo depende do comodo e de quem
+# fala. Quem acha que "demora pra enviar" quase sempre quer mexer no
+# SILENCIO_MS, e nao tem por que editar codigo pra isso.
+SILENCIO_MS = int(os.environ.get("VOZ_SILENCIO_MS", "1000"))
+MINIMO_MS = int(os.environ.get("VOZ_MINIMO_MS", "1500"))
+MAXIMO_MS = int(os.environ.get("VOZ_MAXIMO_MS", "15000"))
+PISO_RUIDO = int(os.environ.get("VOZ_PISO_RUIDO", "200"))   # RMS de sala silenciosa
+FATOR_FALA = float(os.environ.get("VOZ_FATOR_FALA", "2.5")) # fala = 2,5x o chiado
 
 DIGITOS = {
     "0": "zero", "1": "um", "2": "dois", "3": "três", "4": "quatro",

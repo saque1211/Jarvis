@@ -247,6 +247,16 @@ Fala **"vexis, como está o tempo"**. Debug do wake: `WAKE_DEBUG=1` mostra
 - não acorda → baixa (0.4 → 0.3)
 - acorda sozinho → sobe (0.4 → 0.5)
 
+**Se parecer que "demora pra enviar"**, quase sempre é o fim de fala, não a
+rede: ele espera 1s de silêncio antes de dar o comando por encerrado.
+
+| variável | padrão | pra quê |
+|---|---|---|
+| `VOZ_SILENCIO_MS` | 1000 | silêncio que encerra. 600 responde mais rápido; abaixo disso corta quem faz pausa |
+| `VOZ_MINIMO_MS` | 1500 | piso antes de poder encerrar — protege a pausa depois das duas primeiras palavras |
+| `VOZ_MAXIMO_MS` | 15000 | teto do comando |
+| `VOZ_PISO_RUIDO` | 200 | RMS de sala silenciosa; suba em ambiente barulhento |
+
 Quando estiver bom, vira serviço:
 ```bash
 sudo tee /etc/systemd/system/vexis-voz.service > /dev/null <<'EOF'
