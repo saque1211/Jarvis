@@ -258,27 +258,48 @@ rede: ele espera 1s de silêncio antes de dar o comando por encerrado.
 | `VOZ_PISO_RUIDO` | 200 | RMS de sala silenciosa; suba em ambiente barulhento |
 
 Quando estiver bom, vira serviço:
+
 ```bash
 sudo tee /etc/systemd/system/vexis-voz.service > /dev/null <<'EOF'
 [Unit]
 Description=Vexis voz (openWakeWord)
-After=network.target jarvis-cloud.service
+After=network-online.target jarvis-cloud.service
+Wants=network-online.target
 
 [Service]
 User=vexis
-Environment=JARVIS_MIC=<IDX>
+WorkingDirectory=/home/vexis/jarvis
 Environment=JARVIS_NUCLEUS_URL=http://localhost:3000
 Environment=JARVIS_CLOUD_URL=http://localhost:8080
 Environment=JARVIS_TRIGGER=escuta
-Environment=WAKE_LIMIAR=0.4
+Environment=WAKE_LIMIAR=0.3
+Environment=VOZ_SILENCIO_MS=600
 ExecStart=/home/vexis/vexis-venv/bin/python /home/vexis/jarvis/pi/jarvis-pi.py
-Restart=on-failure
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo systemctl daemon-reload && sudo systemctl enable --now vexis-voz
+sudo systemctl daemon-reload
+sudo systemctl enable --now vexis-voz
+sudo systemctl is-active vexis-voz
 ```
+
+Sem `JARVIS_MIC` de propósito: o cliente acha o microfone sozinho e abre na
+taxa que ele aceitar. Índice cravado quebra quando o USB troca de posição num
+reboot — e é exatamente isso que um painel de parede faz depois de queda de luz.
+
+`Restart=always`, não `on-failure`: um assistente que morreu de madrugada e não
+volta não tem ninguém para reiniciá-lo.
+
+Pra acompanhar o que ele ouve:
+```bash
+sudo journalctl -u vexis-voz -f
+```
+
+Pra mexer nos números depois, edite com `sudo systemctl edit --full vexis-voz`
+e reinicie o serviço.
 
 ## 8. Casa inteligente (opcional)
 
