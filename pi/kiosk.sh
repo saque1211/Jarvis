@@ -64,6 +64,13 @@ xset s noblank
 # Ponteiro some sozinho.
 unclutter -idle 0.1 -root &
 
+# O monitor leva um instante pra informar o tamanho. Abrindo o Chromium antes
+# disso, ele nasce numa janela padrao menor que a tela — e o painel aparece
+# ocupando meia tela, com o resto em branco, ate alguem reiniciar. Dois
+# segundos de espera custam menos que essa confusao.
+sleep 2
+xrandr --auto 2>/dev/null
+
 exec $NAVEGADOR \\
   --kiosk "$ENDERECO" \\
   --noerrdialogs \\
@@ -75,6 +82,8 @@ exec $NAVEGADOR \\
   --check-for-update-interval=31536000 \\
   --autoplay-policy=no-user-gesture-required \\
   --disable-pinch \\
+  --start-fullscreen \\
+  --window-position=0,0 \\
   --overscroll-history-navigation=0
 EOF
 chmod +x "$CASA/.xinitrc"
