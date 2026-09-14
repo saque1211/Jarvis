@@ -150,16 +150,32 @@ async function request(method, endpoint, { body, query, _semResgate } = {}) {
 
   if (!res.ok) throw new Error(`Spotify ${res.status}: ${(await res.text()).slice(0, 200)}`);
 
+  // Comandos (play, pause, next, volume, transfer) nao devolvem dado nenhum: o
+  // proprio 2xx e a resposta. A Spotify as vezes manda 200 com um corpo que nao
+  // e JSON — um identificador de requisicao, por exemplo — e tentar interpretar
+  // isso transformava um pause BEM SUCEDIDO em erro na cara do usuario.
+  // So lemos corpo quando ele foi anunciado como JSON.
+  const tipo = res.headers.get('content-type') || '';
+  if (!tipo.includes('json')) {
+    if (method === 'GET') {
+      const texto = (await res.text()).slice(0, 80);
+      throw new Error(
+        `Spotify respondeu ${tipo || 'sem tipo'} em GET ${endpoint} (${res.status}): ${texto}`
+      );
+    }
+    return null;
+  }
+
   const text = await res.text();
   if (!text) return null;
   try {
     return JSON.parse(text);
   } catch {
-    // Um "Unexpected token" solto nao diz nada sobre onde o problema esta. Diga
-    // qual rota respondeu e com o que — e o que separa "a Spotify devolveu uma
-    // pagina de erro" de "o corpo veio cortado".
+    // Um "Unexpected token" solto nao diz onde procurar. Diga qual rota
+    // respondeu e com o que — e o que separa "pagina de erro" de "corpo
+    // cortado no meio".
     throw new Error(
-      `Spotify respondeu algo que nao e JSON em ${method} ${endpoint} ` +
+      `Spotify respondeu JSON invalido em ${method} ${endpoint} ` +
         `(${res.status}): ${text.slice(0, 80)}`
     );
   }
