@@ -12,6 +12,11 @@ import { config, saveJson, loadJson } from '../core/config.js';
 const API = 'https://api.spotify.com/v1';
 const TOKEN_URL = 'https://accounts.spotify.com/api/token';
 
+// Sem prazo, uma conexao pendurada trava o assistente inteiro: quem falou
+// "toca musica" fica sem resposta ate o sistema operacional desistir, o que
+// leva minutos. Melhor dizer que falhou em 8 segundos.
+const PRAZO_MS = Number(process.env.SPOTIFY_TIMEOUT_MS || 8000);
+
 export const SCOPES = [
   'user-read-playback-state',
   'user-modify-playback-state',
@@ -45,6 +50,7 @@ async function refreshAccessToken(refreshToken) {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
+    signal: AbortSignal.timeout(PRAZO_MS),
   });
   if (!res.ok) throw new Error(`Refresh do Spotify falhou: ${res.status} ${await res.text()}`);
 
@@ -125,6 +131,7 @@ async function request(method, endpoint, { body, query, _semResgate } = {}) {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(PRAZO_MS),
   });
 
   // 204 = sucesso sem corpo (play/pause/next respondem assim).

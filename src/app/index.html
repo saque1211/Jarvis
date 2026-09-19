@@ -57,13 +57,16 @@ body {
 /* ---- cabeçalho ---- */
 header {
   position: sticky; top: 0; z-index: 20;
-  padding: calc(14px + var(--seguro-topo)) 20px 14px;
+  /* Enxuto de proposito: a saudacao logo abaixo ja diz o dia e a hora, e num
+     celular cada 30px de cabecalho e uma linha de conteudo que some. O que
+     precisa ficar aqui e o pulso da conexao — isso o resto da tela nao diz. */
+  padding: calc(9px + var(--seguro-topo)) 20px 9px;
   background: rgba(6,9,12,.86);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
   border-bottom: 1px solid var(--borda);
   display: flex; align-items: baseline; gap: 12px;
 }
-header h1 { font-family: var(--serif); font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+header h1 { font-family: var(--serif); font-size: 19px; font-weight: 600; letter-spacing: -.02em; }
 header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display: flex; align-items: center; gap: 7px; }
 .bolinha { width: 8px; height: 8px; border-radius: 50%; background: var(--fraco); flex: none; }
 .bolinha.viva { background: var(--acento); box-shadow: 0 0 10px var(--acento); }
@@ -100,6 +103,62 @@ h2:first-child { margin-top: 4px; }
   border: 1px solid var(--borda); border-radius: 16px; padding: 16px; margin-bottom: 12px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 10px 26px -20px rgba(0,0,0,.9);
 }
+
+/* ---- perguntar ao Vexis ---- */
+/*
+ * O app existia sem isto: mostrava o estado da voz e nao deixava falar. Num
+ * celular, digitar costuma ser mais pratico que gritar pro painel da sala —
+ * principalmente de madrugada, ou quando a pessoa nao esta no mesmo comodo.
+ */
+.perguntar { padding: 14px; }
+.perguntar .campo-linha { display: flex; gap: 10px; align-items: flex-end; }
+.perguntar textarea {
+  flex: 1; min-width: 0; resize: none;
+  background: rgba(255,255,255,.06); border: 1px solid var(--borda);
+  border-radius: 13px; padding: 13px 14px; color: inherit;
+  font-family: inherit; font-size: 16px; line-height: 1.35;
+  min-height: 48px; max-height: 132px;
+}
+.perguntar textarea:focus { outline: none; border-color: var(--acento); }
+.enviar-bt {
+  flex: none; width: 48px; height: 48px; border-radius: 50%;
+  background: var(--acento-forte); border: none; color: #fff;
+  display: grid; place-items: center; cursor: pointer;
+}
+.enviar-bt:disabled { opacity: .45; }
+.enviar-bt:active { transform: scale(.94); }
+.enviar-bt svg { width: 21px; height: 21px; }
+
+/* Atalhos: o que se pede todo dia, sem digitar. Rolam na horizontal porque
+   cabem mais do que a largura do celular — e cortar a lista seria pior. */
+.atalhos {
+  display: flex; gap: 8px; margin-top: 12px;
+  overflow-x: auto; scrollbar-width: none;
+  /* sangra ate a borda do cartao pra a rolagem parecer natural */
+  margin-left: -14px; margin-right: -14px; padding: 0 14px 2px;
+}
+.atalhos::-webkit-scrollbar { display: none; }
+.atalho {
+  flex: none; background: rgba(255,255,255,.055); border: 1px solid var(--borda);
+  border-radius: 999px; padding: 9px 15px; color: var(--texto);
+  font-size: 14px; cursor: pointer; white-space: nowrap;
+}
+.atalho:active { background: rgba(25,192,221,.16); border-color: var(--acento); }
+
+/* Resposta: aparece embaixo do campo, nao numa tela nova. Quem perguntou ainda
+   esta olhando pro mesmo lugar. */
+.resposta {
+  margin-top: 13px; padding: 13px 14px;
+  background: rgba(25,192,221,.08); border: 1px solid rgba(25,192,221,.22);
+  border-radius: 13px; font-size: 15px; line-height: 1.5;
+  animation: entra .28s cubic-bezier(.22,.61,.36,1);
+}
+.resposta .quem { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--acento-claro); margin-bottom: 5px; }
+.resposta.pensando { color: var(--fraco); }
+.resposta .pontos::after {
+  content: ''; animation: pontinhos 1.4s steps(4,end) infinite;
+}
+@keyframes pontinhos { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
 
 /* ---- card de voz vivo ---- */
 .orb { width: 14px; height: 14px; border-radius: 50%; background: var(--fraco); flex: none; position: relative; transition: background .3s, box-shadow .3s; }
@@ -285,6 +344,19 @@ nav button:active svg { transform: scale(.9); }
         <span class="qual-dia" id="data-hoje">—</span>
         <span class="relogio" id="relogio">—</span>
       </div>
+    </div>
+
+    <div class="carta perguntar">
+      <div class="campo-linha">
+        <textarea id="pergunta" rows="1" placeholder="Peça alguma coisa ao Vexis…"
+                  enterkeyhint="send" autocomplete="off"></textarea>
+        <button class="enviar-bt" id="pergunta-enviar" aria-label="Enviar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="atalhos" id="atalhos"></div>
+      <div id="resposta"></div>
     </div>
 
     <div id="meus-paineis"></div>
@@ -537,11 +609,17 @@ function pintarAoVivo() {
   const p = ESTADO.preferencias;
   $('dispositivo').textContent = p?.dispositivo || 'sem nome';
   const estado = ESTADO.voice?.state || 'offline';
-  $('cartao-voz').dataset.estado = estado;
-  $('voz-estado').textContent = ROTULOS[estado] || '—';
-  $('voz-ultima').textContent = ESTADO.voice?.lastTranscript
-    ? '“' + ESTADO.voice.lastTranscript + '”'
-    : 'nada dito ainda';
+  const ultima = ESTADO.voice?.lastTranscript;
+  // Some quando nao ha nada acontecendo nem nada dito. Parado, este cartao
+  // anunciava "Painel desligado" logo abaixo de "Painel da sala: ligado" — duas
+  // frases sobre coisas diferentes que se leem como contradicao.
+  const vale = (estado && estado !== 'offline' && estado !== 'idle') || Boolean(ultima);
+  $('cartao-voz').hidden = !vale;
+  if (vale) {
+    $('cartao-voz').dataset.estado = estado;
+    $('voz-estado').textContent = ROTULOS[estado] || '—';
+    $('voz-ultima').textContent = ultima ? '“' + ultima + '”' : 'ouvindo o cômodo';
+  }
 
   // Tempo
   const t = ESTADO.tempo;
@@ -570,6 +648,76 @@ function pintarAoVivo() {
     };
   }
 }
+
+/* ── perguntar ao Vexis ────────────────────────────────────────────────── */
+/*
+ * Mesmo router da voz, entrada de texto. O `source: 'app'` do servidor mantem
+ * esta conversa separada da do painel — perguntar aqui nao atravessa o que
+ * alguem esta falando na sala.
+ */
+const ATALHOS = [
+  'Como vai estar o tempo hoje?',
+  'Toca uma música',
+  'Pausa a música',
+  'O que está tocando?',
+  'Que horas são?',
+];
+
+function montarAtalhos() {
+  const alvo = $('atalhos');
+  if (!alvo) return;
+  alvo.innerHTML = ATALHOS.map((t) => `<button class="atalho">${esc(t)}</button>`).join('');
+  for (const b of alvo.querySelectorAll('.atalho')) {
+    b.onclick = () => enviarPergunta(b.textContent);
+  }
+}
+
+function mostrarResposta(texto, pensando) {
+  $('resposta').innerHTML =
+    `<div class="resposta${pensando ? ' pensando' : ''}">` +
+    `<div class="quem">Vexis</div>` +
+    `<div>${esc(texto)}${pensando ? '<span class="pontos"></span>' : ''}</div></div>`;
+}
+
+let perguntando = false;
+async function enviarPergunta(texto) {
+  const t = String(texto || '').trim();
+  if (!t || perguntando) return;
+  perguntando = true;
+  $('pergunta-enviar').disabled = true;
+  mostrarResposta('Pensando', true);
+  try {
+    const r = await api('/v1/texto', 'POST', { texto: t });
+    mostrarResposta(r.resposta || r.erro || 'Sem resposta.', false);
+    $('pergunta').value = '';
+    ajustarAltura();
+  } catch (err) {
+    mostrarResposta('Não alcancei o Vexis: ' + err.message, false);
+  } finally {
+    perguntando = false;
+    $('pergunta-enviar').disabled = false;
+  }
+}
+
+// O campo cresce com o texto ate um teto. Caixa de uma linha so esconde o que
+// a pessoa escreveu; caixa alta demais come a tela do celular.
+function ajustarAltura() {
+  const el = $('pergunta');
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 132) + 'px';
+}
+
+$('pergunta').oninput = ajustarAltura;
+$('pergunta').onkeydown = (e) => {
+  // Enter envia; Shift+Enter quebra linha. Num celular o teclado mostra
+  // "enviar" por causa do enterkeyhint.
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    enviarPergunta($('pergunta').value);
+  }
+};
+$('pergunta-enviar').onclick = () => enviarPergunta($('pergunta').value);
+montarAtalhos();
 
 /* ── fotos ─────────────────────────────────────────────────────────────── */
 // A credencial vai na URL da imagem: uma tag <img> não manda cabeçalho, e o

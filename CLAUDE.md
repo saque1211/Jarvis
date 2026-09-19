@@ -144,6 +144,12 @@ inicial (manifest + service worker) e não precisa de loja.
 Não usa o palco escalado do HUD de propósito: lá o alvo é uma tela fixa vista
 de longe; aqui é um polegar, e o que importa é alvo grande e texto que reflui.
 
+Na Casa, **falar com ele é a primeira coisa da tela** — campo de texto, atalhos
+do que se pede todo dia, e a resposta aparecendo logo abaixo, no mesmo lugar
+onde a pessoa está olhando. Vai pelo `/v1/texto`, mesmo router da voz, com
+`source: 'app'`: perguntar aqui não atravessa a conversa de quem está falando
+na sala.
+
 O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
 servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
 lista velha você acredita.
