@@ -312,7 +312,7 @@ nav button:active svg { transform: scale(.9); }
     <h2>Fundo de tela</h2>
     <p class="ajuda">As fotos que aparecem no painel. Toque no + para enviar do celular.</p>
     <div class="grade" id="grade-fotos"></div>
-    <input type="file" id="arquivo" accept="image/jpeg,image/png,image/webp" multiple hidden>
+    <input type="file" id="arquivo" accept="image/*" multiple hidden>
     <button class="botao largo" id="enviar-foto" style="margin-top:12px">+ Enviar fotos</button>
 
     <h2>Aparência</h2>
@@ -592,6 +592,52 @@ async function carregarFotos() {
   }
 }
 
+/*
+ * Reduz a foto ANTES de enviar.
+ *
+ * Três problemas de uma vez. Foto de celular tem 8-12 MB e 4000px de largura —
+ * o painel desenha em 1920 e não ganha nada com o resto, mas a subida pelo
+ * Wi-Fi de casa demora e às vezes estoura o limite do servidor. O formato do
+ * celular nem sempre é JPEG (Samsung e iPhone gravam HEIC), e o servidor não
+ * aceita. E o cartão SD do painel é pequeno.
+ *
+ * O canvas resolve os três: redesenha no tamanho certo e re-exporta em JPEG.
+ * Se o navegador não souber abrir o arquivo (HEIC em Android antigo), manda o
+ * original e deixa o servidor decidir — melhor tentar que recusar aqui.
+ */
+const LADO_MAXIMO = 2560;
+
+function reduzirFoto(arq) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(arq);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const escala = Math.min(1, LADO_MAXIMO / Math.max(img.width, img.height));
+      // Já pequena e já num formato aceito: não mexe. Re-encodar de graça só
+      // perderia qualidade.
+      if (escala === 1 && /^image\/(jpeg|png|webp)$/.test(arq.type)) {
+        resolve({ corpo: arq, tipo: arq.type });
+        return;
+      }
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * escala);
+      cv.height = Math.round(img.height * escala);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      cv.toBlob(
+        (b) => resolve(b ? { corpo: b, tipo: 'image/jpeg' } : { corpo: arq, tipo: arq.type }),
+        'image/jpeg',
+        0.85
+      );
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve({ corpo: arq, tipo: arq.type || 'image/jpeg' });
+    };
+    img.src = url;
+  });
+}
+
 $('enviar-foto').onclick = () => $('arquivo').click();
 $('arquivo').onchange = async (e) => {
   const arqs = [...e.target.files];
@@ -600,29 +646,34 @@ $('arquivo').onchange = async (e) => {
   // Sobe uma por uma (o servidor recebe um arquivo por requisicao) e mostra o
   // progresso. Falha em uma nao derruba as outras — a pessoa nao quer perder as
   // 9 boas porque a 3a era um formato torto.
-  let ok = 0, falhas = 0;
+  let ok = 0;
+  const erros = [];
   for (let i = 0; i < arqs.length; i++) {
     const arq = arqs[i];
-    torrada(arqs.length > 1 ? `Enviando ${i + 1} de ${arqs.length}…` : 'Enviando…');
+    torrada(arqs.length > 1 ? `Enviando ${i + 1} de ${arqs.length}…` : 'Preparando…');
     try {
+      const { corpo, tipo } = await reduzirFoto(arq);
       const r = await fetch('/fotos', {
         method: 'POST',
         // fetch direto (binário, não JSON) — mas ainda precisa do login.
-        headers: { 'content-type': arq.type, 'authorization': 'Bearer ' + JWT },
-        body: arq,
+        headers: { 'content-type': tipo, 'authorization': 'Bearer ' + JWT },
+        body: corpo,
       });
       if (r.status === 401) { mostrarLogin(); return; }
-      const j = await r.json();
-      if (j.ok) ok++; else falhas++;
-    } catch {
-      falhas++;
+      const j = await r.json().catch(() => ({}));
+      if (j.ok) ok++;
+      // Guarda o motivo REAL. "1 falhou" sem dizer por que deixa a pessoa
+      // tentando de novo a mesma foto pra sempre.
+      else erros.push(j.erro || `erro ${r.status}`);
+    } catch (err) {
+      erros.push(err.message || 'falha de rede');
     }
   }
 
   torrada(
-    falhas === 0
+    !erros.length
       ? (ok === 1 ? 'Foto no painel.' : `${ok} fotos no painel.`)
-      : `${ok} enviada(s), ${falhas} falhou/falharam.`
+      : `${ok} enviada(s). Falhou: ${erros[0]}`
   );
   carregarFotos();
   e.target.value = '';

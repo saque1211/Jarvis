@@ -34,7 +34,13 @@ export function writeRuntime(patch) {
     current = {};
   }
   const next = { ...current, ...patch, updatedAt: new Date().toISOString() };
-  fs.writeFileSync(file, JSON.stringify(next, null, 2), 'utf8');
+  // Grava ao lado e RENOMEIA. Tres processos escrevem aqui (nucleus, cerebro e
+  // HUD) e todos leem; com writeFileSync direto existe um instante em que o
+  // arquivo esta pela metade. Quem le nesse instante cai no catch e recebe
+  // estado VAZIO — e o painel pisca, apagando hora e musica por um quadro.
+  const temp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify(next, null, 2), 'utf8');
+  fs.renameSync(temp, file);
   return next;
 }
 

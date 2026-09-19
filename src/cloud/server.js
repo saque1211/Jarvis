@@ -109,7 +109,21 @@ function lerCorpo(req, limite) {
 export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
   const ouvintes = new Set();
 
+  // Uma rota que lanca fora do try dela derruba o PROCESSO: em Node, uma
+  // promessa rejeitada sem tratamento encerra tudo. Aqui isso significa o
+  // assistente emudecer no meio de uma conversa por causa de um JSON torto ou
+  // do cartao SD cheio. O cerco fica aqui, como ja esta no nucleus.
   const servidor = http.createServer(async (req, res) => {
+    try {
+      await atender(req, res);
+    } catch (err) {
+      console.error(`[cerebro] ${req.method} ${req.url}: ${err.message}`);
+      if (!res.headersSent) json(res, 500, { erro: err.message });
+      else res.end();
+    }
+  });
+
+  async function atender(req, res) {
     const url = new URL(req.url, 'http://x');
 
     // Saude e a unica rota aberta: serve pro monitor do VPS saber se subiu, e
@@ -230,7 +244,7 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
     }
 
     return json(res, 404, { erro: 'rota desconhecida' });
-  });
+  }
 
   function emitir() {
     if (!ouvintes.size) return;
@@ -255,6 +269,14 @@ export function startCloud({ port = 8080, host = '0.0.0.0' } = {}) {
       }
     }
   }, 25000);
+
+  // Um painel de parede nao pode morrer por causa de uma promessa solta: rede
+  // caindo, cartao cheio, API fora do ar. Registrar e seguir de pe e melhor que
+  // sair — quem esta olhando a tela nao tem como reiniciar nada.
+  servidor.on('error', (err) => console.error(`[cerebro] erro no servidor: ${err.message}`));
+  process.on('unhandledRejection', (err) =>
+    console.error(`[cerebro] promessa rejeitada sem tratamento: ${err?.message || err}`)
+  );
 
   servidor.listen(port, host);
   return {

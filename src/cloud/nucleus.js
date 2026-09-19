@@ -358,6 +358,14 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   const musica = acompanharSpotify();
 
   servidor.on('error', (err) => console.error(`[nucleus] erro no servidor: ${err.message}`));
+  // Um painel de parede nao pode morrer por causa de uma promessa solta: rede
+  // caindo, cartao cheio, API fora do ar. Registrar e seguir de pe e melhor que
+  // sair — quem esta olhando a tela nao tem como reiniciar nada.
+  servidor.on('error', (err) => console.error(`[nucleus] erro no servidor: ${err.message}`));
+  process.on('unhandledRejection', (err) =>
+    console.error(`[nucleus] promessa rejeitada sem tratamento: ${err?.message || err}`)
+  );
+
   servidor.listen(port, host);
   return {
     port,

@@ -136,7 +136,11 @@ async function request(method, endpoint, { body, query, _semResgate } = {}) {
     // usuario "abrir o app e tocar algo uma vez" e um conselho que vence: dez
     // minutos depois ele precisa fazer de novo. Se ha aparelho VISIVEL (o
     // raspotify do proprio painel, por exemplo), assumimos ele e repetimos.
-    if (!_semResgate) {
+    // So um COMANDO resgata. Um GET (o "o que esta tocando" do painel, a leitura
+    // do volume antes de abafar) que assumisse um aparelho estaria mudando o
+    // mundo pra responder uma pergunta: bastaria perguntar a musica atual pro
+    // painel roubar a reproducao do celular de alguem.
+    if (!_semResgate && method !== 'GET') {
       let nome = null;
       try {
         nome = await escolherAparelho();
