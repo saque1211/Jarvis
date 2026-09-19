@@ -41,6 +41,14 @@ class MainActivity : Activity() {
     private lateinit var web: WebView
     private var retornoDeArquivo: ValueCallback<Array<Uri>>? = null
 
+    // Reconexao automatica. O painel mora num Raspberry que reinicia sozinho
+    // depois de queda de luz e demora ate dois minutos pra subir: uma tela de
+    // erro com botao e um beco sem saida justamente quando basta esperar.
+    private val relogio = android.os.Handler(android.os.Looper.getMainLooper())
+    private var tentativas = 0
+    private var tentandoAgora = false
+    private var deuErro = false
+
     companion object {
         private const val PEDIDO_ARQUIVO = 1001
         private const val PEDIDO_MIC = 1002
@@ -202,6 +210,7 @@ class MainActivity : Activity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun abrir(url: String) {
+        deuErro = false
         web = WebView(this)
         web.setBackgroundColor(FUNDO)
 
@@ -216,6 +225,16 @@ class MainActivity : Activity() {
         }
 
         web.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, endereco: String?) {
+                // O WebView chama isto TAMBEM depois de um erro, quando termina
+                // de desenhar a propria pagina de falha. Zerar aqui sem checar
+                // faria a espera nunca crescer: o app ficaria recarregando de 2
+                // em 2 segundos pra sempre num painel desligado.
+                if (deuErro) return
+                tentativas = 0
+                tentandoAgora = false
+            }
+
             override fun onReceivedError(
                 view: WebView?,
                 pedido: WebResourceRequest?,
@@ -224,7 +243,8 @@ class MainActivity : Activity() {
                 // So o carregamento da PAGINA importa. Um icone que falhou nao
                 // pode jogar a pessoa de volta pra tela de configuracao.
                 if (pedido?.isForMainFrame != true) return
-                telaDeErro(url, erro?.description?.toString() ?: "sem resposta")
+                deuErro = true
+                telaDeEspera(url, erro?.description?.toString() ?: "sem resposta")
             }
 
             /**
@@ -244,11 +264,12 @@ class MainActivity : Activity() {
                 resposta: android.webkit.WebResourceResponse?
             ) {
                 if (pedido?.isForMainFrame != true) return
+                deuErro = true
                 val codigo = resposta?.statusCode ?: 0
-                telaDeErro(
+                telaDeEspera(
                     url,
                     if (codigo == 404)
-                        "O painel respondeu 404 — ele está rodando uma versão antiga, sem o app. Rode \"git pull\" no PC."
+                        "O painel respondeu 404 — está rodando uma versão antiga, sem o app. Falta um \"git pull\" nele."
                     else
                         "O painel respondeu HTTP $codigo."
                 )
@@ -305,7 +326,25 @@ class MainActivity : Activity() {
         web.loadUrl(url)
     }
 
-    private fun telaDeErro(url: String, motivo: String) {
+    /**
+     * Painel fora do ar: espera e tenta de novo sozinho.
+     *
+     * Antes isto era uma tela de erro com um botao "Tentar de novo" — um beco
+     * sem saida justamente no caso mais comum: o painel mora num Raspberry que
+     * reinicia sozinho depois de queda de luz e demora ate dois minutos pra
+     * subir. A pessoa abria o app, via "nao achei", e tinha que ficar batendo
+     * no botao ate acertar o segundo em que o servidor voltou.
+     *
+     * Agora ele reconecta sozinho, com espera crescente (2s, 4s, 8s… ate 15s),
+     * e entra no painel no instante em que ele responde. O botao continua ali
+     * pra quem nao quer esperar.
+     */
+    private fun telaDeEspera(url: String, motivo: String) {
+        relogio.removeCallbacksAndMessages(null)
+        tentativas++
+
+        val espera = minOf(15_000L, 2_000L * (1L shl minOf(3, tentativas - 1)))
+
         val raiz = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(FUNDO)
@@ -314,35 +353,39 @@ class MainActivity : Activity() {
         }
 
         raiz.addView(TextView(this).apply {
-            text = "Não achei o painel"
+            text = "Painel desligado"
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
             gravity = Gravity.CENTER
         })
 
-        raiz.addView(TextView(this).apply {
+        val recado = TextView(this).apply {
             // O motivo primeiro, em vez de um palpite generico: "respondeu 404"
             // e "sem resposta" mandam a pessoa pra lados opostos.
-            text = "$motivo\n\nEm ${curto(url)}.\n\n" +
-                "O PC está ligado com \"npm run hud\"? E o celular está no mesmo Wi-Fi?"
+            text = "$motivo\n\nEm ${curto(url)}.\n\nReconectando sozinho…"
             setTextColor(FRACO)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
             gravity = Gravity.CENTER
             setPadding(0, dp(12), 0, dp(26))
-        })
+        }
+        raiz.addView(recado)
 
         raiz.addView(Button(this).apply {
-            text = "Tentar de novo"
+            text = "Tentar agora"
             setTextColor(Color.WHITE)
             setBackgroundColor(AZUL)
             layoutParams = LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT
             )
-            setOnClickListener { abrir(url) }
+            setOnClickListener {
+                relogio.removeCallbacksAndMessages(null)
+                tentativas = 0
+                abrir(url)
+            }
         })
 
-        // O IP do PC muda quando o roteador reinicia, e este e o unico lugar
-        // do app onde da pra consertar isso sem reinstalar.
+        // O IP do painel muda quando o roteador reinicia, e este e o unico
+        // lugar do app onde da pra consertar isso sem reinstalar.
         raiz.addView(Button(this).apply {
             text = "Trocar endereço"
             setTextColor(AZUL_CLARO)
@@ -352,10 +395,29 @@ class MainActivity : Activity() {
             )
             lp.topMargin = dp(8)
             layoutParams = lp
-            setOnClickListener { telaDeEndereco(null) }
+            setOnClickListener {
+                relogio.removeCallbacksAndMessages(null)
+                telaDeEndereco(null)
+            }
         })
 
         setContentView(raiz)
+
+        // Uma tentativa por vez: sem esta guarda, um erro de imagem no meio da
+        // pagina agendaria um segundo relogio e os dois recarregariam juntos.
+        if (tentandoAgora) return
+        tentandoAgora = true
+        relogio.postDelayed({
+            tentandoAgora = false
+            abrir(url)
+        }, espera)
+    }
+
+    override fun onDestroy() {
+        // Um relogio pendurado depois da tela morrer recarrega um WebView que
+        // nao existe mais.
+        relogio.removeCallbacksAndMessages(null)
+        super.onDestroy()
     }
 
     // ── seletor de arquivos ──────────────────────────────────────────────────

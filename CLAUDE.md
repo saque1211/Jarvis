@@ -172,6 +172,16 @@ no ALSA a fala e a música já estão misturadas, e abaixar uma abaixaria as dua
 O volume original só é anotado quando não há abafamento em curso; senão duas
 respostas seguidas gravariam 20% como "o volume de antes".
 
+**App Android** (`android/`): WebView apontado pro painel. Quando o servidor não
+responde ele **reconecta sozinho** (2s, 4s, 8s… até 15s) em vez de parar numa
+tela de erro — o painel mora num Raspberry que reinicia depois de queda de luz
+e demora até dois minutos pra subir, e ali basta esperar.
+
+Uma consequência que vale saber: com o `nucleus` rodando **no próprio Pi**,
+desligar o Pi desliga o app inteiro — é ele quem serve a página e as contas.
+Pra o app abrir com o painel apagado (e mostrar "desligado" na lista), o
+nucleus precisa morar num lugar sempre ligado; o Pi vira só mais um painel.
+
 **Falta:** calendário e e-mail.
 
 ## Limites conhecidos, documentados de propósito
