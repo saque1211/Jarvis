@@ -150,6 +150,12 @@ onde a pessoa está olhando. Vai pelo `/v1/texto`, mesmo router da voz, com
 `source: 'app'`: perguntar aqui não atravessa a conversa de quem está falando
 na sala.
 
+**Parear tem um `+` no cabeçalho**, e uma folha só. Era a primeira coisa que se
+faz com um painel novo e estava no fim da última aba, depois de rolar cinco
+seções. O sexto dígito já dispara — ninguém digita 6 números e depois procura
+um botão. Os Ajustes apontam pra mesma folha: dois campos pro mesmo código
+seriam duas telas pra manter e duas pra dar errado.
+
 O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
 servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
 lista velha você acredita.

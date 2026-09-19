@@ -40,6 +40,8 @@
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body {
   color: var(--texto);
+  /* Um filho largo demais nao pode fazer a pagina inteira rolar pro lado. */
+  overflow-x: hidden;
   font-family: var(--sans); font-size: 16px;
   overscroll-behavior-y: contain;
 }
@@ -70,6 +72,50 @@ header h1 { font-family: var(--serif); font-size: 19px; font-weight: 600; letter
 header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display: flex; align-items: center; gap: 7px; }
 .bolinha { width: 8px; height: 8px; border-radius: 50%; background: var(--fraco); flex: none; }
 .bolinha.viva { background: var(--acento); box-shadow: 0 0 10px var(--acento); }
+
+/* ---- botão + do cabeçalho ---- */
+/*
+ * Parear morava no fim dos Ajustes, depois de rolar cinco seções. É a primeira
+ * coisa que alguém faz com um painel novo e era a mais escondida do app.
+ */
+.mais {
+  flex: none; width: 34px; height: 34px; border-radius: 50%;
+  background: rgba(25,192,221,.14); border: 1px solid rgba(79,214,238,.34);
+  color: var(--acento-claro); display: grid; place-items: center; cursor: pointer;
+  margin-left: 4px;
+}
+.mais:active { transform: scale(.92); }
+.mais svg { width: 19px; height: 19px; }
+
+/* ---- folha de baixo ---- */
+/*
+ * Sobe de baixo, não cai do meio: o polegar está embaixo, e é lá que ficam os
+ * botões. Fechar tocando fora é o gesto que todo mundo já tenta.
+ */
+.folha-fundo {
+  position: fixed; inset: 0; z-index: 50; display: none;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.folha-fundo.on { display: block; animation: apaga .2s ease; }
+@keyframes apaga { from { opacity: 0; } to { opacity: 1; } }
+.folha {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  background: #0d1216; border-top: 1px solid var(--borda);
+  border-radius: 22px 22px 0 0;
+  padding: 10px 20px calc(26px + var(--seguro-base));
+  animation: sobe .28s cubic-bezier(.22,.61,.36,1);
+  max-height: 88vh; overflow-y: auto;
+}
+@keyframes sobe { from { transform: translateY(100%); } to { transform: none; } }
+/* Alcinha: diz "isto arrasta/fecha" sem escrever nada. */
+.folha .alca { width: 38px; height: 4px; border-radius: 99px; background: rgba(255,255,255,.2); margin: 0 auto 16px; }
+.folha h2 { margin: 0 0 6px; }
+.folha .ajuda { margin: 0 0 18px; }
+#codigo-parear {
+  letter-spacing: .3em; text-align: center; font-size: 27px; font-weight: 600;
+  padding: 16px 14px; font-variant-numeric: tabular-nums;
+}
 
 /* ---- meus painéis (topo da Casa) ---- */
 .painel-linha { display: flex; align-items: center; gap: 12px; }
@@ -186,7 +232,10 @@ button, input, select { font-family: inherit; font-size: 16px; color: inherit; }
 .botao.fantasma { background: transparent; border: 1px solid var(--borda); }
 .botao.perigo { background: transparent; border: 1px solid rgba(214,0,108,.45); color: var(--perigo); }
 .botao.largo { width: 100%; }
-input[type=text], input[type=time], input[type=number] {
+/* Por exclusao, nao por lista: a lista esquecia tel, email e password — e o
+   campo de login e o do codigo de pareamento ficavam sem largura nenhuma,
+   estourando a caixa que os continha. */
+input:not([type=range]):not([type=checkbox]):not([type=radio]):not([type=file]) {
   background: rgba(255,255,255,.06); border: 1px solid var(--borda);
   border-radius: 12px; padding: 13px 14px; width: 100%; min-height: 46px;
 }
@@ -333,7 +382,25 @@ nav button:active svg { transform: scale(.9); }
 <header>
   <h1>VEXIS</h1>
   <span class="onde"><span class="bolinha" id="pulso"></span><span id="dispositivo">—</span></span>
+  <button class="mais" id="abrir-parear" aria-label="Parear um painel" title="Parear um painel">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+         stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
 </header>
+
+<!-- ═══ FOLHA: PAREAR PAINEL ═══ -->
+<div class="folha-fundo" id="folha-parear">
+  <div class="folha">
+    <div class="alca"></div>
+    <h2>Parear um painel</h2>
+    <p class="ajuda">Um painel novo mostra um código de 6 dígitos na tela — ou fala ele em voz alta. Digite aqui para ligá-lo a esta conta.</p>
+    <input type="tel" id="codigo-parear" inputmode="numeric" maxlength="6"
+           autocomplete="one-time-code" placeholder="000000">
+    <div class="sub" id="msg-parear" style="margin:10px 0 14px; min-height:20px"></div>
+    <button class="botao largo" id="btn-parear">Parear</button>
+    <button class="botao largo fantasma" id="fechar-parear" style="margin-top:10px">Cancelar</button>
+  </div>
+</div>
 
 <main>
   <!-- ═══ CASA ═══ -->
@@ -484,15 +551,12 @@ nav button:active svg { transform: scale(.9); }
     <h2>Casa inteligente</h2>
     <div class="carta" id="cartao-casa"></div>
 
-    <h2>Parear painel</h2>
+    <h2>Painéis</h2>
     <div class="carta">
-      <div class="sub" style="margin-bottom:10px">Um painel novo mostra um código de 6 dígitos na tela. Digite aqui para ligá-lo a esta conta.</div>
-      <div class="duplo">
-        <input type="tel" id="parear-codigo" inputmode="numeric" maxlength="6" placeholder="000000" style="letter-spacing:.28em;text-align:center;font-size:22px">
-        <button class="botao largo" id="parear-btn">Parear</button>
-      </div>
-      <div class="sub" id="parear-msg" style="margin-top:8px"></div>
-      <div id="lista-aparelhos" style="margin-top:12px"></div>
+      <div id="lista-aparelhos"></div>
+      <!-- Um campo só no app inteiro: dois lugares para digitar o mesmo código
+           dariam duas telas para manter e duas para dar errado. -->
+      <button class="botao largo fantasma" id="parear-daqui" style="margin-top:12px">+ Parear um painel</button>
     </div>
 
     <h2>Dispositivo</h2>
@@ -1138,28 +1202,73 @@ $('volume').onchange = async () => {
 };
 $('nome-disp').onchange = () => gravar({ dispositivo: { nome: $('nome-disp').value.trim() } }, 'Nome salvo.');
 
-// Parear painel: a pessoa digita o código que o painel mostra na parede.
-$('parear-btn').onclick = async () => {
-  const codigo = $('parear-codigo').value.replace(/\D/g, '');
-  const msg = $('parear-msg');
+/* ── parear painel ─────────────────────────────────────────────────────── */
+/*
+ * Uma folha só, aberta pelo + do cabeçalho ou pelo botão dos Ajustes. Parear é
+ * a primeira coisa que se faz com um painel novo e estava no fim da última
+ * aba, depois de rolar cinco seções.
+ */
+function abrirParear() {
+  $('msg-parear').textContent = '';
+  $('codigo-parear').value = '';
+  $('folha-parear').classList.add('on');
+  // O teclado numérico precisa de um instante: focar junto com a animação faz
+  // a folha subir cortada no meio.
+  setTimeout(() => $('codigo-parear').focus(), 320);
+}
+
+function fecharParear() {
+  $('folha-parear').classList.remove('on');
+  $('codigo-parear').blur();
+}
+
+$('abrir-parear').onclick = abrirParear;
+$('parear-daqui').onclick = abrirParear;
+$('fechar-parear').onclick = fecharParear;
+// Tocar fora fecha — mas só no fundo, não na folha: um toque no meio do
+// formulário não pode jogar fora o que a pessoa acabou de digitar.
+$('folha-parear').onclick = (e) => { if (e.target === $('folha-parear')) fecharParear(); };
+
+// Só dígitos, e o sexto já dispara: ninguém digita 6 números e depois procura
+// um botão.
+$('codigo-parear').oninput = () => {
+  const el = $('codigo-parear');
+  const limpo = el.value.replace(/\D/g, '').slice(0, 6);
+  if (limpo !== el.value) el.value = limpo;
+  if (limpo.length === 6) parear();
+};
+
+let pareando = false;
+async function parear() {
+  const codigo = $('codigo-parear').value.replace(/\D/g, '');
+  const msg = $('msg-parear');
   if (codigo.length !== 6) { msg.textContent = 'O código tem 6 dígitos.'; return; }
-  $('parear-btn').disabled = true;
+  if (pareando) return;
+  pareando = true;
+  $('btn-parear').disabled = true;
   msg.textContent = 'Pareando…';
   try {
     const r = await api('/devices/aprovar', 'POST', { codigo });
     if (r.nome) {
       msg.textContent = '✓ "' + r.nome + '" pareado. O painel já vai abrir sozinho.';
-      $('parear-codigo').value = '';
+      torrada('Painel "' + r.nome + '" pareado.');
       carregarAparelhos();
+      carregarPaineis();
+      // Fecha depois de um instante: sumir na hora esconde a confirmação.
+      setTimeout(fecharParear, 1200);
     } else {
       msg.textContent = r.erro || 'Código inválido ou expirado.';
+      $('codigo-parear').value = '';
     }
   } catch (err) {
     msg.textContent = 'Falhou: ' + err.message;
   } finally {
-    $('parear-btn').disabled = false;
+    pareando = false;
+    $('btn-parear').disabled = false;
   }
-};
+}
+
+$('btn-parear').onclick = parear;
 
 $('reiniciar').onclick = async () => {
   if (!confirm('Reiniciar o painel agora?')) return;
