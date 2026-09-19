@@ -448,6 +448,30 @@ def gravar(audio):
 
 
 # ── Nuvem (voz) ──────────────────────────────────────────────────────────────
+def bater_ponto(token):
+    """
+    Diz ao nucleus, de tempos em tempos, que este aparelho esta vivo.
+
+    Sem isto o painel aparece "desligado" no app o tempo todo: quem conta como
+    ligado e quem mantem uma conexao de estado aberta, e o cliente de voz nao
+    mantem — ele escuta o comodo em silencio e so fala com o servidor quando
+    alguem diz a palavra. Ficava eternamente desligado enquanto atendia.
+
+    Roda numa thread de fundo e falha calado: um ping perdido nao pode
+    atrapalhar quem esta ouvindo o comodo.
+    """
+    while True:
+        try:
+            requests.post(
+                f"{NUCLEUS}/devices/ping",
+                headers={"x-device-token": token, "authorization": f"Bearer {token}"},
+                timeout=5,
+            )
+        except Exception:
+            pass
+        time.sleep(60)
+
+
 def avisar_que_ouve(token):
     """
     Diz ao cerebro que a palavra de ativacao disparou, antes de existir audio.
@@ -824,6 +848,10 @@ def main():
     if not token:
         log("parear", "sem token ainda — iniciando pareamento.")
         token = parear()
+
+    # Sinal de vida em segundo plano: e o que faz o aparelho aparecer ligado no
+    # app mesmo parado, escutando.
+    threading.Thread(target=bater_ponto, args=(token,), daemon=True).start()
 
     audio = carregar_audio().PyAudio()
 

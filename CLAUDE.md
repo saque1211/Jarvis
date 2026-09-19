@@ -156,6 +156,12 @@ seções. O sexto dígito já dispara — ninguém digita 6 números e depois pr
 um botão. Os Ajustes apontam pra mesma folha: dois campos pro mesmo código
 seriam duas telas pra manter e duas pra dar errado.
 
+**"Ligado" tem duas formas de acontecer**: conexão de estado aberta, ou sinal de
+vida recente (`/devices/ping`, 2,5 min). O painel de parede mantém a conexão —
+ele desenha o estado ao vivo. O cliente de voz do Pi não: ele escuta o cômodo
+em silêncio e só fala com o servidor quando alguém chama. Contando só conexão,
+ele aparecia desligado justamente enquanto atendia.
+
 O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
 servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
 lista velha você acredita.

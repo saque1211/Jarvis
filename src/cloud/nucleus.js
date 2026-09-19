@@ -109,6 +109,21 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   // Um painel ligado mantem o SSE aberto; caiu a zero, esta desligado. E o que
   // deixa a Casa do app dizer "ligado" sem inventar.
   const presenca = new Map();
+
+  // Nem todo aparelho fica com uma conexao aberta. O painel de parede fica —
+  // ele desenha o estado ao vivo. O cliente de voz do Pi nao: ele escuta o
+  // comodo em silencio e so aparece quando alguem fala. Contando so conexao
+  // aberta, ele ficava eternamente "desligado" enquanto atendia comandos.
+  //
+  // Entao ha duas formas de estar presente: conexao aberta, ou ter dado sinal
+  // de vida ha pouco. A segunda vence sozinha, senao um aparelho desligado
+  // ficaria "ligado" pra sempre.
+  const VALIDADE_SINAL = Number(process.env.JARVIS_PRESENCA_MS || 150000);
+  const ultimoSinal = new Map(); // id -> quando pingou pela ultima vez
+
+  const estaOnline = (id) =>
+    (presenca.get(id) || 0) > 0 || Date.now() - (ultimoSinal.get(id) || 0) < VALIDADE_SINAL;
+
   const marcarPresenca = (id, delta) => {
     const n = (presenca.get(id) || 0) + delta;
     if (n > 0) presenca.set(id, n); else presenca.delete(id);
@@ -200,7 +215,13 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     // O cerebro de voz valida o token do aparelho aqui.
     if (p === '/devices/ping') {
       const t = req.headers['x-device-token'] || tokenDaReq(req, url);
-      return aparelhoValido(t) ? json(res, 200, { ok: true }) : json(res, 401, { erro: 'aparelho nao pareado' });
+      const ap = aparelhoDoToken(t);
+      if (!ap) return json(res, 401, { erro: 'aparelho nao pareado' });
+      // Todo ping conta como sinal de vida. O cerebro ja valida o token aqui a
+      // cada comando, entao um aparelho que esta atendendo alguem aparece
+      // ligado sem precisar de nada novo.
+      ultimoSinal.set(ap.id, Date.now());
+      return json(res, 200, { ok: true });
     }
 
     // ── Daqui pra baixo, tudo exige um ator: pessoa OU aparelho pareado. ────
@@ -228,7 +249,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     }
     if (p === '/devices/meus') {
       if (quem.tipo !== 'pessoa') return json(res, 403, { erro: 'so uma pessoa lista aparelhos' });
-      const lista = aparelhosDe(quem.user).map((a) => ({ ...a, online: (presenca.get(a.id) || 0) > 0 }));
+      const lista = aparelhosDe(quem.user).map((a) => ({ ...a, online: estaOnline(a.id) }));
       return json(res, 200, { aparelhos: lista });
     }
     if (p === '/devices/remover' && req.method === 'POST') {
@@ -259,7 +280,10 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       clientes.add(res);
       // Se quem abriu foi um painel, ele passa a contar como "ligado".
       const idPainel = quem.tipo === 'aparelho' ? quem.device.id : null;
-      if (idPainel) marcarPresenca(idPainel, +1);
+      if (idPainel) {
+        marcarPresenca(idPainel, +1);
+        ultimoSinal.set(idPainel, Date.now());
+      }
       req.on('close', () => {
         clientes.delete(res);
         if (idPainel) marcarPresenca(idPainel, -1);
