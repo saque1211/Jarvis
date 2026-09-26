@@ -136,6 +136,12 @@ ou pro `linux.js`. O HUD nunca sabe em qual dos dois está. `capacidades()`
 diz o que a máquina realmente faz, e **controle que não mexe em nada some da
 tela** em vez de existir enganando.
 
+**Ligando** (`#ligando` no HUD): a sequência de quando o painel acorda. Ela
+mostra **progresso real** — as etapas acendem quando o núcleo responde e quando
+o primeiro estado chega, não num cronômetro fingindo trabalho. Fica no ar no
+mínimo 2,2s pra não piscar numa rede local rápida, e **sai sozinha em 7s mesmo
+sem conexão**: abertura bonita que não termina é painel quebrado com animação.
+
 **App do celular** (`src/app/`): PWA servida pelo mesmo processo do HUD, em
 `/app`. Cinco abas — Casa, Fotos, Lista, Avisos, Ajustes — editando o mesmo
 `settings.json` que o painel obedece, pelas mesmas rotas HTTP. Instala na tela

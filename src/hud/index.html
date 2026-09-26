@@ -42,6 +42,100 @@ html, body {
   background: #000;
 }
 
+/* ==========================================================================
+   Ligando. A sequência de quando o painel acorda.
+
+   Um painel de parede liga sozinho depois de queda de luz, e o que aparecia
+   até agora era um retângulo preto virando relógio de uma vez — parecia
+   travamento, não partida. Isto dá ao aparelho o segundo de respiro que todo
+   aparelho de verdade tem ao ser ligado.
+
+   Três regras que essa tela obedece:
+
+   1. **Mostra progresso real.** As linhas embaixo do nome acompanham o que
+      está de fato acontecendo (achou o núcleo, recebeu o primeiro estado), não
+      um cronômetro fingindo trabalho. Barra de carregamento falsa é mentira
+      pequena, mas é mentira.
+   2. **Nunca prende.** Se o núcleo não responder, ela sai mesmo assim e deixa
+      o painel mostrar "sem conexão". Uma abertura bonita que não termina é um
+      painel quebrado com animação.
+   3. **Some rápido de quem já esperou.** Fica no ar no mínimo um instante pra
+      não piscar, e no máximo o suficiente pra não cansar.
+   ========================================================================== */
+#ligando {
+  position: absolute; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  background:
+    radial-gradient(56% 42% at 50% 46%, rgba(25,192,221,.13), transparent 70%),
+    #000;
+  transition: opacity .75s cubic-bezier(.4,0,.2,1), transform .75s cubic-bezier(.4,0,.2,1);
+}
+/* O painel aparece POR TRÁS: a abertura afasta e clareia, como se a tela
+   estivesse sempre lá e a cortina saísse da frente. */
+#ligando.saiu { opacity: 0; transform: scale(1.06); pointer-events: none; }
+#ligando.fora { display: none; }
+
+.lg-caixa { text-align: center; position: relative; }
+
+/* O nome chega abrindo: as letras partem espalhadas e se juntam. Dá a
+   sensação de algo se organizando, que é exatamente o que está acontecendo. */
+.lg-nome {
+  font-family: var(--serif);
+  font-size: 128px; font-weight: 600; line-height: 1;
+  letter-spacing: .34em; text-indent: .34em;   /* compensa o vão da última letra */
+  color: #fff;
+  animation: lgNome 1.5s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes lgNome {
+  from { opacity: 0; letter-spacing: .92em; text-indent: .92em; filter: blur(9px); }
+  to   { opacity: 1; letter-spacing: .34em; text-indent: .34em; filter: blur(0); }
+}
+
+/* Um fio de luz que se abre sob o nome — o "ligou" da coisa. */
+.lg-fio {
+  height: 2px; width: 340px; margin: 34px auto 0;
+  background: linear-gradient(90deg, transparent, var(--acento), transparent);
+  transform: scaleX(0);
+  animation: lgFio 1.1s .45s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes lgFio { to { transform: scaleX(1); } }
+
+/* Respiro de luz atrás do nome: lento, para não competir com a leitura. */
+.lg-brilho {
+  position: absolute; left: 50%; top: 50%; width: 760px; height: 300px;
+  transform: translate(-50%,-50%);
+  background: radial-gradient(50% 50%, rgba(25,192,221,.20), transparent 72%);
+  filter: blur(26px);
+  animation: lgRespira 3.4s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes lgRespira { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* As etapas. Cada uma acende quando ACONTECE de verdade. */
+.lg-passos {
+  margin-top: 40px; display: flex; gap: 30px; justify-content: center;
+  font-family: var(--mono); font-size: 13px; letter-spacing: .34em;
+  text-transform: uppercase;
+  animation: lgSobe .8s .9s cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes lgSobe { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.lg-passo { color: rgba(255,255,255,.26); display: flex; align-items: center; gap: 9px; transition: color .45s; }
+.lg-passo::before {
+  content: ''; width: 7px; height: 7px; border-radius: 50%;
+  background: rgba(255,255,255,.2); transition: background .45s, box-shadow .45s;
+}
+.lg-passo.on { color: var(--acento-claro); }
+.lg-passo.on::before { background: var(--acento); box-shadow: 0 0 12px var(--acento); }
+/* A etapa que está sendo tentada pulsa — diz "trabalhando", não "parado". */
+.lg-passo.indo::before { animation: lgPisca 1.1s ease-in-out infinite; }
+@keyframes lgPisca { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+/* Quem pede menos movimento no sistema recebe a mesma tela, sem o teatro. */
+@media (prefers-reduced-motion: reduce) {
+  .lg-nome, .lg-fio, .lg-passos { animation-duration: .01ms; animation-delay: 0s; }
+  .lg-brilho { animation: none; }
+}
+
 /* ---- fundo ---- */
 #fundo { position: absolute; inset: 0; }
 #fundo img {
@@ -370,7 +464,28 @@ html, body {
 /* ---- central de controle ---- */
 #pegador { position: absolute; top: 0; left: 0; right: 0; height: 64px; z-index: 70; cursor: grab; touch-action: none; }
 #pegador:active { cursor: grabbing; }
-#alca { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); width: 120px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35); z-index: 71; pointer-events: none; }
+/*
+ * A alça da central. Ela diz "arraste aqui" — e só diz a verdade pra quem tem
+ * como arrastar.
+ *
+ * Numa TV de parede sem toque e sem mouse ela virava um risco cinza
+ * permanente no alto da tela, prometendo um gesto que ninguém ali pode fazer.
+ * É a mesma regra que o resto do painel já segue: controle que não mexe em
+ * nada some, em vez de existir enganando.
+ *
+ * Então: escondida por padrão; sempre visível onde o dedo é o ponteiro; e, com
+ * mouse, ela aparece quando o cursor chega ao topo e some quando ele sai.
+ */
+#alca {
+  position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+  width: 120px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.35);
+  z-index: 71; pointer-events: none;
+  opacity: 0; transition: opacity .35s ease;
+}
+@media (pointer: coarse) { #alca { opacity: 1; } }
+@media (hover: hover) { #pegador:hover + #alca { opacity: 1; } }
+/* Enquanto a central está sendo puxada, a alça acompanha o dedo/cursor. */
+#alca.usando { opacity: 1; }
 #cortina { position: absolute; inset: 0; z-index: 55; background: #000; opacity: 0; pointer-events: none; transition: opacity .3s; }
 #cortina.ativa { pointer-events: auto; }
 #central {
@@ -478,6 +593,19 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
 </style>
 </head>
 <body>
+<div id="ligando">
+  <div class="lg-caixa">
+    <div class="lg-brilho"></div>
+    <div class="lg-nome" id="lg-nome">VEXIS</div>
+    <div class="lg-fio"></div>
+    <div class="lg-passos">
+      <span class="lg-passo indo" id="lg-nucleo">núcleo</span>
+      <span class="lg-passo" id="lg-estado">estado</span>
+      <span class="lg-passo" id="lg-tela">painel</span>
+    </div>
+  </div>
+</div>
+
 <div id="palco" class="v-editorial">
 
   <div id="fundo"><div id="semfoto"></div></div>
@@ -624,6 +752,48 @@ async function carregarConta() {
   } catch { /* sem conta e so um rotulo; nao trava o painel */ }
 }
 
+/* ==========================================================================
+   Ligando — a lógica.
+
+   Marca as etapas conforme elas realmente acontecem e sai. O tempo mínimo
+   existe porque numa rede local o estado chega em 40 ms: sem ele a abertura
+   seria um lampejo, que incomoda mais do que não ter abertura nenhuma. O tempo
+   máximo existe porque um painel preso numa tela bonita é um painel quebrado.
+   ========================================================================== */
+const LIGANDO = {
+  nascimento: Date.now(),
+  MINIMO: 2200,
+  TETO: 7000,
+  saindo: false,
+};
+
+function passoFeito(id, proximo) {
+  const el = $(id);
+  if (!el || el.classList.contains('on')) return;
+  el.classList.remove('indo');
+  el.classList.add('on');
+  if (proximo && $(proximo)) $(proximo).classList.add('indo');
+}
+
+function sairDoLigando() {
+  if (LIGANDO.saindo) return;
+  LIGANDO.saindo = true;
+  const falta = Math.max(0, LIGANDO.MINIMO - (Date.now() - LIGANDO.nascimento));
+  setTimeout(() => {
+    passoFeito('lg-tela');
+    const el = $('ligando');
+    if (!el) return;
+    el.classList.add('saiu');
+    // `display:none` só depois da transição: tirar antes corta o fade no meio,
+    // e o elemento invisível ainda captaria toque se ficasse por cima.
+    setTimeout(() => el.classList.add('fora'), 800);
+  }, falta);
+}
+
+// Rede caída, núcleo fora do ar, token vencido: a abertura sai assim mesmo e
+// deixa o painel dizer "sem conexão", que é a informação verdadeira.
+setTimeout(sairDoLigando, LIGANDO.TETO);
+
 function conectar() {
   // Sem cabecalho no EventSource: a credencial (pessoa ou aparelho) vai na URL.
   fonte = new EventSource('/estado' + CRED_URL);
@@ -631,12 +801,17 @@ function conectar() {
   fonte.onopen = () => {
     tentativas = 0;
     $('sem-conexao').classList.remove('ativo');
+    passoFeito('lg-nucleo', 'lg-estado');
   };
 
   fonte.onmessage = (ev) => {
     try {
       ESTADO = JSON.parse(ev.data);
       desenhar();
+      // O primeiro estado é o marco: daqui em diante há o que mostrar. Sair
+      // antes disso entregaria um painel com traços no lugar da hora.
+      passoFeito('lg-estado', 'lg-tela');
+      sairDoLigando();
     } catch (e) {
       console.error('estado ilegivel', e);
     }
@@ -1288,6 +1463,9 @@ $('pegador').addEventListener('pointerdown', (ev) => {
   ev.preventDefault();
   $('pegador').setPointerCapture(ev.pointerId);
   arrastando = true;
+  // Puxando: a alça fica visível mesmo onde ela normalmente se esconde, pra
+  // não sumir debaixo do dedo no meio do gesto.
+  $('alca').classList.add('usando');
   // O palco esta escalado; sem dividir pela escala o painel anda mais que o
   // dedo em tela pequena e menos em tela grande.
   const inicioY = ev.clientY / escala;
@@ -1302,6 +1480,7 @@ $('pegador').addEventListener('pointerdown', (ev) => {
     $('pegador').removeEventListener('pointerup', soltar);
     $('pegador').removeEventListener('pointercancel', soltar);
     arrastando = false;
+    $('alca').classList.remove('usando');
     aberto = deslocamento > ALTURA_PAINEL * 0.35;
     aplicarPainel(aberto ? ALTURA_PAINEL : 0, true);
     if (aberto) abrirCentral();
