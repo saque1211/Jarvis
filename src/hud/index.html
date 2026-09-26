@@ -1932,22 +1932,38 @@ async function mostrarPareamento() {
       return;
     }
     const codigo = dados.codigo;
+    // Fica só aqui, na memória desta página. Nunca vai pra tela nem pro
+    // localStorage — é ele que troca o código por um token de verdade.
+    const segredo = dados.pollSecret;
     $('boot-conteudo').innerHTML =
       '<h1>Parear este painel</h1>' +
-      '<p>Abra o app do VEXIS no celular, entre na sua conta e vá em ' +
-      '<b>Ajustes → Parear painel</b>. Digite o código:</p>' +
+      '<p>Abra o app do VEXIS no celular, entre na sua conta e toque no ' +
+      '<b>+</b> no canto de cima. Digite o código:</p>' +
       '<div class="cod-parear">' + esc(codigo) + '</div>' +
       '<p class="cod-espera">Esperando aprovação…</p>';
 
+    // Espera pelo SEGREDO, nunca pelo codigo.
+    //
+    // O codigo de 6 digitos serve pra pessoa digitar no celular — ele aparece
+    // na tela da sala e as vezes e lido em voz alta. Usa-lo tambem pra buscar
+    // o token faria de um numero de seis digitos a chave do assistente
+    // inteiro. O `pollSecret` tem 24 bytes aleatorios, fica so na memoria
+    // desta pagina, e nunca e mostrado a ninguem.
     const poll = setInterval(async () => {
       let r;
-      try { r = await (await fetch('/devices/conferir?codigo=' + encodeURIComponent(codigo))).json(); }
-      catch { return; }
-      if (r.estado === 'aprovado') {
+      try {
+        r = await (await fetch('/devices/poll', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ pollSecret: segredo }),
+        })).json();
+      } catch { return; }
+
+      if (r.approved && r.deviceToken) {
         clearInterval(poll);
-        localStorage.setItem('vexis_device', r.token);
+        localStorage.setItem('vexis_device', r.deviceToken);
         location.reload();
-      } else if (r.estado === 'expirado' || r.estado === 'inexistente') {
+      } else if (!r.encontrado || r.expirado) {
         clearInterval(poll);
         pedir(); // o codigo venceu; pega outro
       }

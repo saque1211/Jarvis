@@ -162,6 +162,20 @@ seções. O sexto dígito já dispara — ninguém digita 6 números e depois pr
 um botão. Os Ajustes apontam pra mesma folha: dois campos pro mesmo código
 seriam duas telas pra manter e duas pra dar errado.
 
+**O código de 6 dígitos nunca entrega token.** Ele é para a pessoa digitar —
+aparece na tela da sala e às vezes é lido em voz alta, então um milhão de
+combinações não é segredo, é cadeado de bicicleta. Quem espera o token faz
+polling por `pollSecret` (24 bytes, só na memória de quem pediu o código).
+`/devices/conferir` responde só o estado. As rotas abertas de pareamento têm
+freio por origem **e por rota** — no próprio Pi o painel e a voz saem os dois
+de 127.0.0.1, e uma conta só somaria os dois pollings e travaria sem ataque.
+
+**Senha nunca em `scryptSync`.** A versão síncrona trava o laço de eventos:
+medido, 10 tentativas de login seguravam o servidor por 594 ms — o painel para
+de receber estado, e num servidor exposto isso vira um jeito barato de derrubar
+a casa. `entrar()` também tem freio que dobra a cada erro, contado por email +
+origem: só por email, alguém trancaria a sua conta de longe.
+
 **"Ligado" tem duas formas de acontecer**: conexão de estado aberta, ou sinal de
 vida recente (`/devices/ping`, 2,5 min). O painel de parede mantém a conexão —
 ele desenha o estado ao vivo. O cliente de voz do Pi não: ele escuta o cômodo

@@ -38,20 +38,36 @@ function segredo() {
 
 // ── Senha ────────────────────────────────────────────────────────────────
 
+/**
+ * scrypt, sempre ASSINCRONO.
+ *
+ * A versao Sync trava o laco de eventos do Node enquanto calcula — sao
+ * centenas de milissegundos num Raspberry com a CPU freada. Durante um login o
+ * nucleus inteiro congela: o painel para de receber estado, o app para de
+ * responder. E, num servidor exposto na internet, tentar senha repetidamente
+ * vira uma forma barata de derrubar a casa toda. A versao assincrona faz a
+ * mesma conta na fila de trabalho, sem segurar ninguem.
+ */
+function scrypt(senha, sal, tamanho) {
+  return new Promise((ok, falha) => {
+    crypto.scrypt(senha, sal, tamanho, (err, chave) => (err ? falha(err) : ok(chave)));
+  });
+}
+
 /** scrypt com sal aleatorio. Formato guardado: scrypt$<sal hex>$<hash hex>. */
-function embaralharSenha(senha) {
+async function embaralharSenha(senha) {
   const sal = crypto.randomBytes(16);
-  const hash = crypto.scryptSync(senha, sal, 64);
+  const hash = await scrypt(senha, sal, 64);
   return `scrypt$${sal.toString('hex')}$${hash.toString('hex')}`;
 }
 
 /** Compara em tempo constante: comparar hash com === vaza informacao no tempo. */
-function senhaConfere(senha, guardado) {
+async function senhaConfere(senha, guardado) {
   try {
     const [algo, salHex, hashHex] = String(guardado).split('$');
     if (algo !== 'scrypt') return false;
     const esperado = Buffer.from(hashHex, 'hex');
-    const veio = crypto.scryptSync(senha, Buffer.from(salHex, 'hex'), esperado.length);
+    const veio = await scrypt(senha, Buffer.from(salHex, 'hex'), esperado.length);
     return crypto.timingSafeEqual(esperado, veio);
   } catch {
     return false;
@@ -112,8 +128,58 @@ function normalizarEmail(email) {
   return String(email || '').trim().toLowerCase();
 }
 
+/**
+ * Freio de tentativa de senha.
+ *
+ * Sem isto, um servidor na internet aceita quantos palpites o atacante quiser,
+ * o dia inteiro. Com uma espera que dobra a cada erro, adivinhar deixa de ser
+ * viavel — e quem so errou a propria senha uma vez nao sente nada.
+ *
+ * A contagem e por email e por origem: travar so por email deixaria alguem
+ * trancar a SUA conta de proposito, errando a senha de longe.
+ */
+const TENTATIVAS_LIVRES = 5;
+const ESPERA_BASE = 2000;
+const ESQUECE_EM = 15 * 60 * 1000;
+const falhas = new Map(); // chave -> { n, ultima }
+
+function chaveFreio(email, origem) {
+  return `${normalizarEmail(email)}|${origem || '?'}`;
+}
+
+/** Quanto falta esperar, em ms. Zero quando esta liberado. */
+export function esperaDoFreio(email, origem) {
+  const f = falhas.get(chaveFreio(email, origem));
+  if (!f) return 0;
+  if (Date.now() - f.ultima > ESQUECE_EM) {
+    falhas.delete(chaveFreio(email, origem));
+    return 0;
+  }
+  if (f.n < TENTATIVAS_LIVRES) return 0;
+  // 2s, 4s, 8s… com teto de 5 min: incomoda um robo, nao uma pessoa.
+  const punicao = Math.min(300000, ESPERA_BASE * 2 ** (f.n - TENTATIVAS_LIVRES));
+  return Math.max(0, punicao - (Date.now() - f.ultima));
+}
+
+function anotarFalha(email, origem) {
+  const k = chaveFreio(email, origem);
+  const f = falhas.get(k) || { n: 0, ultima: 0 };
+  f.n++;
+  f.ultima = Date.now();
+  falhas.set(k, f);
+  // O mapa nao pode crescer pra sempre num servidor aberto.
+  if (falhas.size > 5000) {
+    const limite = Date.now() - ESQUECE_EM;
+    for (const [chave, v] of falhas) if (v.ultima < limite) falhas.delete(chave);
+  }
+}
+
+function limparFalhas(email, origem) {
+  falhas.delete(chaveFreio(email, origem));
+}
+
 /** Cria uma conta. Erros sao mensagens falaveis, ja em portugues. */
-export function registrar(email, senha) {
+export async function registrar(email, senha) {
   const e = normalizarEmail(email);
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) throw new Error('Email invalido.');
   if (!senha || senha.length < 8) throw new Error('A senha precisa de 8 caracteres ou mais.');
@@ -124,7 +190,7 @@ export function registrar(email, senha) {
   const usuario = {
     id: crypto.randomUUID(),
     email: e,
-    senha: embaralharSenha(senha),
+    senha: await embaralharSenha(senha),
     criadoEm: new Date().toISOString(),
   };
   dados.usuarios.push(usuario);
@@ -133,13 +199,21 @@ export function registrar(email, senha) {
 }
 
 /** Entra numa conta existente. Mensagem unica pra nao dizer se o email existe. */
-export function entrar(email, senha) {
+export async function entrar(email, senha, origem) {
   const e = normalizarEmail(email);
+
+  const falta = esperaDoFreio(e, origem);
+  if (falta > 0) {
+    throw new Error(`Muitas tentativas. Espere ${Math.ceil(falta / 1000)} segundos.`);
+  }
+
   const dados = lerContas();
   const usuario = dados.usuarios.find((u) => u.email === e);
-  if (!usuario || !senhaConfere(senha, usuario.senha)) {
+  if (!usuario || !(await senhaConfere(senha, usuario.senha))) {
+    anotarFalha(e, origem);
     throw new Error('Email ou senha incorretos.');
   }
+  limparFalhas(e, origem);
   return { token: novoToken(usuario), user: publico(usuario) };
 }
 
@@ -214,11 +288,23 @@ export function aprovarCodigo(codigo, usuario) {
 }
 
 /** O aparelho faz polling neste ate o codigo ser aprovado (por codigo). */
+/**
+ * Estado de um codigo — e SO o estado. Nunca o token.
+ *
+ * Esta rota e aberta por necessidade: o painel ainda nao tem credencial
+ * nenhuma quando pergunta pelo proprio codigo. Ela respondia com o token do
+ * aparelho, e isso fazia de um numero de 6 digitos — que aparece na tela e as
+ * vezes e dito em voz alta — a chave de acesso ao assistente inteiro. Um
+ * milhao de combinacoes nao e segredo; e um cadeado de bicicleta.
+ *
+ * Quem espera o token faz polling por `pollSecret`, que tem 24 bytes
+ * aleatorios e nunca aparece na tela. Era a razao de ele existir; faltava o
+ * painel usar.
+ */
 export function conferirCodigo(codigo) {
-  const dados = lerDispositivos();
-  const pedido = dados.codigos.find((c) => c.codigo === String(codigo));
+  const pedido = lerDispositivos().codigos.find((c) => c.codigo === String(codigo));
   if (!pedido) return { estado: 'inexistente' };
-  if (pedido.token) return { estado: 'aprovado', token: pedido.token };
+  if (pedido.token) return { estado: 'aprovado' };
   if (pedido.expira <= Date.now()) return { estado: 'expirado' };
   return { estado: 'aguardando' };
 }

@@ -108,6 +108,35 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   // Presenca dos paineis: id do aparelho -> quantas conexoes de estado abertas.
   // Um painel ligado mantem o SSE aberto; caiu a zero, esta desligado. E o que
   // deixa a Casa do app dizer "ligado" sem inventar.
+  /*
+   * Freio das rotas ABERTAS de pareamento.
+   *
+   * /devices/conferir precisa ser aberta — o painel ainda nao tem credencial
+   * nenhuma quando pergunta pelo proprio codigo. Mas ela responde sobre um
+   * numero de 6 digitos, e sem freio um script percorre o espaco inteiro em
+   * minutos. Com 30 tentativas por minuto por origem, a mesma varredura levaria
+   * mais de um ano — e um painel de verdade pergunta uma vez a cada 3 segundos.
+   */
+  const batidas = new Map(); // origem+rota -> { n, janela }
+  const LIMITE_POR_MINUTO = 30;
+  const freado = (req, rota) => {
+    // A conta e por origem E POR ROTA. No proprio Pi o painel e o cliente de
+    // voz saem os dois de 127.0.0.1, e cada um faz o seu polling: somados
+    // passariam do teto e o freio dispararia sem ninguem atacando nada.
+    const origem = `${req.socket?.remoteAddress || '?'}|${rota}`;
+    const agora = Date.now();
+    const b = batidas.get(origem);
+    if (!b || agora - b.janela > 60000) {
+      batidas.set(origem, { n: 1, janela: agora });
+      if (batidas.size > 2000) {
+        for (const [k, v] of batidas) if (agora - v.janela > 60000) batidas.delete(k);
+      }
+      return false;
+    }
+    b.n++;
+    return b.n > LIMITE_POR_MINUTO;
+  };
+
   const presenca = new Map();
 
   // Nem todo aparelho fica com uma conexao aberta. O painel de parede fica —
@@ -161,7 +190,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     if (p === '/auth/register' && req.method === 'POST') {
       try {
         const { email, password } = JSON.parse((await lerCorpo(req)).toString() || '{}');
-        return json(res, 200, registrar(email, password));
+        return json(res, 200, await registrar(email, password));
       } catch (err) {
         return json(res, 400, { erro: err.message });
       }
@@ -169,7 +198,10 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     if (p === '/auth/login' && req.method === 'POST') {
       try {
         const { email, password } = JSON.parse((await lerCorpo(req)).toString() || '{}');
-        return json(res, 200, entrar(email, password));
+        // A origem entra no freio: travar so por email deixaria alguem
+        // trancar a conta de outra pessoa errando a senha de longe.
+        const origem = req.socket?.remoteAddress || '?';
+        return json(res, 200, await entrar(email, password, origem));
       } catch (err) {
         return json(res, 400, { erro: err.message });
       }
@@ -189,6 +221,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       }
     }
     if (p === '/devices/conferir') {
+      if (freado(req, 'conferir')) return json(res, 429, { erro: 'muitas tentativas' });
       return json(res, 200, conferirCodigo(url.searchParams.get('codigo')));
     }
     // Protocolo do cliente do Pi: registra (codigo publico + segredo de polling)
@@ -203,6 +236,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
       }
     }
     if (p === '/devices/poll' && req.method === 'POST') {
+      if (freado(req, 'poll')) return json(res, 429, { erro: 'muitas tentativas' });
       try {
         const { pollSecret } = JSON.parse((await lerCorpo(req)).toString() || '{}');
         const r = conferirPorSegredo(pollSecret);
