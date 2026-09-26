@@ -120,7 +120,7 @@ header .onde { font-size: 13px; color: var(--fraco); margin-left: auto; display:
 /* ---- meus painéis (topo da Casa) ---- */
 .painel-linha { display: flex; align-items: center; gap: 12px; }
 .painel-linha + .painel-linha { border-top: 1px solid var(--borda); margin-top: 10px; padding-top: 12px; }
-.painel-luz { width: 10px; height: 10px; border-radius: 50%; background: var(--fraco); flex: none; }
+.painel-luz { width: 10px; height: 10px; border-radius: 50%; background: var(--fraco); flex: none; margin-right: 2px; }
 .painel-luz.on { background: #2ecc71; box-shadow: 0 0 10px #2ecc71; }
 .painel-linha .estado { font-size: 13px; color: var(--fraco); }
 .painel-linha .estado.on { color: #2ecc71; }
@@ -264,6 +264,16 @@ select {
 .grade { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .foto { position: relative; aspect-ratio: 16/10; border-radius: 14px; overflow: hidden; border: 1px solid var(--borda); }
 .foto img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Foto que não carregou: moldura tracejada e um recado, em vez do ícone de
+   imagem quebrada do navegador — que não diz nada e parece defeito do app.
+   O botão de apagar continua ali, que é justamente o que se quer fazer. */
+.foto.quebrada { border-style: dashed; background: rgba(255,255,255,.03); }
+.foto.quebrada img { display: none; }
+.foto.quebrada::after {
+  content: 'não carregou';
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-size: 13px; color: var(--fraco);
+}
 .foto .x {
   position: absolute; top: 7px; right: 7px; width: 32px; height: 32px; border-radius: 50%;
   background: rgba(0,0,0,.62); border: none; color: #fff; font-size: 17px; line-height: 1; cursor: pointer;
@@ -790,8 +800,13 @@ const fotoUrl = (f) => '/fotos/' + encodeURIComponent(f) + (JWT ? '?token=' + en
 
 async function carregarFotos() {
   const { fotos } = await api('/fotos');
+  // `onerror` marca a moldura em vez de deixar o navegador desenhar o ícone de
+  // imagem quebrada. Foto some do disco, token vence, rede cai no meio do
+  // carregamento — em todos esses casos o que aparecia era um retângulo com
+  // borda branca e um símbolo sem explicação, que parece defeito do app.
   $('grade-fotos').innerHTML = fotos.length
-    ? fotos.map((f) => `<div class="foto"><img src="${fotoUrl(f)}" alt="">
+    ? fotos.map((f) => `<div class="foto"><img src="${fotoUrl(f)}" alt=""
+        onerror="this.closest('.foto').classList.add('quebrada')">
         <button class="x" data-apagar="${esc(f)}">×</button></div>`).join('')
     : '<div class="vazio" style="grid-column:1/-1">Nenhuma foto ainda.</div>';
 
@@ -1056,9 +1071,16 @@ async function carregarAparelhos() {
     if (!aps.length) { alvo.innerHTML = '<div class="sub">Nenhum painel pareado ainda.</div>'; return; }
     alvo.innerHTML = aps.map((a) => {
       const desde = a.criadoEm ? new Date(a.criadoEm).toLocaleDateString('pt-BR') : '';
-      return '<div class="linha"><div class="cresce">' +
+      // O estado REAL, com a mesma luz da aba Casa. Isto dizia "✓ ligado" pra
+      // todo mundo, cravado: um painel apagado se anunciava ligado, e era a
+      // unica tela onde dava pra remove-lo — justo onde a pessoa precisa saber
+      // qual dos dois esta morto.
+      return '<div class="linha">' +
+        '<span class="painel-luz' + (a.online ? ' on' : '') + '"></span>' +
+        '<div class="cresce">' +
         '<div class="rotulo">' + esc(a.nome || 'Painel') + '</div>' +
-        '<div class="sub">pareado' + (desde ? ' em ' + esc(desde) : '') + ' · ✓ ligado</div>' +
+        '<div class="sub">pareado' + (desde ? ' em ' + esc(desde) : '') + ' · ' +
+        (a.online ? 'ligado' : 'desligado') + '</div>' +
         '</div><button class="botao fantasma" data-remover="' + esc(a.id) + '" ' +
         'style="min-height:38px;padding:6px 14px;color:var(--perigo);border-color:rgba(214,0,108,.4)">Remover</button></div>';
     }).join('');
