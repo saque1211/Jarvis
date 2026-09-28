@@ -75,6 +75,18 @@ const PADRAO = {
     horasAFrente: 6,
   },
 
+  transito: {
+    // De onde as rotas saem. Sem isso nao ha o que calcular: a cidade da
+    // previsao nao serve, porque o centro da cidade nao e a sua rua, e o
+    // tempo de trajeto sairia errado por 20 minutos com cara de certo.
+    origem: { nome: null, endereco: null, lat: null, lon: null },
+    // Lugares com nome: "trabalho", "faculdade", "casa da minha avo".
+    // { nome, endereco, lat, lon }
+    lugares: [],
+    // Qual deles responde "como esta o transito" sem destino dito.
+    padrao: null,
+  },
+
   // "Quinta-feira tirar o lixo, das 8h as 21h".
   avisos: [],
 

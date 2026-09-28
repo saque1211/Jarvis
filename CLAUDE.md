@@ -87,9 +87,9 @@ não diz que o problema é a pasta.
 
 ## Estado atual
 
-20 skills / 109 tools. No Windows carregam todas; no Raspberry e na nuvem,
-as 9 que não tocam a máquina (weather, avisos, compras, memory, tasks,
-search, voice, integrations, freelance).
+23 skills / 117 tools. No Windows carregam todas; no Raspberry e na nuvem,
+as 13 que não tocam a máquina (weather, transito, avisos, compras, memory,
+tasks, search, voice, integrations, freelance, relogio, spotify, timer).
 
 Uma skill marca `platform: 'win32'` pra rodar só no PC, ou `platform: '*'`
 pra rodar em qualquer lugar. Sem marcação nenhuma também vale em todo lugar
@@ -186,6 +186,22 @@ O service worker guarda **só a casca**, nunca dados. Lista de compras de ontem
 servida como se fosse a de hoje é pior que erro de rede: o erro você vê, a
 lista velha você acredita.
 
+**Trânsito** (`src/skills/transito.js`): responde com dois números — quanto
+leva agora e quanto levaria com a via livre. "23 minutos" sozinho não diz se o
+dia está bom. Vem da TomTom, e não do Google Directions, porque o Google exige
+cartão cadastrado antes da primeira chamada e a TomTom dá 2.500 consultas por
+dia só com e-mail; o Waze não tem API pública.
+
+Os lugares têm **nome** ("trabalho", "faculdade") porque a pergunta de toda
+manhã é a mesma — o que muda é o trânsito, não o endereço. Um deles é o padrão,
+e é quem responde "como está o trânsito" sem destino dito.
+
+A origem **não** cai na cidade da previsão do tempo quando falta: o centro da
+cidade não é a sua rua, e o trajeto sairia errado por vinte minutos com cara de
+certo. E endereço se digita — os mesmos lugares se cadastram nos Ajustes do app,
+porque ditar "rua Doutor Fulano de Tal, 1420" erra o número metade das vezes.
+Detalhes em `.skills/transito.md`.
+
 **Música recua quando ele fala** (`src/cloud/abafar.js`): resposta falada por
 cima do Spotify não se entende. O corte é no volume do *aparelho* pela API —
 no ALSA a fala e a música já estão misturadas, e abaixar uma abaixaria as duas.
@@ -213,6 +229,9 @@ nucleus precisa morar num lugar sempre ligado; o Pi vira só mais um painel.
   caos, você abre a janela certa de uma vez.
 - **GPU** depende de `nvidia-smi`. Em AMD/Intel a tool reporta indisponível em
   vez de inventar número.
+- **Waze não tem API pública.** O app é o produto. Quem promete trânsito "pelo
+  Waze" está raspando o site, que quebra sem aviso. O caminho honesto é uma API
+  de rotas com dados de trânsito — aqui, a TomTom.
 - **Xiaomi Home não tem API pública de consumidor.** O caminho honesto é o
   Home Assistant como intermediário: ele tem REST com token, e a integração
   Xiaomi Miio dele já resolve o protocolo. Uma integração cobre Xiaomi, Tuya

@@ -543,6 +543,11 @@ nav button:active svg { transform: scale(.9); }
       <input type="range" id="chuva" min="10" max="90" step="10">
     </div>
 
+    <h2>Trânsito</h2>
+    <!-- Endereço se digita. Ditar "rua Doutor Fulano de Tal, 1420" pro microfone
+         da sala erra o número metade das vezes; aqui sai certo de primeira. -->
+    <div class="carta" id="cartao-transito"></div>
+
     <h2>Brilho e volume</h2>
     <div class="carta">
       <div class="linha">
@@ -731,6 +736,7 @@ function pintarAoVivo() {
  */
 const ATALHOS = [
   'Como vai estar o tempo hoje?',
+  'Como está o trânsito?',
   'Toca uma música',
   'Pausa a música',
   'O que está tocando?',
@@ -1099,6 +1105,97 @@ async function carregarAparelhos() {
 /* ── casa inteligente (Home Assistant) ─────────────────────────────────────
    c.casa vem do /config: baseUrl e token — o token chega mascarado como
    '(guardado)' quando existe, entao nunca aparece de verdade na tela. */
+/* ── trânsito ──────────────────────────────────────────────────────────── */
+/*
+ * Um lugar salvo tem NOME porque a pergunta de toda manhã é a mesma. O que
+ * muda entre os dias é o trânsito, não o endereço do trabalho.
+ *
+ * O botão de estrela escolhe qual deles responde "como está o trânsito" sem
+ * destino dito — sem isso, quem tem três lugares salvos ouviria o tempo até a
+ * academia enquanto está atrasado pro serviço.
+ */
+let TRANSITO = null;
+
+async function carregarTransito() {
+  try { TRANSITO = await api('/transito'); }
+  catch { TRANSITO = null; }
+  montarCartaoTransito();
+}
+
+function montarCartaoTransito() {
+  const alvo = $('cartao-transito');
+  if (!alvo) return;
+  const t = TRANSITO;
+  if (!t) { alvo.innerHTML = '<div class="sub">Não consegui ler os ajustes de trânsito.</div>'; return; }
+
+  if (!t.configurado) {
+    alvo.innerHTML =
+      '<div class="sub" style="line-height:1.6">Falta a chave do TomTom. São 2.500 consultas por ' +
+      'dia de graça, só com e-mail, em <b>developer.tomtom.com</b> — depois cole em ' +
+      '<b>TOMTOM_API_KEY</b> no .env do painel e reinicie.</div>';
+    return;
+  }
+
+  const temOrigem = t.origem && t.origem.lat != null;
+  const linhas = (t.lugares || []).map((l) => {
+    const ehPadrao = (t.padrao || '').toLowerCase() === l.nome.toLowerCase();
+    return '<div class="linha" style="margin-top:10px">' +
+      '<div class="cresce"><div class="rotulo">' + esc(l.nome) + (ehPadrao ? ' ★' : '') + '</div>' +
+      '<div class="sub">' + esc(l.endereco) + '</div></div>' +
+      (ehPadrao ? '' : '<button class="botao fantasma" data-padrao="' + esc(l.nome) + '" title="Usar como padrão">★</button>') +
+      '<button class="botao fantasma" data-apagar="' + esc(l.nome) + '">Apagar</button>' +
+      '</div>';
+  }).join('');
+
+  alvo.innerHTML =
+    '<div class="linha"><div class="cresce"><div class="rotulo">Saio de</div>' +
+      '<div class="sub" id="transito-origem">' +
+        (temOrigem ? esc(t.origem.endereco) : 'não definido — digite seu endereço abaixo') +
+      '</div></div></div>' +
+    '<input type="text" id="transito-casa" style="margin-top:10px" placeholder="Rua e número de casa">' +
+    '<button class="botao largo" id="transito-salvar-casa" style="margin-top:10px">Salvar meu endereço</button>' +
+    '<div class="sub" style="border-top:1px solid var(--borda);padding-top:16px;margin-top:18px">' +
+      'Lugares que você pergunta pelo nome — ★ é o que responde "como está o trânsito"</div>' +
+    (linhas || '<div class="sub" style="margin-top:8px">Nenhum ainda.</div>') +
+    '<div class="duplo" style="border-top:1px solid var(--borda);padding-top:16px;margin-top:16px">' +
+      '<input type="text" id="transito-nome" placeholder="trabalho">' +
+      '<input type="text" id="transito-end" placeholder="endereço ou nome do lugar">' +
+    '</div>' +
+    '<button class="botao fantasma largo" id="transito-add" style="margin-top:10px">Salvar lugar</button>';
+
+  $('transito-salvar-casa').onclick = async () => {
+    const endereco = $('transito-casa').value.trim();
+    if (!endereco) { torrada('Digite o endereço.'); return; }
+    torrada('Procurando no mapa…');
+    const r = await api('/transito/origem', 'POST', { endereco });
+    torrada(r.ok ? 'Pronto, saindo de ' + r.origem.endereco : (r.erro || 'Não achei esse endereço.'));
+    if (r.ok) carregarTransito();
+  };
+
+  $('transito-add').onclick = async () => {
+    const nome = $('transito-nome').value.trim();
+    const endereco = $('transito-end').value.trim();
+    if (!nome || !endereco) { torrada('Preencha o nome e o endereço.'); return; }
+    torrada('Procurando no mapa…');
+    const r = await api('/transito/lugar', 'POST', { nome, endereco });
+    torrada(r.ok ? 'Salvei ' + r.lugar.nome + '.' : (r.erro || 'Não achei esse lugar.'));
+    if (r.ok) carregarTransito();
+  };
+
+  for (const b of alvo.querySelectorAll('[data-apagar]')) {
+    b.onclick = async () => {
+      await api('/transito/lugar', 'DELETE', { nome: b.dataset.apagar });
+      carregarTransito();
+    };
+  }
+  for (const b of alvo.querySelectorAll('[data-padrao]')) {
+    b.onclick = async () => {
+      await api('/transito/padrao', 'POST', { nome: b.dataset.padrao });
+      carregarTransito();
+    };
+  }
+}
+
 function montarCartaoCasa(casa) {
   casa = casa || {};
   const conectada = Boolean(casa.baseUrl && casa.token);
@@ -1393,6 +1490,7 @@ $('log-senha').onkeydown = (e) => { if (e.key === 'Enter') entrar(); };
 function iniciarApp() {
   conectar();
   carregarConfig();
+  carregarTransito();
   carregarCasaRapida(); // a aba Casa já abre ativa; carrega os botões da casa
   carregarPaineis();
   // Presença muda quando um painel liga ou desliga; relê de tempos em tempos.

@@ -303,6 +303,9 @@ async function main() {
   if (config.homeAssistant.baseUrl && config.homeAssistant.token) ok('Home Assistant configurado');
   else warn('Home Assistant ausente — controle da casa desligado');
 
+  if ((process.env.TOMTOM_API_KEY || '').trim()) ok('Transito (TomTom) configurado');
+  else warn('TOMTOM_API_KEY ausente — transito desligado (2.500/dia de graca em developer.tomtom.com)');
+
   if (config.brave.apiKey) ok('Brave Search configurado');
   else warn('BRAVE_API_KEY ausente — busca web cai no DuckDuckGo (mais fraco)');
 

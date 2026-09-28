@@ -20,6 +20,12 @@ import {
   acaoDispositivo,
   estadoFavoritos,
 } from '../core/casa.js';
+import { definirOrigem, salvarLugar, apagarLugar, acharLugar } from '../skills/transito.js';
+import {
+  calcular as calcularTransito,
+  configurado as transitoConfigurado,
+  emPalavras as transitoEmPalavras,
+} from '../integrations/transito.js';
 import * as plataforma from '../platform/index.js';
 
 /**
@@ -137,7 +143,7 @@ export async function atenderControle(req, res, url) {
   const rota = url.pathname;
   const mudaAlgo = req.method !== 'GET';
 
-  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras') || rota.startsWith('/timer') || rota.startsWith('/casa')) {
+  if (rota.startsWith('/fotos') || CONTROLE.has(rota) || rota.startsWith('/aviso') || rota.startsWith('/compras') || rota.startsWith('/timer') || rota.startsWith('/casa') || rota.startsWith('/transito')) {
     if (mudaAlgo && !autorizado(req)) {
       responder(res, 401, { erro: 'Token invalido ou ausente (cabecalho x-vexis-token).' });
       return true;
@@ -410,6 +416,79 @@ export async function atenderControle(req, res, url) {
     try {
       await acaoDispositivo(entity_id, acao);
       responder(res, 200, { ok: true });
+    } catch (err) {
+      responder(res, 200, { ok: false, erro: err.message });
+    }
+    return true;
+  }
+
+  // ---- TRANSITO ------------------------------------------------------------
+
+  // Endereco se digita, nao se fala. Ditar "rua Doutor Fulano de Tal, 1420"
+  // pro microfone da sala erra o numero metade das vezes; no teclado do
+  // celular sai certo de primeira. Por isso os lugares tambem se cadastram
+  // aqui, alem da voz.
+
+  if (rota === '/transito' && req.method === 'GET') {
+    const t = lerSettings().transito;
+    responder(res, 200, { configurado: transitoConfigurado(), ...t });
+    return true;
+  }
+
+  if (rota === '/transito/origem' && req.method === 'POST') {
+    const { endereco } = await lerJson(req);
+    try {
+      const achado = await definirOrigem(endereco);
+      responder(res, 200, { ok: true, origem: achado });
+    } catch (err) {
+      responder(res, 200, { ok: false, erro: err.message });
+    }
+    return true;
+  }
+
+  if (rota === '/transito/lugar' && req.method === 'POST') {
+    const { nome, endereco, padrao } = await lerJson(req);
+    try {
+      const { lugar } = await salvarLugar(nome, endereco, Boolean(padrao));
+      responder(res, 200, { ok: true, lugar, transito: lerSettings().transito });
+    } catch (err) {
+      responder(res, 200, { ok: false, erro: err.message });
+    }
+    return true;
+  }
+
+  if (rota === '/transito/lugar' && req.method === 'DELETE') {
+    const { nome } = await lerJson(req);
+    const alvo = apagarLugar(nome);
+    responder(res, 200, { ok: Boolean(alvo), transito: lerSettings().transito });
+    return true;
+  }
+
+  if (rota === '/transito/padrao' && req.method === 'POST') {
+    const { nome } = await lerJson(req);
+    const t = lerSettings().transito;
+    const alvo = acharLugar(t.lugares, nome);
+    if (!alvo) {
+      responder(res, 200, { ok: false, erro: 'Esse lugar nao esta salvo.' });
+      return true;
+    }
+    gravarSettings({ transito: { padrao: alvo.nome } });
+    responder(res, 200, { ok: true, transito: lerSettings().transito });
+    return true;
+  }
+
+  // Tempo agora, pra tela mostrar o mesmo numero que a voz fala.
+  if (rota === '/transito/agora' && req.method === 'GET') {
+    const t = lerSettings().transito;
+    const pedido = url.searchParams.get('destino');
+    const alvo = pedido ? acharLugar(t.lugares, pedido) : acharLugar(t.lugares, t.padrao || '') || t.lugares[0];
+    if (!transitoConfigurado() || t.origem.lat == null || !alvo) {
+      responder(res, 200, { ok: false, erro: 'Transito nao configurado.' });
+      return true;
+    }
+    try {
+      const dados = await calcularTransito(t.origem, alvo);
+      responder(res, 200, { ok: true, nome: alvo.nome, ...dados, frase: transitoEmPalavras(dados, alvo.nome) });
     } catch (err) {
       responder(res, 200, { ok: false, erro: err.message });
     }

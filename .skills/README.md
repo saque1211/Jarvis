@@ -93,6 +93,8 @@ sinal que o modelo tem pra escolher entre 99 tools. Diga *quando* usar, não só
 | `timer.js` | Contagem regressiva, cronômetro, pomodoro |
 | `notify.js` | Lembretes, alarmes, notificações do Windows |
 | `memory.js` | Consultar e alimentar o vault |
+| `transito.js` | Tempo de trajeto e engarrafamento (TomTom) |
+| `weather.js` | Previsão do tempo e chance de chuva (Open-Meteo) |
 
 ## Segurança
 
