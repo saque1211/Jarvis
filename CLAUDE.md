@@ -204,12 +204,15 @@ porque ditar "rua Doutor Fulano de Tal, 1420" erra o número metade das vezes.
 **As animações** (`src/hud/transito/*.html`) são páginas inteiras servidas em
 `/transito/*.html` e embutidas em **iframe**, conversando por `postMessage`. Em
 iframe porque têm CSS próprio: dentro do HUD as duas folhas brigariam, e cada
-redesenho viraria um merge à mão. O indicador fica no painel de parede — 60 fps
-em qualquer tamanho; o mapa fica no celular, porque em 1080p ele é limitado por
-área pintada (14 fps medidos, e tirar carros e perspectiva leva só a 17).
+redesenho viraria um merge à mão.
 
-No painel ele aparece de duas formas: **faixa na janela da manhã**, e **cena
-grande de 16s quando alguém pergunta** — a mesma mecânica da cena do tempo.
+Cada uma tem um papel, e a medição é que decidiu: o **indicador** é a faixa da
+janela da manhã, porque faz 60 fps em qualquer tamanho e pode passar horas na
+tela; o **mapa** é a cena de 16s de quem perguntou, numa caixa de 1360×520 onde
+ele faz 50 fps — em tela cheia cairia pra 19, porque o custo dele é área
+pintada. Sem perspectiva: ela custa um terço do quadro por um detalhe que de
+longe ninguém enxerga.
+
 Fora da janela `paraOPainel()` devolve `null` sem tocar na API. Detalhes e os
 números medidos em `.skills/transito.md`.
 

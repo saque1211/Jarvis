@@ -287,15 +287,18 @@ html, body {
 }
 #alarme button:active { transform: scale(.97); }
 
-/* ---- transito: o indicador animado ----
-   Duas formas de aparecer, um elemento so. Na janela da manha ele fica como
-   faixa no alto do palco — o topo do centro e o unico vao livre entre os
-   timers (esquerda) e os avisos (direita). Quando alguem PERGUNTA, a mesma
-   faixa cresce pro meio da tela com um veu por tras, e volta pro alto depois.
-   Recriar o iframe entre os dois custaria um recarregamento; ele e um so. */
+/* ---- transito: duas animacoes, dois papeis ----
+   FAIXA (indicador): a janela da manha. Fica no alto do centro, o unico vao
+   livre entre os timers (esquerda) e os avisos (direita). 60 fps medidos em
+   qualquer tamanho — ela pode passar horas na tela.
+   CENA (mapa): quando alguem PERGUNTA. Aparece no meio com veu por tras e sai
+   em 16s. E o mapa, e nao a faixa aumentada, porque quem perguntou merece ver
+   o trajeto. Cabe aqui porque o custo dele e area pintada: 1360x520 da 50 fps
+   medidos, contra 19 em tela cheia. Sem a perspectiva de proposito — ela
+   custaria um terco do quadro por um detalhe que de longe ninguem enxerga. */
 #transito-veu {
   position: absolute; inset: 0; z-index: 76; pointer-events: none;
-  background: radial-gradient(1200px 800px at 50% 50%, rgba(2,16,24,.55), rgba(2,10,16,.82) 70%);
+  background: radial-gradient(1200px 800px at 50% 50%, rgba(2,16,24,.55), rgba(2,10,16,.86) 70%);
   opacity: 0; transition: opacity .6s ease;
 }
 #transito-veu.on { opacity: 1; }
@@ -303,16 +306,24 @@ html, body {
   position: absolute; z-index: 77; left: 50%; top: 56px;
   width: 820px; height: 220px;
   transform: translateX(-50%) scale(.97);
-  opacity: 0; pointer-events: none; overflow: hidden;
-  transition: opacity .6s ease, transform .7s cubic-bezier(.22,.61,.36,1),
-              top .7s cubic-bezier(.22,.61,.36,1), width .7s cubic-bezier(.22,.61,.36,1),
-              height .7s cubic-bezier(.22,.61,.36,1);
+  opacity: 0; pointer-events: none;
+  transition: opacity .6s ease, transform .7s cubic-bezier(.22,.61,.36,1);
 }
 #transito-cena.on { opacity: 1; transform: translateX(-50%) scale(1); }
-#transito-cena.grande { top: 300px; width: 1280px; height: 340px; }
-#transito-cena iframe { width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+#transito-grande {
+  position: absolute; z-index: 78; left: 50%; top: 50%;
+  width: 1360px; height: 520px; border-radius: 24px; overflow: hidden;
+  transform: translate(-50%, -50%) scale(.96);
+  opacity: 0; pointer-events: none;
+  box-shadow: 0 40px 120px rgba(0,0,0,.6);
+  transition: opacity .6s ease, transform .7s cubic-bezier(.22,.61,.36,1);
+}
+#transito-grande.on { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+#transito-cena iframe, #transito-grande iframe {
+  width: 100%; height: 100%; border: 0; display: block; background: transparent;
+}
 @media (prefers-reduced-motion: reduce) {
-  #transito-cena, #transito-veu { transition: opacity .2s linear; }
+  #transito-cena, #transito-grande, #transito-veu { transition: opacity .2s linear; }
 }
 
 /* ---- cena do tempo (so aparece quando pedem a previsao) ---- */
@@ -694,6 +705,7 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
   <!-- transito: faixa no alto de manha, e no meio da tela quando perguntam -->
   <div id="transito-veu"></div>
   <div id="transito-cena"></div>
+  <div id="transito-grande"></div>
 
   <!-- cena do tempo: aparece so quando a pessoa pede a previsao -->
   <div id="clima-cena"><div class="cl-cartao"></div></div>
@@ -1145,50 +1157,61 @@ $('alarme-off').onclick = async () => {
 const TRANSITO_DUR = 16000;
 let transitoPedidoEm = 0;
 let transitoTimer = null;
-let transitoQuadro = null;
-let transitoUltimo = '';
 
-function quadroDeTransito() {
-  if (!transitoQuadro) {
-    transitoQuadro = document.createElement('iframe');
-    transitoQuadro.title = 'Trânsito';
-    // Sem fundo próprio: o painel já tem foto ou preto por baixo.
-    transitoQuadro.src = '/transito/indicador.html?fundo=transparente';
-    transitoQuadro.addEventListener('load', () => {
-      transitoQuadro.pronto = true;
-      enviarAoQuadro();
-    }, { once: true });
-    $('transito-cena').appendChild(transitoQuadro);
+/**
+ * Um quadro por animação, criado na primeira vez que precisa.
+ *
+ * Num Pi de 1 GB não se paga uma página extra no boot por algo que talvez não
+ * apareça no dia. Depois de criado ele fica: recriar custaria um recarregamento
+ * bem no meio da transição.
+ *
+ * `pendente` guarda o último estado até o iframe terminar de subir — a primeira
+ * mensagem costuma chegar antes dele estar pronto, e sem isso ela se perde.
+ */
+function quadro(caixaId, endereco, guardado) {
+  if (!guardado.el) {
+    const q = document.createElement('iframe');
+    q.title = 'Trânsito';
+    q.src = endereco;
+    q.addEventListener('load', () => { q.pronto = true; postarNoQuadro(guardado); }, { once: true });
+    $(caixaId).appendChild(q);
+    guardado.el = q;
   }
-  return transitoQuadro;
+  return guardado.el;
 }
 
-function enviarAoQuadro() {
-  const q = transitoQuadro;
+function postarNoQuadro(guardado) {
+  const q = guardado.el;
   if (!q || !q.pronto || !q.pendente) return;
-  try { q.contentWindow.postMessage({ tipo: 'transito', ...q.pendente }, '*'); } catch { /* iframe ainda subindo */ }
+  try { q.contentWindow.postMessage({ tipo: 'transito', ...q.pendente }, '*'); }
+  catch { /* ainda subindo; o load reenvia */ }
 }
 
-function mandarTransito(d) {
-  // Mesma situação e mesmos números não precisam de nova mensagem: a animação
-  // reinicia as transições a cada chamada, e piscaria de 5 em 5 minutos.
+const FAIXA = { el: null, ultimo: '' };
+const MAPA = { el: null, ultimo: '' };
+
+function mandarPara(guardado, caixaId, endereco, d) {
+  // Mesmos números não precisam de nova mensagem: a animação reinicia as
+  // transições a cada chamada, e piscaria de 5 em 5 minutos sem motivo.
   const chave = `${d.situacao}|${d.minutos}|${d.atrasoMin}|${d.destino}`;
-  if (chave === transitoUltimo) return;
-  transitoUltimo = chave;
-  const q = quadroDeTransito();
+  if (chave === guardado.ultimo) return;
+  guardado.ultimo = chave;
+  const q = quadro(caixaId, endereco, guardado);
   q.pendente = { situacao: d.situacao, minutos: d.minutos, atrasoMin: d.atrasoMin, destino: d.destino };
-  enviarAoQuadro();
+  postarNoQuadro(guardado);
 }
 
-/** Volta da cena grande pra faixa — ou some, se não for hora de estar lá. */
+const mandarNaFaixa = (d) => mandarPara(FAIXA, 'transito-cena', '/transito/indicador.html?fundo=transparente', d);
+// Sem perspectiva e com menos carros: medido, o 3d custa um terço do quadro.
+const mandarNoMapa = (d) => mandarPara(MAPA, 'transito-grande', '/transito/mapa.html?carros=0.5&3d=0', d);
+
+/** Fecha a cena grande e devolve a faixa, se for hora dela estar lá. */
 function recolherTransito() {
   $('transito-veu').classList.remove('on');
-  $('transito-cena').classList.remove('grande');
+  $('transito-grande').classList.remove('on');
   if (ESTADO.transito) {
-    mandarTransito(ESTADO.transito);
+    mandarNaFaixa(ESTADO.transito);
     $('transito-cena').classList.add('on');
-  } else {
-    $('transito-cena').classList.remove('on');
   }
 }
 
@@ -1199,8 +1222,10 @@ function desenharTransito() {
   if (idade <= TRANSITO_DUR) {
     if (pedido.at !== transitoPedidoEm) {
       transitoPedidoEm = pedido.at;
-      mandarTransito(pedido);
-      $('transito-cena').classList.add('on', 'grande');
+      mandarNoMapa(pedido);
+      // A faixa sai de cena: com o véu no ar ela ficaria boiando por cima.
+      $('transito-cena').classList.remove('on');
+      $('transito-grande').classList.add('on');
       $('transito-veu').classList.add('on');
       clearTimeout(transitoTimer);
       transitoTimer = setTimeout(recolherTransito, Math.max(1000, TRANSITO_DUR - idade));
@@ -1209,9 +1234,9 @@ function desenharTransito() {
   }
 
   // Sem pedido no ar: quem manda é a janela da manhã.
-  if ($('transito-cena').classList.contains('grande')) return; // a cena ainda está saindo
+  if ($('transito-grande').classList.contains('on')) return; // a cena ainda está saindo
   if (ESTADO.transito) {
-    mandarTransito(ESTADO.transito);
+    mandarNaFaixa(ESTADO.transito);
     $('transito-cena').classList.add('on');
   } else {
     $('transito-cena').classList.remove('on');

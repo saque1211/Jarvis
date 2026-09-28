@@ -90,10 +90,23 @@ Medido no Chromium, 6 segundos de execução real:
 | mapa | 750 | 69 | 35 fps | 14 fps |
 | mapa `carros=0.4&3d=0` | 638 | 69 | 57 fps | 17 fps |
 
-Em 1080p, tirar carros e perspectiva quase não ajuda (14 → 17 fps): o gargalo é
-**área pintada**, não quantidade de elemento. Por isso o indicador vai pro
-painel de parede e o mapa fica no celular, onde a tela é pequena e a GPU é de
-verdade. A máquina onde isso foi medido é bem mais rápida que um Pi 3 B+.
+Em tela cheia, tirar carros e perspectiva quase não ajuda (14 → 17 fps): o
+gargalo é **área pintada**, não quantidade de elemento. O que muda tudo é o
+tamanho da caixa:
+
+| mapa em | fps | pior quadro |
+|---|---|---|
+| 1280×340 | 60 | 33 ms |
+| 1360×520 (a cena grande) | 50 | 50 ms |
+| 1360×520 com `3d=1` | 32 | 83 ms |
+| 1600×620 | 38 | 67 ms |
+| 1920×1080 | 19 | 117 ms |
+
+Daí a divisão: o **indicador** é a faixa da manhã, porque pode passar horas na
+tela e faz 60 fps em qualquer tamanho; o **mapa** é a cena de 16s, numa caixa
+de 1360×520 onde ele faz 50 fps. Sem a perspectiva de propósito — ela custa um
+terço do quadro por um detalhe que, num painel visto de longe, ninguém enxerga.
+A máquina onde isso foi medido é bem mais rápida que um Pi 3 B+.
 
 ### Duas formas de aparecer no painel
 
@@ -102,8 +115,10 @@ verdade. A máquina onde isso foi medido é bem mais rápida que um Pi 3 B+.
   às 3 da madrugada é enfeite, e cada consulta gasta cota de um trajeto que
   ninguém vai fazer.
 - **Cena de quem perguntou** — `get_traffic` grava `transitoPedido` no runtime
-  com a hora, igual à cena do tempo. A faixa cresce pro meio da tela por 16s e
-  volta. Vale mesmo fora da janela: quem perguntou quer ver agora.
+  com a hora, igual à cena do tempo. O **mapa** sobe no meio da tela com véu por
+  trás, por 16s, e a faixa sai de cena enquanto isso (com o véu no ar ela ficaria
+  boiando por cima). Vale mesmo fora da janela: quem perguntou quer ver agora, e
+  merece ver o trajeto, não o resumo.
 
 O iframe é criado na **primeira vez** que precisa e vive daí em diante. Num Pi
 de 1 GB não se paga uma página extra no boot por algo que talvez não apareça no
