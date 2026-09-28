@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sem isto o Chromium pinta o fundo do iframe de BRANCO por baixo do
+     documento transparente: com fundo=transparente, o cartao some e
+     aparece uma caixa branca no lugar do painel. -->
+<meta name="color-scheme" content="dark">
+<title>Vexis · Trânsito · Indicador</title>
+<!--
+  VEXIS · INDICADOR DE TRÂNSITO — arquivo único, sem dependências.
+
+  API
+    window.setTransito({ situacao: 'livre'|'moderado'|'carregado'|'travado',
+                         minutos: 29, atrasoMin: 9, destino: 'trabalho' })
+      Campos omitidos mantêm o valor anterior. Retorna o estado atual.
+    window.getTransito()
+    postMessage({ tipo: 'transito', situacao: 'moderado', ... })  (para iframe)
+
+  OPÇÕES (na URL, ou em window.TRANSITO_OPCOES = {...} antes deste arquivo carregar)
+    demo=1              cicla os quatro estados sozinho (só demonstração)
+    fundo=transparente  sem fundo nem cartão (padrão: cartão sobre #02141C)
+    carros=1            quantidade de carros no mini-mapa (0.3 – 1.5)
+-->
+<style>
+html,body{margin:0;height:100%;background:#02141C}
+html.transp,html.transp body{background:transparent}
+.ind{--free:#3FE08A;--mod:#F7C048;--load:#FF8A3D;--jam:#FF5566;--ink:#E9FAF9;--dim:#7FA8B2;--sc:var(--free);width:100%;height:100%}
+.ind[data-s=livre]{--sc:var(--free)}
+.ind[data-s=moderado]{--sc:var(--mod)}
+.ind[data-s=carregado]{--sc:var(--load)}
+.ind[data-s=travado]{--sc:var(--jam)}
+.ind svg{width:100%;height:100%;display:block}
+.transp .card{display:none}
+.mono{font-family:ui-monospace,"SF Mono","DejaVu Sans Mono",Menlo,monospace}
+.sans{font-family:system-ui,-apple-system,"Segoe UI","DejaVu Sans",sans-serif}
+.lab{fill:var(--sc);transition:fill 1.2s ease}
+.sc{fill:var(--sc);transition:fill 1.2s ease}
+.rc{stroke:var(--c);transition:stroke 1.6s ease}
+.rf{fill:var(--c);transition:fill 1.6s ease}
+.car{transition:opacity .9s ease}
+.t1,.t2{opacity:0}
+.brk{stop-color:#6b2a33;transition:stop-color 1.2s ease}
+.seg{fill:rgba(127,168,178,.26);transition:fill .8s ease}
+.fade{transition:opacity .35s ease}
+.fade.out{opacity:0}
+@media (prefers-reduced-motion:reduce){.lab,.sc,.rc,.rf,.car,.brk,.seg{transition-duration:.2s}.fade{transition:none}}
+</style>
+</head>
+<body>
+<div class="ind" id="ind" data-s="livre">
+  <svg viewBox="0 0 700 246" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Situação do trânsito">
+    <defs>
+      <linearGradient id="cardbg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stop-color="#082A37"/><stop offset="1" stop-color="#03141C"/>
+      </linearGradient>
+      <clipPath id="box"><rect x="0" y="0" width="152" height="152" rx="18"/></clipPath>
+    </defs>
+    <rect class="card" x="1" y="1" width="698" height="244" rx="26" fill="url(#cardbg)" stroke="rgba(94,231,220,.2)" stroke-width="1.5"/>
+    <g transform="translate(34 47)">
+      <rect width="152" height="152" rx="18" fill="rgba(2,17,24,.72)" stroke="rgba(94,231,220,.12)"/>
+      <g clip-path="url(#box)" id="mini"></g>
+    </g>
+    <text x="222" y="72" class="mono" font-size="20" letter-spacing="5" fill="#7FA8B2">VEXIS · TRÂNSITO</text>
+    <text x="220" y="128" class="sans lab fade" id="lab" font-size="52" font-weight="700">LIVRE</text>
+    <text x="222" y="172" class="sans" id="eta">
+      <tspan id="min" font-size="32" font-weight="700" fill="#E9FAF9">—</tspan><tspan class="mono" font-size="22" fill="#7FA8B2" dx="6">min</tspan><tspan class="mono" id="dest" font-size="22" fill="#7FA8B2" dx="16"></tspan>
+    </text>
+    <g transform="translate(222 203)">
+      <rect class="seg s0" x="0" width="36" height="8" rx="4"/>
+      <rect class="seg s1" x="44" width="36" height="8" rx="4"/>
+      <rect class="seg s2" x="88" width="36" height="8" rx="4"/>
+      <rect class="seg s3" x="132" width="36" height="8" rx="4"/>
+    </g>
+    <text x="406" y="212" class="mono sc" id="atr" font-size="22"></text>
+  </svg>
+</div>
+<script>
+(function () {
+  'use strict';
+  var Q = new URLSearchParams(location.search), O = window.TRANSITO_OPCOES || {};
+  function opt(k, d) { return Q.has(k) ? Q.get(k) : (O[k] != null ? String(O[k]) : d); }
+  var DEMO = opt('demo', '0') === '1';
+  var DENS = Math.min(1.5, Math.max(0.3, parseFloat(opt('carros', '1')) || 1));
+  var RM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var ind = document.getElementById('ind');
+  if (/^transp/.test(opt('fundo', 'escuro'))) { document.documentElement.classList.add('transp'); ind.classList.add('transp'); }
+
+  var STATES = ['livre', 'moderado', 'carregado', 'travado'];
+  var LABEL = { livre: 'LIVRE', moderado: 'MODERADO', carregado: 'CARREGADO', travado: 'TRAVADO' };
+  var SEGC = ['var(--free)', 'var(--mod)', 'var(--load)', 'var(--jam)'];
+  var TY = {
+    expressa: { w: 14, f: 1, P: 18, spd: 40, L: 10, H: 4.6, prio: 3 },
+    avenida:  { w: 12, f: 1, P: 21, spd: 34, L: 9, H: 4.2, prio: 2 },
+    rua:      { w: 8, f: 1, P: 28, spd: 24, L: 7, H: 3.2, prio: 1 }
+  };
+  var COLK = { livre: 'var(--free)', moderado: 'var(--mod)', carregado: 'var(--load)', travado: 'var(--jam)' };
+  var MAPC = {
+    expressa: { livre: 'livre', moderado: 'moderado', carregado: 'carregado', travado: 'travado' },
+    avenida:  { livre: 'livre', moderado: 'moderado', carregado: 'carregado', travado: 'travado' },
+    rua:      { livre: 'livre', moderado: 'livre', carregado: 'moderado', travado: 'carregado' }
+  };
+  var TIER = {
+    expressa: { livre: 1, moderado: 2, carregado: 3, travado: 3 },
+    avenida:  { livre: 1, moderado: 2, carregado: 3, travado: 3 },
+    rua:      { livre: 1, moderado: 1, carregado: 2, travado: 3 }
+  };
+  var RATE = {
+    expressa: { livre: 1, moderado: .55, carregado: .25, travado: .07 },
+    avenida:  { livre: 1, moderado: .6, carregado: .32, travado: .12 },
+    rua:      { livre: 1, moderado: .85, carregado: .55, travado: .3 }
+  };
+  var BRK = { livre: '#6b2a33', moderado: '#b8343f', carregado: '#FF4458', travado: '#FF4458' };
+
+  var css = '';
+  Object.keys(TY).forEach(function (t) {
+    STATES.forEach(function (s) {
+      var sel = '.ind[data-s=' + s + '] ';
+      css += sel + '.x-' + t + '{--c:' + COLK[MAPC[t][s]] + '}';
+      if (TIER[t][s] >= 2) css += sel + '.g-' + t + ' .t1{opacity:1}';
+      if (TIER[t][s] >= 3) css += sel + '.g-' + t + ' .t2{opacity:1}';
+      css += sel + '.b-' + t + '{stop-color:' + BRK[MAPC[t][s]] + '}';
+    });
+  });
+  STATES.forEach(function (s, i) {
+    for (var k = 0; k <= i; k++) css += '.ind[data-s=' + s + '] .s' + k + '{fill:' + SEGC[k] + '}';
+  });
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  var ROADS = [
+    { tipo: 'expressa', h: 1, c: 60, a: -12, b: 164 },
+    { tipo: 'avenida', h: 0, c: 92, a: -12, b: 164 },
+    { tipo: 'rua', h: 1, c: 114, a: -12, b: 92 }
+  ];
+
+  // ── motor de faixas (mesmo do mapa) ─────────────────────────────────
+  function trafficNet(roads, TYP, dens) {
+    roads.forEach(function (r) { r.T = TYP[r.tipo]; });
+    var nodes = [];
+    roads.forEach(function (h) {
+      if (!h.h) return;
+      roads.forEach(function (v) {
+        if (v.h) return;
+        if (v.a <= h.c && h.c <= v.b && h.a <= v.c && v.c <= h.b) {
+          var win = v.T.prio > h.T.prio ? v : h;
+          nodes.push({ x: v.c, y: h.c, h: h, v: v, win: win, lose: win === h ? v : h });
+        }
+      });
+    });
+    var html = '', meta = [], cid = 0;
+    roads.forEach(function (r) {
+      var T = r.T, P = T.P / dens, L = r.b - r.a, n = Math.ceil(L / P) + 5;
+      var zones = nodes.filter(function (nd) { return nd.lose === r; }).map(function (nd) {
+        return { c: r.h ? nd.x : nd.y, half: (r.h ? nd.v.T.w : nd.h.T.w) / 2 + 1.5 };
+      });
+      [1, -1].forEach(function (dir) {
+        for (var k = 0; k < T.f; k++) {
+          var off = ((k + 0.5) / T.f) * (T.w / 2 - 1), tf;
+          if (r.h) tf = dir > 0 ? 'translate(' + r.a + ' ' + (r.c + off) + ')' : 'translate(' + r.b + ' ' + (r.c - off) + ') rotate(180)';
+          else tf = dir > 0 ? 'translate(' + (r.c - off) + ' ' + r.a + ') rotate(90)' : 'translate(' + (r.c + off) + ' ' + r.b + ') rotate(-90)';
+          var cuts = zones.map(function (z) { var s = dir > 0 ? z.c - r.a : r.b - z.c; return [s - z.half, s + z.half]; }).sort(function (p, q) { return p[0] - q[0]; });
+          var s0 = 0, rects = '';
+          cuts.forEach(function (c) { if (c[0] > s0) rects += '<rect x="' + s0 + '" y="-10" width="' + (c[0] - s0) + '" height="20"/>'; s0 = Math.max(s0, c[1]); });
+          if (L > s0) rects += '<rect x="' + s0 + '" y="-10" width="' + (L - s0) + '" height="20"/>';
+          var id = 'mc' + (cid++), cars = '';
+          for (var i = 0; i < n; i++) {
+            var x = -4 * P + i * P, t = i % 4 === 0 ? 0 : i % 4 === 2 ? 1 : 2;
+            cars += '<rect class="car t' + t + '" x="' + (x - T.L / 2).toFixed(1) + '" y="' + (-T.H / 2) + '" width="' + T.L + '" height="' + T.H + '" rx="' + (T.H * 0.32).toFixed(1) + '"/>';
+          }
+          html += '<clipPath id="' + id + '">' + rects + '</clipPath><g transform="' + tf + '" clip-path="url(#' + id + ')"><g class="mv g-' + r.tipo + '" fill="url(#car-' + r.tipo + ')">' + cars + '</g></g>';
+          meta.push({ tipo: r.tipo, D: 4 * P, spd: T.spd });
+        }
+      });
+    });
+    return { html: html, meta: meta, nodes: nodes };
+  }
+  function carGrad(t) {
+    return '<linearGradient id="car-' + t + '"><stop offset="0" class="brk b-' + t + '"/><stop offset=".16" class="brk b-' + t + '"/>' +
+      '<stop offset=".16" stop-color="#EAFBFA"/><stop offset="1" stop-color="#D6F4F1"/></linearGradient>';
+  }
+  function seg(r) { return r.h ? [r.a, r.c, r.b, r.c] : [r.c, r.a, r.c, r.b]; }
+  function line(r, cls, sw, extra) {
+    var s = seg(r);
+    return '<line class="' + cls + '" x1="' + s[0] + '" y1="' + s[1] + '" x2="' + s[2] + '" y2="' + s[3] + '" stroke-width="' + sw + '"' + (extra || '') + '/>';
+  }
+
+  var net = trafficNet(ROADS, TY, DENS), m = '<defs>' + Object.keys(TY).map(carGrad).join('') + '</defs>';
+  ROADS.forEach(function (r) { m += line(r, '', r.T.w + 5, ' stroke="#01121A"'); });
+  ROADS.forEach(function (r) { m += line(r, 'rc x-' + r.tipo, r.T.w + 1.5, ' opacity=".45"'); });
+  ROADS.forEach(function (r) { m += line(r, '', r.T.w - 1.5, ' stroke="#031A24"'); });
+  ROADS.forEach(function (r) { m += line(r, 'rc x-' + r.tipo, r.T.w - 1.5, ' opacity=".22"'); });
+  ROADS.forEach(function (r) { m += line(r, '', 0.8, ' stroke="#CFF7F3" stroke-dasharray="4 5" opacity=".25"'); });
+  net.nodes.forEach(function (n) {
+    var w = n.v.T.w, h = n.h.T.w;
+    m += '<rect x="' + (n.x - w / 2) + '" y="' + (n.y - h / 2) + '" width="' + w + '" height="' + h + '" fill="#031A24"/>';
+    m += '<rect class="rf x-' + n.win.tipo + '" x="' + (n.x - w / 2) + '" y="' + (n.y - h / 2) + '" width="' + w + '" height="' + h + '" opacity=".22"/>';
+  });
+  var mini = document.getElementById('mini');
+  mini.innerHTML = m + net.html;
+
+  var anims = Array.prototype.map.call(mini.querySelectorAll('.mv'), function (el, i) {
+    var mt = net.meta[i], dur = mt.D / mt.spd * 1000;
+    var a = el.animate([{ transform: 'translateX(0px)' }, { transform: 'translateX(' + mt.D + 'px)' }], { duration: dur, iterations: Infinity });
+    a.currentTime = Math.random() * dur;
+    if (RM) a.pause();
+    return { a: a, tipo: mt.tipo };
+  });
+  var rampT = null;
+  function applyRates(s) {
+    if (RM) return;
+    clearInterval(rampT);
+    var from = anims.map(function (x) { return x.a.playbackRate; });
+    var to = anims.map(function (x) { return RATE[x.tipo][s]; });
+    var k = 0, n = 16;
+    rampT = setInterval(function () {
+      k++;
+      var t = k / n, e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      anims.forEach(function (x, i) { x.a.playbackRate = from[i] + (to[i] - from[i]) * e; });
+      if (k >= n) clearInterval(rampT);
+    }, 100);
+  }
+
+  // ── estado + API ─────────────────────────────────────────────────────
+  var ALIAS = { 'sem-transito': 'livre', 'sem trânsito': 'livre', leve: 'livre', forte: 'travado', pesado: 'carregado', intenso: 'carregado' };
+  var cur = { situacao: 'livre', minutos: null, atrasoMin: null, destino: null };
+  var elLab = document.getElementById('lab'), elMin = document.getElementById('min'), elDest = document.getElementById('dest'), elAtr = document.getElementById('atr');
+  var labT = null;
+
+  function render(prev) {
+    ind.setAttribute('data-s', cur.situacao);
+    if (prev !== cur.situacao) {
+      if (prev == null || RM) elLab.textContent = LABEL[cur.situacao];
+      else {
+        clearTimeout(labT);
+        elLab.classList.add('out');
+        labT = setTimeout(function () { elLab.textContent = LABEL[cur.situacao]; elLab.classList.remove('out'); }, 350);
+      }
+      applyRates(cur.situacao);
+    }
+    elMin.textContent = cur.minutos == null ? '—' : Math.round(cur.minutos);
+    elDest.textContent = cur.destino ? '→ ' + String(cur.destino).toUpperCase() : '';
+    var a = cur.atrasoMin;
+    elAtr.textContent = a == null ? '' : a > 0 ? '+' + Math.round(a) + ' min que o normal' : 'no tempo normal';
+  }
+  window.setTransito = function (o) {
+    o = o || {};
+    var prev = cur.situacao;
+    if (o.situacao != null) {
+      var s = String(o.situacao).toLowerCase();
+      s = ALIAS[s] || s;
+      if (STATES.indexOf(s) >= 0) cur.situacao = s; else console.warn('setTransito: situação desconhecida', o.situacao);
+    }
+    ['minutos', 'atrasoMin', 'destino'].forEach(function (k) { if (k in o) cur[k] = o[k]; });
+    render(prev);
+    return window.getTransito();
+  };
+  window.getTransito = function () { return { situacao: cur.situacao, minutos: cur.minutos, atrasoMin: cur.atrasoMin, destino: cur.destino }; };
+  window.addEventListener('message', function (e) { var d = e.data; if (d && d.tipo === 'transito') window.setTransito(d); });
+
+  render(null);
+  applyRates(cur.situacao);
+
+  if (DEMO) {
+    var SEQ = [
+      { situacao: 'livre', minutos: 22, atrasoMin: 0, destino: 'trabalho' },
+      { situacao: 'moderado', minutos: 27, atrasoMin: 5 },
+      { situacao: 'carregado', minutos: 34, atrasoMin: 12 },
+      { situacao: 'travado', minutos: 48, atrasoMin: 26 }
+    ], di = 0;
+    window.setTransito(SEQ[0]);
+    setInterval(function () { di = (di + 1) % SEQ.length; window.setTransito(SEQ[di]); }, 4500);
+  }
+})();
+</script>
+</body>
+</html>

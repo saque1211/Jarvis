@@ -200,6 +200,11 @@ export function snapshot() {
     // skill weather grava isto com a hora). O HUD desenha por alguns segundos.
     clima: runtime.climaPedido || null,
 
+    // Mesma ideia pro transito: gravado pela skill quando alguem PERGUNTA.
+    // O indicador da janela da manha nao vem daqui — ele e calculado por quem
+    // serve o painel, porque depende de chamar a API de tempos em tempos.
+    transitoPedido: runtime.transitoPedido || null,
+
     // Painel AVISO — o card de cima do HUD. So o que esta pendente AGORA:
     // dia certo, dentro da janela, e ainda nao marcado como feito hoje.
     avisos: pendentes(),

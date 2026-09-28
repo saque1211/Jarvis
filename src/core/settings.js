@@ -85,6 +85,11 @@ const PADRAO = {
     lugares: [],
     // Qual deles responde "como esta o transito" sem destino dito.
     padrao: null,
+    // O indicador no painel de parede. Fora da janela ele so aparece quando
+    // alguem pergunta — transito de madrugada e enfeite, nao informacao.
+    noPainel: true,
+    mostrarDe: '06:00',
+    mostrarAte: '09:00',
   },
 
   // "Quinta-feira tirar o lixo, das 8h as 21h".

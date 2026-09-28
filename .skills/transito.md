@@ -60,3 +60,59 @@ sem isso "Avenida Brasil" pode cair em outro estado.
   previstas), mas nem sempre vem — a subtração é a rede de baixo.
 - 403 e 429 viram frase em português ("chave recusada", "cota acabou") em vez de
   "HTTP 403", que ninguém ouve e entende.
+
+## O indicador animado
+
+`src/hud/transito/indicador.html` e `src/hud/transito/mapa.html` são páginas
+inteiras, desenhadas por fora do projeto, servidas em `/transito/*.html` pelos
+dois servidores (HUD e nucleus) e embutidas em **iframe**. Iframe e não HTML
+colado dentro da página porque elas têm CSS próprio — dentro do HUD as duas
+folhas brigariam, e qualquer redesenho vira um merge à mão.
+
+A conversa é por `postMessage`:
+
+```js
+quadro.contentWindow.postMessage({
+  tipo: 'transito', situacao: 'travado', minutos: 41, atrasoMin: 21, destino: 'trabalho',
+}, '*');
+```
+
+As quatro situações (`livre`, `moderado`, `carregado`, `travado`) são as mesmas
+que `classificar()` devolve — não há tradução no meio.
+
+### Onde cada uma roda, e por quê
+
+Medido no Chromium, 6 segundos de execução real:
+
+| | nós | animações | 800×480 | 1920×1080 |
+|---|---|---|---|---|
+| indicador | 172 | 12 | 60 fps | 60 fps |
+| mapa | 750 | 69 | 35 fps | 14 fps |
+| mapa `carros=0.4&3d=0` | 638 | 69 | 57 fps | 17 fps |
+
+Em 1080p, tirar carros e perspectiva quase não ajuda (14 → 17 fps): o gargalo é
+**área pintada**, não quantidade de elemento. Por isso o indicador vai pro
+painel de parede e o mapa fica no celular, onde a tela é pequena e a GPU é de
+verdade. A máquina onde isso foi medido é bem mais rápida que um Pi 3 B+.
+
+### Duas formas de aparecer no painel
+
+- **Faixa da manhã** — `paraOPainel()` é chamada de 5 em 5 minutos por quem
+  serve o painel e devolve `null` fora da janela **sem tocar na API**. Trânsito
+  às 3 da madrugada é enfeite, e cada consulta gasta cota de um trajeto que
+  ninguém vai fazer.
+- **Cena de quem perguntou** — `get_traffic` grava `transitoPedido` no runtime
+  com a hora, igual à cena do tempo. A faixa cresce pro meio da tela por 16s e
+  volta. Vale mesmo fora da janela: quem perguntou quer ver agora.
+
+O iframe é criado na **primeira vez** que precisa e vive daí em diante. Num Pi
+de 1 GB não se paga uma página extra no boot por algo que talvez não apareça no
+dia, e recriar entre as duas formas custaria um recarregamento no meio da
+transição.
+
+### `color-scheme: dark` não é enfeite
+
+Sem essa meta nas duas páginas, o Chromium pinta o fundo do iframe de **branco**
+por baixo do documento transparente: com `fundo=transparente` o cartão some e
+sobra uma caixa branca no meio do painel escuro. Foi assim que apareceu na
+primeira montagem.

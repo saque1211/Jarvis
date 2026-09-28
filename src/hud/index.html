@@ -287,6 +287,34 @@ html, body {
 }
 #alarme button:active { transform: scale(.97); }
 
+/* ---- transito: o indicador animado ----
+   Duas formas de aparecer, um elemento so. Na janela da manha ele fica como
+   faixa no alto do palco — o topo do centro e o unico vao livre entre os
+   timers (esquerda) e os avisos (direita). Quando alguem PERGUNTA, a mesma
+   faixa cresce pro meio da tela com um veu por tras, e volta pro alto depois.
+   Recriar o iframe entre os dois custaria um recarregamento; ele e um so. */
+#transito-veu {
+  position: absolute; inset: 0; z-index: 76; pointer-events: none;
+  background: radial-gradient(1200px 800px at 50% 50%, rgba(2,16,24,.55), rgba(2,10,16,.82) 70%);
+  opacity: 0; transition: opacity .6s ease;
+}
+#transito-veu.on { opacity: 1; }
+#transito-cena {
+  position: absolute; z-index: 77; left: 50%; top: 56px;
+  width: 820px; height: 220px;
+  transform: translateX(-50%) scale(.97);
+  opacity: 0; pointer-events: none; overflow: hidden;
+  transition: opacity .6s ease, transform .7s cubic-bezier(.22,.61,.36,1),
+              top .7s cubic-bezier(.22,.61,.36,1), width .7s cubic-bezier(.22,.61,.36,1),
+              height .7s cubic-bezier(.22,.61,.36,1);
+}
+#transito-cena.on { opacity: 1; transform: translateX(-50%) scale(1); }
+#transito-cena.grande { top: 300px; width: 1280px; height: 340px; }
+#transito-cena iframe { width: 100%; height: 100%; border: 0; display: block; background: transparent; }
+@media (prefers-reduced-motion: reduce) {
+  #transito-cena, #transito-veu { transition: opacity .2s linear; }
+}
+
 /* ---- cena do tempo (so aparece quando pedem a previsao) ---- */
 #clima-cena {
   position: absolute; inset: 0; z-index: 78;
@@ -663,6 +691,10 @@ input[type=range] { flex: 1; accent-color: var(--acento); height: 6px; }
     <button id="alarme-off">Desligar</button>
   </div>
 
+  <!-- transito: faixa no alto de manha, e no meio da tela quando perguntam -->
+  <div id="transito-veu"></div>
+  <div id="transito-cena"></div>
+
   <!-- cena do tempo: aparece so quando a pessoa pede a previsao -->
   <div id="clima-cena"><div class="cl-cartao"></div></div>
 
@@ -931,6 +963,7 @@ function desenhar() {
   desenharAvisos();
   desenharTimers();
   desenharClima();
+  desenharTransito();
   desenharTocando();
   desenharPlayer();
 
@@ -1097,6 +1130,93 @@ $('alarme-off').onclick = async () => {
   descartadosLocais.add(String(id));
   try { await mandar('/timer/' + id + '/parar', 'POST'); } catch { /* segue: o alarme ja parou */ }
 };
+
+/* ==========================================================================
+   Trânsito — faixa de manhã, cena grande quando perguntam
+   ==========================================================================
+   Duas origens, e elas não se misturam:
+     ESTADO.transito        janela da manhã, calculada por quem serve o painel
+     ESTADO.transitoPedido  alguém perguntou agora, gravado pela skill
+   O pedido manda enquanto é recente; passado isso, cai de volta pra faixa (ou
+   some, se estiver fora da janela). O iframe é criado na primeira vez que
+   precisa e vive daí em diante — num Pi de 1 GB não se paga página extra no
+   boot por algo que talvez não apareça hoje.
+   ========================================================================== */
+const TRANSITO_DUR = 16000;
+let transitoPedidoEm = 0;
+let transitoTimer = null;
+let transitoQuadro = null;
+let transitoUltimo = '';
+
+function quadroDeTransito() {
+  if (!transitoQuadro) {
+    transitoQuadro = document.createElement('iframe');
+    transitoQuadro.title = 'Trânsito';
+    // Sem fundo próprio: o painel já tem foto ou preto por baixo.
+    transitoQuadro.src = '/transito/indicador.html?fundo=transparente';
+    transitoQuadro.addEventListener('load', () => {
+      transitoQuadro.pronto = true;
+      enviarAoQuadro();
+    }, { once: true });
+    $('transito-cena').appendChild(transitoQuadro);
+  }
+  return transitoQuadro;
+}
+
+function enviarAoQuadro() {
+  const q = transitoQuadro;
+  if (!q || !q.pronto || !q.pendente) return;
+  try { q.contentWindow.postMessage({ tipo: 'transito', ...q.pendente }, '*'); } catch { /* iframe ainda subindo */ }
+}
+
+function mandarTransito(d) {
+  // Mesma situação e mesmos números não precisam de nova mensagem: a animação
+  // reinicia as transições a cada chamada, e piscaria de 5 em 5 minutos.
+  const chave = `${d.situacao}|${d.minutos}|${d.atrasoMin}|${d.destino}`;
+  if (chave === transitoUltimo) return;
+  transitoUltimo = chave;
+  const q = quadroDeTransito();
+  q.pendente = { situacao: d.situacao, minutos: d.minutos, atrasoMin: d.atrasoMin, destino: d.destino };
+  enviarAoQuadro();
+}
+
+/** Volta da cena grande pra faixa — ou some, se não for hora de estar lá. */
+function recolherTransito() {
+  $('transito-veu').classList.remove('on');
+  $('transito-cena').classList.remove('grande');
+  if (ESTADO.transito) {
+    mandarTransito(ESTADO.transito);
+    $('transito-cena').classList.add('on');
+  } else {
+    $('transito-cena').classList.remove('on');
+  }
+}
+
+function desenharTransito() {
+  const pedido = ESTADO.transitoPedido;
+  const idade = pedido && pedido.at ? Date.now() - pedido.at : Infinity;
+
+  if (idade <= TRANSITO_DUR) {
+    if (pedido.at !== transitoPedidoEm) {
+      transitoPedidoEm = pedido.at;
+      mandarTransito(pedido);
+      $('transito-cena').classList.add('on', 'grande');
+      $('transito-veu').classList.add('on');
+      clearTimeout(transitoTimer);
+      transitoTimer = setTimeout(recolherTransito, Math.max(1000, TRANSITO_DUR - idade));
+    }
+    return;
+  }
+
+  // Sem pedido no ar: quem manda é a janela da manhã.
+  if ($('transito-cena').classList.contains('grande')) return; // a cena ainda está saindo
+  if (ESTADO.transito) {
+    mandarTransito(ESTADO.transito);
+    $('transito-cena').classList.add('on');
+  } else {
+    $('transito-cena').classList.remove('on');
+  }
+}
 
 /* ==========================================================================
    Cena do tempo — aparece SO quando a pessoa pede a previsao

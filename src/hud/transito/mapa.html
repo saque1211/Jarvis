@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Sem isto o Chromium pinta o fundo do iframe de BRANCO por baixo do
+     documento transparente: com fundo=transparente, o cartao some e
+     aparece uma caixa branca no lugar do painel. -->
+<meta name="color-scheme" content="dark">
+<title>Vexis · Trânsito · Mapa</title>
+<!--
+  VEXIS · MAPA DE TRÂNSITO — arquivo único, sem dependências.
+
+  API
+    window.setTransito({ situacao: 'livre'|'moderado'|'carregado'|'travado',
+                         minutos: 29, atrasoMin: 9, destino: 'trabalho' })
+      Campos omitidos mantêm o valor anterior. Retorna o estado atual.
+    window.getTransito()
+    postMessage({ tipo: 'transito', situacao: 'carregado', minutos: 34, ... })  (para iframe)
+
+  OPÇÕES (na URL, ou em window.TRANSITO_OPCOES = {...} antes deste arquivo carregar)
+    demo=1              cicla os quatro estados sozinho (só demonstração)
+    fundo=transparente  sem fundo (padrão: #02141C)
+    carros=0.7          quantidade de carros (0.2 – 1.5). No Raspberry Pi use 0.3 – 0.5
+    3d=0                desliga a perspectiva inclinada (mais leve)
+    hud=0               esconde os painéis de texto (só o mapa)
+    velocidade=1        multiplicador da velocidade dos carros
+-->
+<style>
+html,body{margin:0;height:100%;background:#02141C}
+html.transp,html.transp body{background:transparent}
+.tr{--free:#3FE08A;--mod:#F7C048;--load:#FF8A3D;--jam:#FF5566;--ink:#E9FAF9;--dim:#7FA8B2;--teal:#5EE7DC;--sc:var(--free);
+  position:relative;width:100%;height:100%;overflow:hidden;container-type:size;color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI","DejaVu Sans",sans-serif}
+.tr[data-s=livre]{--sc:var(--free);--z:1;--ty:0%}
+.tr[data-s=moderado]{--sc:var(--mod);--z:1.04;--ty:1%}
+.tr[data-s=carregado]{--sc:var(--load);--z:1.1;--ty:2%}
+.tr[data-s=travado]{--sc:var(--jam);--z:1.16;--ty:3%}
+.stage{position:absolute;inset:0}
+.transp .stage{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 26%,#000 90%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 26%,#000 90%,transparent 100%)}
+.cam{position:absolute;inset:0;transform-origin:50% 60%;
+  transform:perspective(240cqh) rotateX(var(--tilt,34deg)) scale(calc(var(--base,1.32) * var(--z))) translateY(var(--ty));
+  transition:transform 2.4s cubic-bezier(.65,0,.35,1)}
+.flat .cam{--tilt:0deg;--base:1.04}
+.cam svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dyn{will-change:transform}
+.fog{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,#02141C 0%,rgba(2,20,28,.85) 9%,rgba(2,20,28,0) 30%),radial-gradient(120% 90% at 50% 50%,rgba(0,0,0,0) 52%,rgba(1,10,15,.75) 100%)}
+.flat .fog{background:radial-gradient(120% 90% at 50% 50%,rgba(0,0,0,0) 55%,rgba(1,10,15,.7) 100%)}
+.transp .fog{display:none}
+.rc{stroke:var(--c);transition:stroke 1.6s ease}
+.rf{fill:var(--c);transition:fill 1.6s ease}
+.car{transition:opacity .9s ease}
+.t1,.t2{opacity:0}
+.brk{stop-color:#6b2a33;transition:stop-color 1.2s ease}
+.pin{opacity:0;transition:opacity 1s ease}
+.pin .bob{animation:bob 2.4s ease-in-out infinite}
+@keyframes bob{50%{transform:translateY(-5px)}}
+.pulse{opacity:0;transform-box:fill-box;transform-origin:center}
+.tr[data-s=carregado] .pulse{animation:pulseLo 2.6s ease-out infinite}
+.tr[data-s=travado] .pulse{animation:pulse 2s ease-out infinite}
+@keyframes pulse{0%{transform:scale(.25);opacity:.5}100%{transform:scale(1);opacity:0}}
+@keyframes pulseLo{0%{transform:scale(.25);opacity:.25}100%{transform:scale(.8);opacity:0}}
+.tr[data-s=travado] .p-acc,.tr[data-s=carregado] .p-obra,.tr[data-s=travado] .p-obra{opacity:1}
+
+.hud{position:absolute;inset:0;padding:4cqmin;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none;box-sizing:border-box}
+.nohud .hud{display:none}
+.mono{font-family:ui-monospace,"SF Mono","DejaVu Sans Mono",Menlo,monospace}
+.top{display:flex;align-items:center;gap:1.6cqmin}
+.top .dot{width:1.3cqmin;height:1.3cqmin;border-radius:50%;background:var(--teal);box-shadow:0 0 2cqmin var(--teal)}
+.top b{font-size:max(13px,3.3cqmin);letter-spacing:.16em}
+.top i{width:1px;height:2.8cqmin;background:rgba(94,231,220,.3)}
+.top .mono{font-size:max(11px,2.2cqmin);letter-spacing:.2em;color:var(--dim)}
+.bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:3cqmin}
+.panel{border-radius:2.2cqmin;background:linear-gradient(145deg,rgba(8,42,55,.93),rgba(3,20,28,.93));border:1px solid rgba(94,231,220,.18);box-shadow:0 3cqmin 6cqmin rgba(0,0,0,.45);padding:2.8cqmin 3.4cqmin;display:flex;flex-direction:column;gap:1.4cqmin}
+.lbl{font-size:max(11px,2.2cqmin);letter-spacing:.24em;color:var(--dim)}
+.st{display:flex;align-items:center;gap:1.6cqmin;opacity:.34;color:var(--dim);transition:opacity .8s ease,color .8s ease}
+.st .d{width:1.4cqmin;height:1.4cqmin;border-radius:50%;background:var(--k);transition:box-shadow .8s ease,transform .8s ease}
+.st .n{font-size:max(13px,3.6cqmin);font-weight:700;line-height:1}
+.tr[data-s=livre] .st[data-k=livre],.tr[data-s=moderado] .st[data-k=moderado],.tr[data-s=carregado] .st[data-k=carregado],.tr[data-s=travado] .st[data-k=travado]{opacity:1;color:var(--k)}
+.tr[data-s=livre] .st[data-k=livre] .d,.tr[data-s=moderado] .st[data-k=moderado] .d,.tr[data-s=carregado] .st[data-k=carregado] .d,.tr[data-s=travado] .st[data-k=travado] .d{box-shadow:0 0 2.4cqmin var(--k);transform:scale(1.5)}
+.eta{align-items:flex-start}
+.big{display:flex;align-items:baseline;gap:.8cqmin}
+.big #min{font-size:max(22px,9cqmin);font-weight:700;line-height:1;color:var(--sc);font-variant-numeric:tabular-nums;transition:color 1.2s ease}
+.big .u{font-size:max(12px,2.6cqmin);color:var(--dim)}
+#atr{font-size:max(11px,2.4cqmin);color:var(--sc);transition:color 1.2s ease}
+
+@media (prefers-reduced-motion:reduce){
+  .pin .bob,.pulse{animation:none!important}
+  .cam{transition-duration:.01s}
+  .rc,.rf,.car,.brk,.st,.st .d{transition-duration:.2s}
+}
+</style>
+</head>
+<body>
+<div class="tr" id="tr" data-s="livre">
+  <div class="stage">
+    <div class="cam">
+      <svg id="ground" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+      <svg id="dyn" class="dyn" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" aria-hidden="true"></svg>
+    </div>
+  </div>
+  <div class="fog"></div>
+  <div class="hud">
+    <div class="top"><span class="dot"></span><b>VEXIS</b><i></i><span class="mono">MONITOR DE TRÂNSITO</span></div>
+    <div class="bottom">
+      <div class="panel">
+        <div class="lbl mono">SITUAÇÃO</div>
+        <div class="st" data-k="livre" style="--k:var(--free)"><span class="d"></span><span class="n">LIVRE</span></div>
+        <div class="st" data-k="moderado" style="--k:var(--mod)"><span class="d"></span><span class="n">MODERADO</span></div>
+        <div class="st" data-k="carregado" style="--k:var(--load)"><span class="d"></span><span class="n">CARREGADO</span></div>
+        <div class="st" data-k="travado" style="--k:var(--jam)"><span class="d"></span><span class="n">TRAVADO</span></div>
+      </div>
+      <div class="panel eta">
+        <div class="lbl mono" id="dest">ATÉ O DESTINO</div>
+        <div class="big"><span id="min">—</span><span class="u mono">min</span></div>
+        <div class="mono" id="atr">&nbsp;</div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var Q = new URLSearchParams(location.search), O = window.TRANSITO_OPCOES || {};
+  function opt(k, d) { return Q.has(k) ? Q.get(k) : (O[k] != null ? String(O[k]) : d); }
+  var DEMO = opt('demo', '0') === '1';
+  var TRANSP = /^transp/.test(opt('fundo', 'escuro'));
+  var DENS = Math.min(1.5, Math.max(0.2, parseFloat(opt('carros', '0.7')) || 0.7));
+  var VEL = Math.max(0.2, parseFloat(opt('velocidade', '1')) || 1);
+  var RM = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var tr = document.getElementById('tr');
+  if (TRANSP) { document.documentElement.classList.add('transp'); tr.classList.add('transp'); }
+  if (opt('3d', '1') === '0') tr.classList.add('flat');
+  if (opt('hud', '1') === '0') tr.classList.add('nohud');
+
+  var STATES = ['livre', 'moderado', 'carregado', 'travado'];
+  var TY = {
+    expressa: { w: 36, f: 2, v: 80, P: 80, spd: 190, L: 26, H: 10, prio: 3 },
+    avenida:  { w: 26, f: 1, v: 60, P: 100, spd: 150, L: 24, H: 10, prio: 2 },
+    rua:      { w: 16, f: 1, v: 40, P: 140, spd: 100, L: 17, H: 7, prio: 1 }
+  };
+  // Cor, densidade visível e velocidade por tipo de via em cada situação.
+  var COLK = { livre: 'var(--free)', moderado: 'var(--mod)', carregado: 'var(--load)', travado: 'var(--jam)' };
+  var MAPC = {
+    expressa: { livre: 'livre', moderado: 'moderado', carregado: 'travado', travado: 'travado' },
+    avenida:  { livre: 'livre', moderado: 'moderado', carregado: 'carregado', travado: 'travado' },
+    rua:      { livre: 'livre', moderado: 'livre', carregado: 'moderado', travado: 'carregado' }
+  };
+  var TIER = {
+    expressa: { livre: 1, moderado: 2, carregado: 3, travado: 3 },
+    avenida:  { livre: 1, moderado: 2, carregado: 3, travado: 3 },
+    rua:      { livre: 1, moderado: 1, carregado: 2, travado: 3 }
+  };
+  var RATE = {
+    expressa: { livre: 1, moderado: .55, carregado: .25, travado: .07 },
+    avenida:  { livre: 1, moderado: .6, carregado: .32, travado: .12 },
+    rua:      { livre: 1, moderado: .85, carregado: .55, travado: .3 }
+  };
+  var BRK = { livre: '#6b2a33', moderado: '#b8343f', carregado: '#FF4458', travado: '#FF4458' };
+
+  var css = '';
+  Object.keys(TY).forEach(function (t) {
+    STATES.forEach(function (s) {
+      var sel = '.tr[data-s=' + s + '] ';
+      css += sel + '.x-' + t + '{--c:' + COLK[MAPC[t][s]] + '}';
+      if (TIER[t][s] >= 2) css += sel + '.g-' + t + ' .t1{opacity:1}';
+      if (TIER[t][s] >= 3) css += sel + '.g-' + t + ' .t2{opacity:1}';
+      css += sel + '.b-' + t + '{stop-color:' + BRK[MAPC[t][s]] + '}';
+    });
+  });
+  var st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  // ── cidade ───────────────────────────────────────────────────────────
+  var ROADS = [
+    { nome: 'Av. Central', tipo: 'expressa', h: 1, c: 540, a: -200, b: 2120, at: 1214 },
+    { nome: 'Eixo N–S', tipo: 'expressa', h: 0, c: 960, a: -200, b: 1280, at: 395 },
+    { nome: 'Av. do Porto', tipo: 'avenida', h: 1, c: 250, a: -200, b: 2120, at: 706 },
+    { nome: 'Av. Sul', tipo: 'avenida', h: 1, c: 820, a: -200, b: 2120, at: 1108 },
+    { nome: 'Av. Oeste', tipo: 'avenida', h: 0, c: 400, a: -200, b: 1280, at: 412 },
+    { nome: 'Av. Leste', tipo: 'avenida', h: 0, c: 1520, a: -200, b: 1280, at: 642 },
+    { nome: 'R. das Flores', tipo: 'rua', h: 1, c: 395, a: 400, b: 960 },
+    { nome: 'R. do Comércio', tipo: 'rua', h: 1, c: 680, a: 960, b: 1520 },
+    { nome: 'R. Aurora', tipo: 'rua', h: 0, c: 680, a: 250, b: 820 },
+    { nome: 'R. Bela Vista', tipo: 'rua', h: 0, c: 1240, a: 540, b: 820 }
+  ];
+  var PARKS = [{ nome: 'PARQUE CENTRAL', x: 1060, y: 300, w: 170, h: 190 }, { nome: 'PRAÇA OESTE', x: 440, y: 580, w: 200, h: 180 }];
+  var RIVER = [[-200, 1000], [300, 1030], [700, 1002], [1100, 1022], [1500, 994], [1900, 1016], [2200, 1004]], RW = 84;
+  var INCID = [
+    { cls: 'p-acc', x: 663, y: 540, texto: 'ACIDENTE · 2 FAIXAS', cor: 'var(--jam)' },
+    { cls: 'p-obra', x: 1520, y: 284, texto: 'OBRA NA PISTA', cor: 'var(--mod)' }
+  ];
+
+  function lcg(s) { return function () { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }; }
+  function riverY(x) {
+    for (var i = 1; i < RIVER.length; i++) if (x <= RIVER[i][0]) {
+      var a = RIVER[i - 1], b = RIVER[i], k = (x - a[0]) / (b[0] - a[0]); return a[1] + (b[1] - a[1]) * k;
+    }
+    return RIVER[RIVER.length - 1][1];
+  }
+  function roadDist(r, x, y) {
+    var u = r.h ? x : y, v = r.h ? y : x;
+    var du = u < r.a ? r.a - u : u > r.b ? u - r.b : 0;
+    return Math.hypot(du, v - r.c);
+  }
+  function seg(r, pad) {
+    pad = pad || 0;
+    return r.h ? [r.a - pad, r.c, r.b + pad, r.c] : [r.c, r.a - pad, r.c, r.b + pad];
+  }
+  function line(r, cls, sw, extra) {
+    var s = seg(r);
+    return '<line class="' + cls + '" x1="' + s[0] + '" y1="' + s[1] + '" x2="' + s[2] + '" y2="' + s[3] + '" stroke-width="' + sw + '"' + (extra || '') + '/>';
+  }
+
+  // ── motor de faixas (compartilhado com o indicador) ─────────────────
+  function trafficNet(roads, TYP, dens) {
+    roads.forEach(function (r) { r.T = TYP[r.tipo]; });
+    var nodes = [];
+    roads.forEach(function (h) {
+      if (!h.h) return;
+      roads.forEach(function (v) {
+        if (v.h) return;
+        if (v.a <= h.c && h.c <= v.b && h.a <= v.c && v.c <= h.b) {
+          var win = v.T.prio > h.T.prio ? v : h;
+          nodes.push({ x: v.c, y: h.c, h: h, v: v, win: win, lose: win === h ? v : h });
+        }
+      });
+    });
+    var html = '', meta = [], cid = 0;
+    roads.forEach(function (r) {
+      var T = r.T, P = T.P / dens, L = r.b - r.a, n = Math.ceil(L / P) + 5;
+      var zones = nodes.filter(function (nd) { return nd.lose === r; }).map(function (nd) {
+        return { c: r.h ? nd.x : nd.y, half: (r.h ? nd.v.T.w : nd.h.T.w) / 2 + 3 };
+      });
+      [1, -1].forEach(function (dir) {
+        for (var k = 0; k < T.f; k++) {
+          var off = ((k + 0.5) / T.f) * (T.w / 2 - 1), tf;
+          if (r.h) tf = dir > 0 ? 'translate(' + r.a + ' ' + (r.c + off) + ')' : 'translate(' + r.b + ' ' + (r.c - off) + ') rotate(180)';
+          else tf = dir > 0 ? 'translate(' + (r.c - off) + ' ' + r.a + ') rotate(90)' : 'translate(' + (r.c + off) + ' ' + r.b + ') rotate(-90)';
+          var cuts = zones.map(function (z) { var s = dir > 0 ? z.c - r.a : r.b - z.c; return [s - z.half, s + z.half]; }).sort(function (p, q) { return p[0] - q[0]; });
+          var s0 = 0, rects = '';
+          cuts.forEach(function (c) { if (c[0] > s0) rects += '<rect x="' + s0 + '" y="-20" width="' + (c[0] - s0) + '" height="40"/>'; s0 = Math.max(s0, c[1]); });
+          if (L > s0) rects += '<rect x="' + s0 + '" y="-20" width="' + (L - s0) + '" height="40"/>';
+          var id = 'cl' + (cid++), cars = '';
+          for (var i = 0; i < n; i++) {
+            var x = -4 * P + i * P, t = i % 4 === 0 ? 0 : i % 4 === 2 ? 1 : 2;
+            cars += '<rect class="car t' + t + '" x="' + (x - T.L / 2).toFixed(1) + '" y="' + (-T.H / 2) + '" width="' + T.L + '" height="' + T.H + '" rx="' + (T.H * 0.32).toFixed(1) + '"/>';
+          }
+          html += '<clipPath id="' + id + '">' + rects + '</clipPath><g transform="' + tf + '" clip-path="url(#' + id + ')"><g class="mv g-' + r.tipo + '" fill="url(#car-' + r.tipo + ')">' + cars + '</g></g>';
+          meta.push({ tipo: r.tipo, D: 4 * P, spd: T.spd });
+        }
+      });
+    });
+    return { html: html, meta: meta, nodes: nodes };
+  }
+  function carGrad(t) {
+    return '<linearGradient id="car-' + t + '"><stop offset="0" class="brk b-' + t + '"/><stop offset=".13" class="brk b-' + t + '"/>' +
+      '<stop offset=".13" stop-color="#EAFBFA"/><stop offset=".6" stop-color="#EAFBFA"/><stop offset=".6" stop-color="#0A2A35"/>' +
+      '<stop offset=".74" stop-color="#0A2A35"/><stop offset=".74" stop-color="#EAFBFA"/><stop offset="1" stop-color="#D6F4F1"/></linearGradient>';
+  }
+  function startLanes(root, meta) {
+    return Array.prototype.map.call(root.querySelectorAll('.mv'), function (el, i) {
+      var m = meta[i], dur = m.D / m.spd * 1000;
+      var a = el.animate([{ transform: 'translateX(0px)' }, { transform: 'translateX(' + m.D + 'px)' }], { duration: dur, iterations: Infinity });
+      a.currentTime = Math.random() * dur;
+      if (RM) a.pause();
+      return { a: a, tipo: m.tipo };
+    });
+  }
+  var rampT = null;
+  function applyRates(anims, s) {
+    if (RM) return;
+    clearInterval(rampT);
+    var from = anims.map(function (x) { return x.a.playbackRate; });
+    var to = anims.map(function (x) { return RATE[x.tipo][s] * VEL; });
+    var k = 0, n = 16;
+    rampT = setInterval(function () {
+      k++;
+      var t = k / n, e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+      anims.forEach(function (x, i) { x.a.playbackRate = from[i] + (to[i] - from[i]) * e; });
+      if (k >= n) clearInterval(rampT);
+    }, 100);
+  }
+
+  // ── chão estático (poucos nós: prédios, árvores e grade viram paths) ─
+  var net = trafficNet(ROADS, TY, DENS);
+  var g = '';
+  if (!TRANSP) g += '<rect x="-300" y="-300" width="2520" height="1680" fill="#04202B"/>';
+  var grid = '';
+  for (var gx = -216; gx <= 2136; gx += 72) grid += 'M' + gx + ' -300V1380';
+  for (var gy = -216; gy <= 1296; gy += 72) grid += 'M-300 ' + gy + 'H2220';
+  g += '<path d="' + grid + '" stroke="#0A3341" stroke-width="1" opacity=".3" fill="none"/>';
+  PARKS.forEach(function (p) { g += '<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="20" fill="#06302D" stroke="#0E4A42" stroke-width="2"/>'; });
+  var rt = lcg(5), trees = '';
+  PARKS.forEach(function (p) {
+    for (var y = p.y + 18; y < p.y + p.h - 10; y += 26) for (var x = p.x + 18; x < p.x + p.w - 10; x += 26) {
+      var k = rt(), dx = (rt() - .5) * 10, dy = (rt() - .5) * 10, r = 5 + rt() * 5;
+      if (k < .3) continue;
+      var cx = x + dx, cy = y + dy;
+      trees += 'M' + (cx - r).toFixed(1) + ' ' + cy.toFixed(1) + 'a' + r.toFixed(1) + ' ' + r.toFixed(1) + ' 0 1 0 ' + (2 * r).toFixed(1) + ' 0a' + r.toFixed(1) + ' ' + r.toFixed(1) + ' 0 1 0 ' + (-2 * r).toFixed(1) + ' 0';
+    }
+  });
+  g += '<path d="' + trees + '" fill="#0D4B41"/>';
+  PARKS.forEach(function (p) { g += '<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2) + '" text-anchor="middle" dominant-baseline="central" class="mono" font-size="20" letter-spacing="3" fill="#7CCBB6" style="font-family:ui-monospace,\'DejaVu Sans Mono\',monospace">' + p.nome + '</text>'; });
+  var rd = 'M' + RIVER.map(function (p) { return p.join(' '); }).join('L');
+  g += '<path d="' + rd + '" stroke="#0C4757" stroke-width="' + (RW + 10) + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+  g += '<path d="' + rd + '" stroke="#07303D" stroke-width="' + RW + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+
+  var rb = lcg(11), shadows = '', roofs = ['', '', '', ''];
+  for (var by = -2; by < 17; by++) for (var bx = -2; bx < 29; bx++) {
+    var skip = rb() < .22, w = 26 + rb() * 30, h = 24 + rb() * 30, jx = (rb() - .5) * 8, jy = (rb() - .5) * 8, tone = Math.floor(rb() * 4), hg = 4 + rb() * 12;
+    if (skip) continue;
+    var X = bx * 72 + (72 - w) / 2 + jx, Y = by * 72 + (72 - h) / 2 + jy, CX = X + w / 2, CY = Y + h / 2, RR = Math.hypot(w, h) / 2;
+    if (Math.abs(CY - riverY(CX)) < RW / 2 + RR + 12) continue;
+    if (PARKS.some(function (p) { return CX > p.x - RR && CX < p.x + p.w + RR && CY > p.y - RR && CY < p.y + p.h + RR; })) continue;
+    if (ROADS.some(function (r) { return roadDist(r, CX, CY) < r.T.w / 2 + RR + 8; })) continue;
+    shadows += 'M' + (X + hg * .5).toFixed(1) + ' ' + (Y + hg).toFixed(1) + 'h' + w.toFixed(1) + 'v' + h.toFixed(1) + 'h' + (-w).toFixed(1) + 'z';
+    roofs[tone] += 'M' + X.toFixed(1) + ' ' + Y.toFixed(1) + 'h' + w.toFixed(1) + 'v' + h.toFixed(1) + 'h' + (-w).toFixed(1) + 'z';
+  }
+  g += '<path d="' + shadows + '" fill="#01101A" opacity=".75"/>';
+  ['#073342', '#093B4B', '#0C4455', '#0F4E60'].forEach(function (c, i) { g += '<path d="' + roofs[i] + '" fill="' + c + '" stroke="rgba(94,231,220,.07)" stroke-width="1"/>'; });
+
+  // pontes
+  ROADS.forEach(function (r) {
+    if (r.h) return;
+    var y = riverY(r.c);
+    if (y < r.a || y > r.b) return;
+    r.bridge = y;
+    g += '<rect x="' + (r.c - r.T.w / 2 - 12) + '" y="' + (y - RW / 2 - 20) + '" width="' + (r.T.w + 24) + '" height="' + (RW + 40) + '" rx="4" fill="#0A2F3B"/>';
+  });
+  // vias em camadas (cruzamentos limpos)
+  ROADS.forEach(function (r) { g += line(r, 'rc x-' + r.tipo, r.T.w + 50, ' opacity="' + (0.05 * r.T.prio).toFixed(2) + '" stroke-linecap="round"'); });
+  ROADS.forEach(function (r) { g += line(r, '', r.T.w + 10, ' stroke="#01121A"'); });
+  ROADS.forEach(function (r) { g += line(r, 'rc x-' + r.tipo, r.T.w + 4, ' opacity="' + (0.3 + 0.07 * r.T.prio).toFixed(2) + '"'); });
+  ROADS.forEach(function (r) { g += line(r, '', r.T.w - 2, ' stroke="#031A24"'); });
+  ROADS.forEach(function (r) { g += line(r, 'rc x-' + r.tipo, r.T.w - 2, ' opacity="' + (0.12 + 0.05 * r.T.prio).toFixed(2) + '"'); });
+  ROADS.forEach(function (r) {
+    g += r.T.f > 1 ? line(r, '', 2, ' stroke="#E9C46A" opacity=".35"') : line(r, '', 1.4, ' stroke="#CFF7F3" stroke-dasharray="12 14" opacity=".22"');
+  });
+  net.nodes.forEach(function (n) {
+    var w = n.v.T.w, h = n.h.T.w;
+    g += '<rect x="' + (n.x - w / 2 - 1) + '" y="' + (n.y - h / 2 - 1) + '" width="' + (w + 2) + '" height="' + (h + 2) + '" fill="#031A24"/>';
+    g += '<rect class="rf x-' + n.win.tipo + '" x="' + (n.x - w / 2 - 1) + '" y="' + (n.y - h / 2 - 1) + '" width="' + (w + 2) + '" height="' + (h + 2) + '" opacity="' + (0.1 + 0.05 * n.win.T.prio).toFixed(2) + '"/>';
+  });
+  ROADS.forEach(function (r) {
+    if (r.bridge == null) return;
+    [-1, 1].forEach(function (s) {
+      var x = r.c + s * (r.T.w / 2 + 8);
+      g += '<line x1="' + x + '" y1="' + (r.bridge - RW / 2 - 18) + '" x2="' + x + '" y2="' + (r.bridge + RW / 2 + 18) + '" stroke="#3C8E9A" stroke-width="3" stroke-linecap="round"/>';
+    });
+  });
+  // nomes das vias + velocidade
+  ROADS.forEach(function (r, i) {
+    if (r.at == null) return;
+    var o = r.T.w / 2 + 26, x = r.h ? r.at : r.c + o, y = r.h ? r.c - o : r.at, a = r.h ? 0 : 90;
+    g += '<text transform="translate(' + x + ' ' + y + ') rotate(' + a + ')" text-anchor="middle" dominant-baseline="central" font-size="24" letter-spacing="3" style="font-family:ui-monospace,\'DejaVu Sans Mono\',monospace">' +
+      '<tspan fill="#E9FAF9">' + r.nome.toUpperCase() + '</tspan><tspan class="rf x-' + r.tipo + '" dx="14" id="kmh' + i + '">' + r.T.v + ' km/h</tspan></text>';
+  });
+  document.getElementById('ground').innerHTML = g;
+
+  // ── camada dinâmica: faixas, alertas, pulsos ─────────────────────────
+  var d = '<defs>' + Object.keys(TY).map(carGrad).join('') + '</defs>' + net.html;
+  net.nodes.forEach(function (n) {
+    if (n.win.T.prio < 3 || n.lose.T.prio < 2) return;
+    d += '<circle class="pulse" cx="' + n.x + '" cy="' + n.y + '" r="130" fill="none" stroke="#FF5566" stroke-width="3"/>';
+  });
+  INCID.forEach(function (it) {
+    var w = 36 + it.texto.length * 15;
+    d += '<g class="pin ' + it.cls + '" transform="translate(' + it.x + ' ' + it.y + ')">' +
+      '<line x1="0" y1="-40" x2="0" y2="0" stroke="' + it.cor + '" stroke-width="3" style="stroke:' + it.cor + '"/><circle r="6" style="fill:' + it.cor + '"/>' +
+      '<g class="bob"><g transform="translate(0 -40)"><circle r="22" style="fill:' + it.cor + '"/>' +
+      '<text text-anchor="middle" dominant-baseline="central" font-size="28" font-weight="700" fill="#04202B">!</text>' +
+      '<g transform="translate(34 -26)"><rect width="' + w + '" height="52" rx="12" fill="rgba(3,20,28,.95)" stroke-width="2" style="stroke:' + it.cor + '"/>' +
+      '<text x="18" y="27" dominant-baseline="central" font-size="24" fill="#E9FAF9" style="font-family:ui-monospace,\'DejaVu Sans Mono\',monospace">' + it.texto + '</text></g></g></g></g>';
+  });
+  var dyn = document.getElementById('dyn');
+  dyn.innerHTML = d;
+  var anims = startLanes(dyn, net.meta);
+
+  // ── estado + API ─────────────────────────────────────────────────────
+  var ALIAS = { 'sem-transito': 'livre', 'sem trânsito': 'livre', leve: 'livre', forte: 'travado', pesado: 'carregado', intenso: 'carregado' };
+  var cur = { situacao: 'livre', minutos: null, atrasoMin: null, destino: null };
+  var elMin = document.getElementById('min'), elAtr = document.getElementById('atr'), elDest = document.getElementById('dest');
+  var KMH = { expressa: RATE.expressa, avenida: RATE.avenida, rua: RATE.rua };
+
+  function render(prev) {
+    tr.setAttribute('data-s', cur.situacao);
+    elMin.textContent = cur.minutos == null ? '—' : Math.round(cur.minutos);
+    elDest.textContent = cur.destino ? '→ ' + String(cur.destino).toUpperCase() : 'ATÉ O DESTINO';
+    var a = cur.atrasoMin;
+    elAtr.textContent = a == null ? '\u00a0' : a > 0 ? '+' + Math.round(a) + ' min que o normal' : 'no tempo normal';
+    ROADS.forEach(function (r, i) {
+      var el = document.getElementById('kmh' + i);
+      if (el) el.textContent = Math.max(4, Math.round(r.T.v * Math.max(KMH[r.tipo][cur.situacao], .08))) + ' km/h';
+    });
+    if (prev !== cur.situacao) applyRates(anims, cur.situacao);
+  }
+  window.setTransito = function (o) {
+    o = o || {};
+    var prev = cur.situacao;
+    if (o.situacao != null) {
+      var s = String(o.situacao).toLowerCase();
+      s = ALIAS[s] || s;
+      if (STATES.indexOf(s) >= 0) cur.situacao = s; else console.warn('setTransito: situação desconhecida', o.situacao);
+    }
+    ['minutos', 'atrasoMin', 'destino'].forEach(function (k) { if (k in o) cur[k] = o[k]; });
+    render(prev);
+    return window.getTransito();
+  };
+  window.getTransito = function () { return { situacao: cur.situacao, minutos: cur.minutos, atrasoMin: cur.atrasoMin, destino: cur.destino }; };
+  window.addEventListener('message', function (e) { var m = e.data; if (m && m.tipo === 'transito') window.setTransito(m); });
+
+  render(null);
+  applyRates(anims, cur.situacao);
+
+  if (DEMO) {
+    var SEQ = [
+      { situacao: 'livre', minutos: 22, atrasoMin: 0, destino: 'trabalho' },
+      { situacao: 'moderado', minutos: 27, atrasoMin: 5 },
+      { situacao: 'carregado', minutos: 34, atrasoMin: 12 },
+      { situacao: 'travado', minutos: 48, atrasoMin: 26 }
+    ], di = 0;
+    window.setTransito(SEQ[0]);
+    setInterval(function () { di = (di + 1) % SEQ.length; window.setTransito(SEQ[di]); }, 4500);
+  }
+})();
+</script>
+</body>
+</html>

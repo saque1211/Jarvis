@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { snapshot } from '../core/state.js';
 import { route } from '../core/router.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
+import { paraOPainel } from '../skills/transito.js';
 import { capacidades } from '../platform/index.js';
 import { atenderControle } from '../hud/controle.js';
 import { atenderCapa } from '../hud/capa.js';
@@ -159,6 +160,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   };
   let vitais = null;
   let tempo = null;
+  let transito = null;
   let caps = null;
 
   const servidor = http.createServer(async (req, res) => {
@@ -184,6 +186,14 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
         : asset[1].endsWith('.js') ? 'text/javascript' : 'image/png';
       return servirArquivo(res, path.join(APP, asset[1]),
         `${tipo}; charset=utf-8`, asset[1] === 'sw.js' ? 'no-cache' : 'public, max-age=86400');
+    }
+
+    // Animacoes do transito: paginas estaticas, sem dado nenhum dentro. Vao
+    // em iframe pra nao misturar o CSS delas com o do painel.
+    const anim = /^\/transito\/(indicador|mapa)\.html$/.exec(p);
+    if (anim) {
+      return servirArquivo(res, path.join(HUD, 'transito', `${anim[1]}.html`),
+        'text/html; charset=utf-8', 'public, max-age=3600');
     }
 
     // ── Contas: entrar e criar sao abertas (sao o proprio portao). ──────────
@@ -300,7 +310,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     if (p === '/estado') {
       let primeiro;
       try {
-        primeiro = JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: caps });
+        primeiro = JSON.stringify({ ...snapshot(), vitais, tempo, transito, capacidades: caps });
       } catch (err) {
         return json(res, 500, { erro: `nao consegui ler o estado: ${err.message}` });
       }
@@ -382,7 +392,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     if (!clientes.size) return;
     let linha;
     try {
-      linha = `data: ${JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: caps })}\n\n`;
+      linha = `data: ${JSON.stringify({ ...snapshot(), vitais, tempo, transito, capacidades: caps })}\n\n`;
     } catch (err) {
       console.error(`[nucleus] falhei ao montar o estado: ${err.message}`);
       return;
@@ -403,6 +413,19 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
   };
   lerTempo();
   const tickTempo = setInterval(lerTempo, 5 * 60 * 1000);
+
+  // Transito da janela da manha. Fora dela a funcao devolve null sem chamar a
+  // API — a cota diaria da TomTom nao se gasta com trajeto que ninguem faz.
+  const lerTransito = async () => {
+    try {
+      transito = await paraOPainel();
+    } catch (err) {
+      transito = null;
+      console.error(`[nucleus] transito indisponivel: ${err.message}`);
+    }
+  };
+  lerTransito();
+  const tickTransito = setInterval(lerTransito, 5 * 60 * 1000);
 
   capacidades().then((c) => { caps = c; }).catch(() => { caps = null; });
 
@@ -430,6 +453,7 @@ export function startNucleus({ port = 3000, host = '0.0.0.0' } = {}) {
     stop() {
       clearInterval(tickEstado);
       clearInterval(tickTempo);
+      clearInterval(tickTransito);
       clearInterval(batida);
       musica.stop();
       for (const c of clientes) c.end();

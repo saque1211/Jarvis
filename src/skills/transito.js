@@ -1,4 +1,5 @@
-import { lerSettings, gravarSettings } from '../core/settings.js';
+import { lerSettings, gravarSettings, dentroDaJanela } from '../core/settings.js';
+import { writeRuntime } from '../core/state.js';
 import { calcular, localizar, configurado, emPalavras } from '../integrations/transito.js';
 
 /**
@@ -114,6 +115,36 @@ async function resolverDestino(pedido, settings, origem) {
   return { destino: achado, nome: pedido };
 }
 
+/**
+ * O que o indicador do painel de parede desenha, ou null pra ele sumir.
+ *
+ * Chamada de fora por quem serve o painel, de 5 em 5 minutos. Devolve null
+ * fora da janela da manha SEM tocar na API: transito as 3 da madrugada e
+ * enfeite, e cada consulta gasta cota de um trajeto que ninguem vai fazer.
+ */
+export async function paraOPainel(quando = new Date()) {
+  const { transito } = lerSettings();
+  if (!transito.noPainel || !configurado()) return null;
+  if (!dentroDaJanela(transito.mostrarDe, transito.mostrarAte, quando)) return null;
+  if (transito.origem.lat == null) return null;
+
+  const alvo = acharLugar(transito.lugares, transito.padrao || '') || transito.lugares[0];
+  if (!alvo) return null;
+
+  const dados = await calcular(transito.origem, alvo);
+  return {
+    situacao: dados.situacao,
+    minutos: dados.minutos,
+    atrasoMin: dados.atrasoMin,
+    destino: alvo.nome,
+  };
+}
+
+/** O mesmo formato que a animacao consome, pra cena de quando alguem pergunta. */
+function paraAnimacao(dados, destino) {
+  return { situacao: dados.situacao, minutos: dados.minutos, atrasoMin: dados.atrasoMin, destino };
+}
+
 export default {
   name: 'transito',
   // So fala com a internet: vale no PC, no Raspberry e na nuvem.
@@ -152,6 +183,14 @@ export default {
           const alvo = await resolverDestino(pedido, settings, base.origem);
           if (alvo.erro) return alvo.erro;
           const dados = await calcular(base.origem, alvo.destino);
+          // Avisa o painel que o transito FOI PEDIDO agora — ele mostra o
+          // indicador animado por alguns segundos, mesmo fora da janela da
+          // manha. Mesma mecanica da cena do tempo.
+          try {
+            writeRuntime({ transitoPedido: { at: Date.now(), ...paraAnimacao(dados, alvo.nome) } });
+          } catch {
+            /* sem HUD/vault ele ainda fala a resposta normalmente */
+          }
           return emPalavras(dados, alvo.nome);
         } catch (err) {
           return `Nao consegui ver o transito: ${err.message}`;

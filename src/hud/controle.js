@@ -481,9 +481,17 @@ export async function atenderControle(req, res, url) {
   if (rota === '/transito/agora' && req.method === 'GET') {
     const t = lerSettings().transito;
     const pedido = url.searchParams.get('destino');
+    // Destino nao salvo ("quanto tempo ate o aeroporto") nao tem mapa: a
+    // resposta falada ja deu o numero, e desenhar o trajeto do trabalho aqui
+    // seriam dois numeros se contradizendo na mesma tela.
     const alvo = pedido ? acharLugar(t.lugares, pedido) : acharLugar(t.lugares, t.padrao || '') || t.lugares[0];
-    if (!transitoConfigurado() || t.origem.lat == null || !alvo) {
+    if (!transitoConfigurado() || t.origem.lat == null) {
       responder(res, 200, { ok: false, erro: 'Transito nao configurado.' });
+      return true;
+    }
+    if (!alvo) {
+      // Nao e falta de configuracao: e destino que nao esta na lista.
+      responder(res, 200, { ok: false, erro: 'Esse lugar nao esta salvo.' });
       return true;
     }
     try {

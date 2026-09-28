@@ -200,7 +200,18 @@ A origem **não** cai na cidade da previsão do tempo quando falta: o centro da
 cidade não é a sua rua, e o trajeto sairia errado por vinte minutos com cara de
 certo. E endereço se digita — os mesmos lugares se cadastram nos Ajustes do app,
 porque ditar "rua Doutor Fulano de Tal, 1420" erra o número metade das vezes.
-Detalhes em `.skills/transito.md`.
+
+**As animações** (`src/hud/transito/*.html`) são páginas inteiras servidas em
+`/transito/*.html` e embutidas em **iframe**, conversando por `postMessage`. Em
+iframe porque têm CSS próprio: dentro do HUD as duas folhas brigariam, e cada
+redesenho viraria um merge à mão. O indicador fica no painel de parede — 60 fps
+em qualquer tamanho; o mapa fica no celular, porque em 1080p ele é limitado por
+área pintada (14 fps medidos, e tirar carros e perspectiva leva só a 17).
+
+No painel ele aparece de duas formas: **faixa na janela da manhã**, e **cena
+grande de 16s quando alguém pergunta** — a mesma mecânica da cena do tempo.
+Fora da janela `paraOPainel()` devolve `null` sem tocar na API. Detalhes e os
+números medidos em `.skills/transito.md`.
 
 **Música recua quando ele fala** (`src/cloud/abafar.js`): resposta falada por
 cima do Spotify não se entende. O corte é no volume do *aparelho* pela API —

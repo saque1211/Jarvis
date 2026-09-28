@@ -369,6 +369,14 @@ nav button:active svg { transform: scale(.9); }
 #login input { margin-bottom: 14px; }
 #login .erro { color: var(--perigo); font-size: 14px; margin-top: 12px; text-align: center; min-height: 20px; }
 
+
+/* Mapa do trânsito na Casa — só aparece depois de perguntar do trânsito. */
+#mapa-transito { display: none; margin-top: 12px; }
+#mapa-transito.on { display: block; }
+#mapa-transito iframe {
+  width: 100%; height: 320px; border: 0; display: block;
+  border-radius: 18px; background: #02141C;
+}
 </style>
 </head>
 <body>
@@ -434,6 +442,9 @@ nav button:active svg { transform: scale(.9); }
       </div>
       <div class="atalhos" id="atalhos"></div>
       <div id="resposta"></div>
+      <!-- O mapa entra só quando a resposta veio do trânsito. Ele é pesado pra
+           ficar de pé o dia inteiro, e fora dessa pergunta não diz nada. -->
+      <div id="mapa-transito"></div>
     </div>
 
     <div id="meus-paineis"></div>
@@ -759,6 +770,50 @@ function mostrarResposta(texto, pensando) {
     `<div>${esc(texto)}${pensando ? '<span class="pontos"></span>' : ''}</div></div>`;
 }
 
+/**
+ * O mapa do trânsito, embaixo da resposta.
+ *
+ * Em iframe pelo mesmo motivo do painel: é uma página inteira, com CSS próprio.
+ * Criado só na primeira vez que alguém pergunta do trânsito — medido, ele custa
+ * ~750 nós e 69 animações, e não vale ficar de pé pra quem nunca pergunta.
+ * Os parâmetros são os leves: sem perspectiva e com menos carros.
+ */
+let mapaQuadro = null;
+
+async function mostrarMapaSe(destino) {
+  const caixa = $('mapa-transito');
+  if (!caixa) return;
+  // null = a resposta não era de trânsito. '' = era, sem destino dito (o padrão).
+  if (destino == null) { caixa.classList.remove('on'); return; }
+
+  // O MESMO destino da resposta: o mapa mostrando o trabalho enquanto o texto
+  // fala da faculdade são dois números que se contradizem na mesma tela.
+  const rota = destino ? '/transito/agora?destino=' + encodeURIComponent(destino) : '/transito/agora';
+  let dados = null;
+  try { dados = await api(rota); } catch { dados = null; }
+  if (!dados || !dados.ok) { caixa.classList.remove('on'); return; }
+
+  if (!mapaQuadro) {
+    mapaQuadro = document.createElement('iframe');
+    mapaQuadro.title = 'Mapa do trânsito';
+    mapaQuadro.src = '/transito/mapa.html?carros=0.5&3d=0';
+    mapaQuadro.addEventListener('load', () => { mapaQuadro.pronto = true; enviarAoMapa(); }, { once: true });
+    caixa.appendChild(mapaQuadro);
+  }
+  mapaQuadro.pendente = {
+    situacao: dados.situacao, minutos: dados.minutos,
+    atrasoMin: dados.atrasoMin, destino: dados.nome,
+  };
+  enviarAoMapa();
+  caixa.classList.add('on');
+}
+
+function enviarAoMapa() {
+  if (!mapaQuadro || !mapaQuadro.pronto || !mapaQuadro.pendente) return;
+  try { mapaQuadro.contentWindow.postMessage({ tipo: 'transito', ...mapaQuadro.pendente }, '*'); }
+  catch { /* iframe ainda subindo; o load reenvia */ }
+}
+
 let perguntando = false;
 async function enviarPergunta(texto) {
   const t = String(texto || '').trim();
@@ -769,6 +824,11 @@ async function enviarPergunta(texto) {
   try {
     const r = await api('/v1/texto', 'POST', { texto: t });
     mostrarResposta(r.resposta || r.erro || 'Sem resposta.', false);
+    // `steps` diz quais tools rodaram de fato. É mais confiável que adivinhar
+    // pelo texto da pergunta: "tá ruim pra ir pro centro?" é trânsito e não
+    // tem a palavra trânsito em lugar nenhum.
+    const passoTransito = (r.steps || []).find((p) => p.tool === 'get_traffic' && p.ok !== false);
+    mostrarMapaSe(passoTransito ? passoTransito.input?.destino || '' : null);
     $('pergunta').value = '';
     ajustarAltura();
   } catch (err) {
@@ -1157,11 +1217,30 @@ function montarCartaoTransito() {
     '<div class="sub" style="border-top:1px solid var(--borda);padding-top:16px;margin-top:18px">' +
       'Lugares que você pergunta pelo nome — ★ é o que responde "como está o trânsito"</div>' +
     (linhas || '<div class="sub" style="margin-top:8px">Nenhum ainda.</div>') +
+    '<div class="linha" style="border-top:1px solid var(--borda);padding-top:16px;margin-top:16px">' +
+      '<div class="cresce"><div class="rotulo">Mostrar no painel de manhã</div>' +
+      '<div class="sub">Fora dessa faixa ele só aparece quando você pergunta.</div></div>' +
+      // O app não tem interruptor em lugar nenhum; um botão que diz o estado
+      // usa o estilo que já existe e não inventa componente novo pra manter.
+      '<button class="botao fantasma" id="transito-painel">' + (t.noPainel ? 'Ligado' : 'Desligado') + '</button>' +
+    '</div>' +
+    '<div class="duplo" style="margin-top:10px">' +
+      '<input type="time" id="transito-de" value="' + esc(t.mostrarDe || '06:00') + '">' +
+      '<input type="time" id="transito-ate" value="' + esc(t.mostrarAte || '09:00') + '">' +
+    '</div>' +
     '<div class="duplo" style="border-top:1px solid var(--borda);padding-top:16px;margin-top:16px">' +
       '<input type="text" id="transito-nome" placeholder="trabalho">' +
       '<input type="text" id="transito-end" placeholder="endereço ou nome do lugar">' +
     '</div>' +
     '<button class="botao fantasma largo" id="transito-add" style="margin-top:10px">Salvar lugar</button>';
+
+  $('transito-painel').onclick = async () => {
+    await api('/config', 'POST', { transito: { noPainel: !TRANSITO.noPainel } });
+    carregarTransito();
+  };
+  $('transito-de').onchange = $('transito-ate').onchange = () =>
+    gravar({ transito: { mostrarDe: $('transito-de').value, mostrarAte: $('transito-ate').value } },
+           'Faixa do trânsito salva.');
 
   $('transito-salvar-casa').onclick = async () => {
     const endereco = $('transito-casa').value.trim();

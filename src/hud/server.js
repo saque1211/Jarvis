@@ -7,6 +7,7 @@ import { route } from '../core/router.js';
 import { atenderControle } from './controle.js';
 import { atenderCapa } from './capa.js';
 import { previsao, deveMostrar } from '../skills/weather.js';
+import { paraOPainel } from '../skills/transito.js';
 import { capacidades } from '../platform/index.js';
 import { acompanharSpotify } from '../integrations/spotify-agora.js';
 
@@ -31,6 +32,10 @@ const CADENCIA_VITAIS = 5000;
 // Tempo muda de 15 em 15 minutos no mundo real. Perguntar mais que isso gasta
 // rede pra receber o mesmo numero.
 const CADENCIA_TEMPO = 5 * 60 * 1000;
+// Transito muda mais rapido que o tempo, mas nao a cada minuto — e a cota da
+// TomTom e diaria. De 5 em 5 minutos, so dentro da janela, da ~36 consultas
+// por manha.
+const CADENCIA_TRANSITO = 5 * 60 * 1000;
 
 export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   const clientes = new Set();
@@ -39,6 +44,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   // mesma cadencia: um custa uma ida a internet, o outro so muda quando o
   // hardware muda. Guardados aqui, o snapshot continua custando milissegundos.
   let tempo = null;
+  let transito = null;
   let capacidadesDaMaquina = null;
 
   const servidor = http.createServer(async (req, res) => {
@@ -75,7 +81,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       // erro, sem tela, sem pista.
       let primeiro;
       try {
-        primeiro = JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: capacidadesDaMaquina });
+        primeiro = JSON.stringify({ ...snapshot(), vitais, tempo, transito, capacidades: capacidadesDaMaquina });
       } catch (err) {
         res.writeHead(500, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ erro: `nao consegui ler o estado: ${err.message}` }));
@@ -140,6 +146,20 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       return;
     }
 
+    // Animacoes do transito. Ficam em iframe de proposito: sao paginas
+    // inteiras, com CSS proprio, e desenhadas por fora do projeto — dentro do
+    // HUD elas brigariam com a folha de estilo do painel. A lista de nomes e
+    // fechada; nada de montar caminho com o que veio na URL.
+    const doTransito = /^\/transito\/(indicador|mapa)\.html$/.exec(url.pathname);
+    if (doTransito) {
+      res.writeHead(200, {
+        'content-type': 'text/html; charset=utf-8',
+        'cache-control': 'public, max-age=3600',
+      });
+      res.end(fs.readFileSync(path.join(AQUI, 'transito', `${doTransito[1]}.html`)));
+      return;
+    }
+
     // Capa do album, repassada pela nossa origem pra o canvas conseguir ler
     // as cores (imagem de outra origem bloqueia getImageData).
     if (await atenderCapa(req, res, url)) return;
@@ -170,7 +190,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
 
     let linha;
     try {
-      linha = `data: ${JSON.stringify({ ...snapshot(), vitais, tempo, capacidades: capacidadesDaMaquina })}\n\n`;
+      linha = `data: ${JSON.stringify({ ...snapshot(), vitais, tempo, transito, capacidades: capacidadesDaMaquina })}\n\n`;
     } catch (err) {
       console.error(`[hud] falhei ao montar o estado: ${err.message}`);
       return;
@@ -204,6 +224,19 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
   };
   lerTempo();
   const tickTempo = setInterval(lerTempo, CADENCIA_TEMPO);
+
+  // Transito da janela da manha. A propria funcao devolve null fora da janela
+  // sem chamar a API — o custo so existe nas horas em que a pessoa sai de casa.
+  const lerTransito = async () => {
+    try {
+      transito = await paraOPainel();
+    } catch (err) {
+      transito = null;
+      console.error(`[hud] transito indisponivel: ${err.message}`);
+    }
+  };
+  lerTransito();
+  const tickTransito = setInterval(lerTransito, CADENCIA_TRANSITO);
 
   // O que esta maquina consegue controlar. Nao muda em uso normal, entao roda
   // uma vez — e o HUD esconde o que nao existe em vez de mostrar controle morto.
@@ -246,6 +279,7 @@ export function startHud({ port = 8791, host = '0.0.0.0' } = {}) {
       clearInterval(tickEstado);
       clearInterval(tickVitais);
       clearInterval(tickTempo);
+      clearInterval(tickTransito);
       musica.stop();
       for (const c of clientes) c.end();
       servidor.close();
